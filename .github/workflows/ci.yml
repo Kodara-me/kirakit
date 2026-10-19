@@ -93,6 +93,20 @@ jobs:
             -Language French -CoAuthor 'Kira <kira@example.com>'
           CLAUDE_CONFIG_DIR="$RUNNER_TEMP/sh-generic" sh get-kira.sh --copy </dev/null
           CLAUDE_CONFIG_DIR="$RUNNER_TEMP/ps-generic" pwsh -File get-kira.ps1 -Copy </dev/null
+      - name: Same release tag picked without a clone
+        run: |
+          remote=$RUNNER_TEMP/remote
+          git init -q -b main "$remote"
+          cp -r personas scripts claude github get-kira.sh get-kira.ps1 "$remote/"
+          git -C "$remote" add -A
+          git -C "$remote" -c user.name=ci -c user.email=ci@example.com commit -q -m ci
+          for tag in v0.9.0 v0.10.0 v0.2.1; do git -C "$remote" tag "$tag"; done
+          export KIRAKIT_REPO="file://$remote" CLAUDE_CONFIG_DIR="$RUNNER_TEMP/ref"
+          profile='-Name A -Gender male -Language auto -NoCoAuthor'
+          sh -s -- --dry-run --name A --gender male --language auto --no-co-author <get-kira.sh |
+            grep -F '(v0.10.0)'
+          pwsh -Command "& ([scriptblock]::Create((Get-Content -Raw ./get-kira.ps1))) -DryRun $profile" |
+            grep -F '(v0.10.0)'
       - name: Compare
         run: |
           for pair in sh:ps sh-generic:ps-generic; do

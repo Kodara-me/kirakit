@@ -21,7 +21,7 @@ Remote use:
   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jstmichel/kirakit/main/get-kira.ps1))) -DryRun
 
 Environment: CLAUDE_CONFIG_DIR (default: ~\.claude), KIRAKIT_REPO and KIRAKIT_REF (repository
-and branch or tag fetched without a clone).
+and branch or tag fetched without a clone; default: the latest release).
 
 .PARAMETER DryRun
 Print what would change, change nothing.
@@ -77,7 +77,9 @@ Set-StrictMode -Version 2.0
 $Bound = $PSBoundParameters
 
 $Repo = if ($env:KIRAKIT_REPO) { $env:KIRAKIT_REPO } else { 'https://github.com/jstmichel/kirakit.git' }
-$Ref = if ($env:KIRAKIT_REF) { $env:KIRAKIT_REF } else { 'main' }
+# Set to the release tag in the copy attached to each GitHub release, so that it installs its
+# own version.
+$KiraVersion = ''
 $ClaudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME '.claude' }
 $ClaudeDir = [IO.Path]::GetFullPath($ClaudeDir).TrimEnd('\', '/')
 
@@ -125,6 +127,28 @@ function Split-KiraLine([string]$Text) {
 
 function Join-KiraLine([string[]]$Lines) {
     return ($Lines -join $Nl) + $Nl
+}
+
+# The branch or tag to fetch without a clone: KIRAKIT_REF, else the version this copy was
+# released with, else the highest vX.Y.Z tag of the repository, else main.
+function Get-KiraRef {
+    if ($env:KIRAKIT_REF) { return $env:KIRAKIT_REF }
+    if ($KiraVersion) { return $KiraVersion }
+    # Windows PowerShell 5.1 turns a native command's error output into a terminating error.
+    $ErrorActionPreference = 'Continue'
+    $best = $null
+    $bestTag = 'main'
+    foreach ($line in @(& git ls-remote --tags --refs -- $Repo 'v*' 2>$null)) {
+        if ($line -match 'refs/tags/(v(\d+)\.(\d+)\.(\d+))$') {
+            $tag = $Matches[1]
+            $version = New-Object Version ([int]$Matches[2]), ([int]$Matches[3]), ([int]$Matches[4])
+            if (-not $best -or $version -gt $best) {
+                $best = $version
+                $bestTag = $tag
+            }
+        }
+    }
+    return $bestTag
 }
 
 function Get-KiraWorkDir {
@@ -582,7 +606,10 @@ function Install-KiraClaude([string]$Style) {
 function Install-KiraGithub {
     $root = $Target
     if (-not $root) {
+        # Windows PowerShell 5.1 turns a native command's error output into a terminating error.
+        $ErrorActionPreference = 'Continue'
         $root = & git rev-parse --show-toplevel 2>$null
+        $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0 -or -not $root) { throw '-Only github needs a Git repository: run it from one or pass -Target DIR' }
     }
     if (-not (Test-Path -LiteralPath $root -PathType Container)) { throw "not a directory: $root" }
@@ -675,8 +702,9 @@ try {
             if ($Link) { throw '-Link needs a local clone: run get-kira.ps1 from the repository' }
             if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'git is required' }
             $repoDir = Join-Path (Get-KiraWorkDir) 'repo'
-            Write-KiraLog "fetching $Repo ($Ref)"
-            & git clone --quiet --depth 1 --branch $Ref -- $Repo $repoDir
+            $ref = Get-KiraRef
+            Write-KiraLog "fetching $Repo ($ref)"
+            & git clone --quiet --depth 1 --branch $ref -- $Repo $repoDir
             if ($LASTEXITCODE -ne 0) { throw "could not fetch $Repo" }
             $script:Src = $repoDir
             $script:Mode = 'copy'

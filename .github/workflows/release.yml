@@ -1,0 +1,38 @@
+# Attach the installers to each published release, stamped with the release tag so that
+# https://github.com/jstmichel/kirakit/releases/latest/download/get-kira.sh installs the
+# version it comes from.
+name: Release assets
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  installers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - name: Stamp the installers
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          case $TAG in
+            v[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::unexpected tag: $TAG"; exit 1 ;;
+          esac
+          case $TAG in *[!A-Za-z0-9.-]*) echo "::error::unexpected tag: $TAG"; exit 1 ;; esac
+          mkdir assets
+          sed "s/^KIRAKIT_VERSION=\$/KIRAKIT_VERSION=$TAG/" get-kira.sh >assets/get-kira.sh
+          sed "s/^[\$]KiraVersion = ''/\$KiraVersion = '$TAG'/" get-kira.ps1 >assets/get-kira.ps1
+          grep -q "^KIRAKIT_VERSION=$TAG\$" assets/get-kira.sh
+          grep -q "^[\$]KiraVersion = '$TAG'" assets/get-kira.ps1
+      - name: Upload them to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" assets/get-kira.sh assets/get-kira.ps1 --clobber

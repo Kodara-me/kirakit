@@ -137,6 +137,22 @@ CLAUDE_CONFIG_DIR=$claude KIRAKIT_REPO="file://$tmp/remote" KIRAKIT_REF=main \
 check 'curl: styles copied' test -f "$claude/output-styles/kira-cozy.md" -a ! -L "$claude/output-styles/kira-cozy.md"
 check 'curl: no co-author' contains "$claude/skills/commit/SKILL.md" 'add no `Co-Authored-By` line'
 
+# Which branch or tag a run without a clone fetches.
+fetched() {
+	CLAUDE_CONFIG_DIR=$tmp/ref KIRAKIT_REPO="file://$tmp/remote" $shell -s -- --dry-run \
+		--name Alex --gender female --language auto --no-co-author <"$1" |
+		sed -n 's/^kirakit: fetching .* (\(.*\))$/\1/p'
+}
+
+check 'ref: main without release tags' test "$(fetched "$root/get-kira.sh")" = main
+for tag in v0.9.0 v0.10.0 v0.2.1 v1.0.0-rc1; do
+	git -C "$tmp/remote" -c tag.gpgsign=false tag "$tag"
+done
+check 'ref: highest release tag by default' test "$(fetched "$root/get-kira.sh")" = v0.10.0
+sed 's/^KIRAKIT_VERSION=$/KIRAKIT_VERSION=v0.9.0/' "$root/get-kira.sh" >"$tmp/stamped.sh"
+check 'ref: a stamped copy installs its own version' test "$(fetched "$tmp/stamped.sh")" = v0.9.0
+check 'ref: KIRAKIT_REF wins' test "$(KIRAKIT_REF=main fetched "$tmp/stamped.sh")" = main
+
 if [ "$failures" -gt 0 ]; then
 	printf '%s test(s) failed\n' "$failures"
 	exit 1

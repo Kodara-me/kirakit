@@ -13,8 +13,10 @@
 set -eu
 
 KIRAKIT_REPO=${KIRAKIT_REPO:-https://github.com/jstmichel/kirakit.git}
-KIRAKIT_REF=${KIRAKIT_REF:-main}
 CLAUDE_DIR=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
+# Set to the release tag in the copy attached to each GitHub release, so that it installs
+# its own version.
+KIRAKIT_VERSION=
 
 dry_run=0
 uninstall=0
@@ -74,7 +76,7 @@ Profile options are asked once and saved in \$CLAUDE_CONFIG_DIR/.kirakit-profile
 Environment:
   CLAUDE_CONFIG_DIR  Claude Code configuration directory (default: ~/.claude)
   KIRAKIT_REPO       Repository fetched without a clone (default: $KIRAKIT_REPO)
-  KIRAKIT_REF        Branch or tag fetched without a clone (default: $KIRAKIT_REF)
+  KIRAKIT_REF        Branch or tag fetched without a clone (default: the latest release)
 EOF
 }
 
@@ -121,6 +123,28 @@ backup() {
 	else
 		run mv -- "$1" "$dest"
 	fi
+}
+
+# The branch or tag to fetch without a clone: KIRAKIT_REF, else the version this copy was
+# released with, else the highest vX.Y.Z tag of the repository, else main.
+resolve_ref() {
+	if [ -n "${KIRAKIT_REF-}" ]; then
+		printf '%s\n' "$KIRAKIT_REF"
+		return
+	fi
+	if [ -n "$KIRAKIT_VERSION" ]; then
+		printf '%s\n' "$KIRAKIT_VERSION"
+		return
+	fi
+	latest=$(git ls-remote --tags --refs -- "$KIRAKIT_REPO" 'v*' 2>/dev/null | awk '
+		{ tag = $2; sub("^refs/tags/", "", tag) }
+		tag ~ /^v[0-9]+\.[0-9]+\.[0-9]+$/ {
+			split(substr(tag, 2), part, ".")
+			key = sprintf("%09d%09d%09d", part[1], part[2], part[3])
+			if (key > best) { best = key; latest = tag }
+		}
+		END { if (latest != "") print latest }')
+	printf '%s\n' "${latest:-main}"
 }
 
 # Whether TARGET is already an identical copy of SOURCE (a file or a directory).
@@ -565,8 +589,9 @@ if [ -z "$src" ]; then
 	[ "$mode" != link ] || die "--link needs a local clone: run get-kira.sh from the repository"
 	command -v git >/dev/null 2>&1 || die "git is required"
 	work_dir
-	log "fetching $KIRAKIT_REPO ($KIRAKIT_REF)"
-	git clone --quiet --depth 1 --branch "$KIRAKIT_REF" -- "$KIRAKIT_REPO" "$work/repo" ||
+	ref=$(resolve_ref)
+	log "fetching $KIRAKIT_REPO ($ref)"
+	git clone --quiet --depth 1 --branch "$ref" -- "$KIRAKIT_REPO" "$work/repo" ||
 		die "could not fetch $KIRAKIT_REPO"
 	src=$work/repo
 	mode=copy
