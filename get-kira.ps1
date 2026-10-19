@@ -114,12 +114,13 @@ function Write-KiraText([string]$Path, [string]$Text) {
     [IO.File]::WriteAllText($Path, $Text, $Utf8)
 }
 
-# Lines of a text, without the final newline; an empty text has no lines.
+# Lines of a text, without the final newline; an empty text has no lines. Callers wrap the
+# result in @() so that one line or none still gives an array.
 function Split-KiraLine([string]$Text) {
     $t = $Text.Replace("`r`n", "`n")
     if ($t.EndsWith("`n")) { $t = $t.Substring(0, $t.Length - 1) }
-    if ($t -eq '') { return , @() }
-    return , ($t -split "`n")
+    if ($t -eq '') { return }
+    return $t -split "`n"
 }
 
 function Join-KiraLine([string[]]$Lines) {
@@ -178,8 +179,10 @@ function Backup-KiraPath([string]$Path, [string]$Root = $ClaudeDir, [string]$Pre
 }
 
 function Get-KiraTreeHash([string]$Path) {
-    $entries = Get-ChildItem -LiteralPath $Path -Recurse -File -Force | ForEach-Object {
-        $_.FullName.Substring($Path.Length) + '|' + (Get-FileHash -LiteralPath $_.FullName).Hash
+    # Relative paths from the resolved name, which may differ from PATH (e.g. short names).
+    $base = (Get-Item -LiteralPath $Path -Force).FullName.TrimEnd('\', '/')
+    $entries = Get-ChildItem -LiteralPath $base -Recurse -File -Force | ForEach-Object {
+        $_.FullName.Substring($base.Length) + '|' + (Get-FileHash -LiteralPath $_.FullName).Hash
     } | Sort-Object
     return (@($entries) -join $Nl)
 }
@@ -406,11 +409,11 @@ function Format-KiraLine([string[]]$Lines, $Values) {
         }
         if ($keep) { $out.Add($line) }
     }
-    return , $out.ToArray()
+    return $out.ToArray()
 }
 
 function Write-KiraRendered([string]$Path, [string[]]$Lines, $Values, [string]$Origin) {
-    $text = Join-KiraLine (Format-KiraLine $Lines $Values)
+    $text = Join-KiraLine @(Format-KiraLine $Lines $Values)
     if ($text -match '\{\{[^}]*\}\}') { throw "${Origin}: unknown placeholder $($Matches[0])" }
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Path) | Out-Null
     Write-KiraText $Path $text
@@ -418,7 +421,7 @@ function Write-KiraRendered([string]$Path, [string[]]$Lines, $Values, [string]$O
 
 function Build-KiraStyle([string]$Out, [string]$PersonaName, [string[]]$CoreLines, $Values) {
     $overlay = Join-Path (Join-Path $script:Src 'personas') "$PersonaName.md"
-    $lines = Split-KiraLine (Read-KiraText $overlay)
+    $lines = @(Split-KiraLine (Read-KiraText $overlay))
     $end = -1
     if ($lines.Count -gt 0 -and $lines[0] -eq '---') {
         for ($i = 1; $i -lt $lines.Count; $i++) { if ($lines[$i] -eq '---') { $end = $i; break } }
@@ -456,7 +459,7 @@ function Build-KiraOutput($UserProfile) {
     $core = Join-Path (Join-Path $script:Src 'personas') '_core.md'
     $coreText = Read-KiraText $core
     if (-not $coreText.Contains('{{overlay}}')) { throw "${core}: missing {{overlay}} marker" }
-    $coreLines = Split-KiraLine $coreText
+    $coreLines = @(Split-KiraLine $coreText)
     foreach ($file in Get-ChildItem -LiteralPath (Join-Path $script:Src 'personas') -Filter '*.md' -File) {
         if ($file.BaseName.StartsWith('_')) { continue }
         Build-KiraStyle $out $file.BaseName $coreLines $values
@@ -473,19 +476,19 @@ function Build-KiraOutput($UserProfile) {
             Copy-Item -LiteralPath $dir.FullName -Destination $dest -Recurse
             foreach ($file in Get-ChildItem -LiteralPath $dest -Recurse -File -Filter '*.md') {
                 $origin = Join-Path $dir.FullName $file.FullName.Substring($dest.Length + 1)
-                Write-KiraRendered $file.FullName (Split-KiraLine (Read-KiraText $file.FullName)) $values $origin
+                Write-KiraRendered $file.FullName @(Split-KiraLine (Read-KiraText $file.FullName)) $values $origin
             }
         }
     }
     $agents = Join-Path $claude 'agents'
     if (Test-Path -LiteralPath $agents) {
         foreach ($file in Get-ChildItem -LiteralPath $agents -Filter '*.md' -File) {
-            Write-KiraRendered (Join-Path (Join-Path $out 'agents') $file.Name) (Split-KiraLine (Read-KiraText $file.FullName)) $values $file.FullName
+            Write-KiraRendered (Join-Path (Join-Path $out 'agents') $file.Name) @(Split-KiraLine (Read-KiraText $file.FullName)) $values $file.FullName
         }
     }
     $claudeMd = Join-Path $claude 'CLAUDE.md'
     if (Test-Path -LiteralPath $claudeMd) {
-        Write-KiraRendered (Join-Path $out 'CLAUDE.md') (Split-KiraLine (Read-KiraText $claudeMd)) $values $claudeMd
+        Write-KiraRendered (Join-Path $out 'CLAUDE.md') @(Split-KiraLine (Read-KiraText $claudeMd)) $values $claudeMd
     }
 }
 
@@ -513,7 +516,7 @@ function Install-KiraOutputStyle([string]$Style) {
     $settings = Join-Path $ClaudeDir 'settings.json'
     $styleFile = Join-Path (Join-Path $script:BuildDir 'output-styles') "$Style.md"
     $value = ''
-    foreach ($line in Split-KiraLine (Read-KiraText $styleFile)) {
+    foreach ($line in @(Split-KiraLine (Read-KiraText $styleFile))) {
         if ($line.StartsWith('name: ')) { $value = $line.Substring(6); break }
     }
     if ($value -eq '' -or $value.Contains('"') -or $value.Contains('\')) { throw "cannot use the name of $Style as outputStyle: $value" }
@@ -530,7 +533,7 @@ function Install-KiraOutputStyle([string]$Style) {
     } else {
         $out = New-Object System.Collections.Generic.List[string]
         $done = $false
-        foreach ($line in Split-KiraLine $text) {
+        foreach ($line in @(Split-KiraLine $text)) {
             $i = $line.IndexOf('{')
             if (-not $done -and $i -ge 0) {
                 $out.Add($line.Substring(0, $i + 1))
