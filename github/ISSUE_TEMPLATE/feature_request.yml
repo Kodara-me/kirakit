@@ -1,0 +1,37 @@
+name: Feature request
+description: A specification for a new feature (requirements, design, tasks)
+labels: [enhancement]
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: The problem to solve and why it matters now.
+    validations:
+      required: true
+  - type: textarea
+    id: requirements
+    attributes:
+      label: Requirements
+      description: Numbered, testable statements of what must be true when this is done.
+      placeholder: |
+        - **R1** — When …, … shall …
+        - **R2** — …
+    validations:
+      required: true
+  - type: textarea
+    id: design
+    attributes:
+      label: Design
+      description: How the requirements will be met, and the trade-offs considered.
+  - type: textarea
+    id: tasks
+    attributes:
+      label: Tasks
+      placeholder: |
+        - [ ] …
+        - [ ] …
+  - type: textarea
+    id: questions
+    attributes:
+      label: Open questions

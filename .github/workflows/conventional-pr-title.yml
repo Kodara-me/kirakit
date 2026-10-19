@@ -1,0 +1,33 @@
+# Reusable workflow: fail when the pull request title does not follow Conventional Commits.
+#
+#   jobs:
+#     conventional-commits:
+#       uses: jstmichel/kirakit/.github/workflows/conventional-pr-title.yml@v0.2.0
+name: Conventional PR title
+
+on:
+  workflow_call:
+    inputs:
+      types:
+        description: Allowed types, separated by "|"
+        type: string
+        default: feat|fix|refactor|perf|test|docs|style|build|ci|chore|revert
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          TYPES: ${{ inputs.types }}
+        run: |
+          pattern="^(${TYPES})(\([a-z0-9._/-]+\))?!?: [^[:space:]]"
+          if [ "${#TITLE}" -le 72 ] && printf '%s\n' "$TITLE" | grep -Eq "$pattern"; then
+            echo "Title follows Conventional Commits: $TITLE"
+          else
+            echo "::error::PR title must look like 'type(scope): description' (types: ${TYPES}, at most 72 characters): $TITLE"
+            exit 1
+          fi

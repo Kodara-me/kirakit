@@ -1,0 +1,11 @@
+name: PR title
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions: {}
+
+jobs:
+  conventional-commits:
+    uses: jstmichel/kirakit/.github/workflows/conventional-pr-title.yml@v0.2.0

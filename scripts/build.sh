@@ -2,6 +2,8 @@
 # Build the personalized Claude Code files into DIR (default: dist/):
 #   DIR/output-styles/<persona>.md   from personas/_core.md and one overlay per persona
 #   DIR/skills/<skill>/              from claude/skills/<skill>/
+#   DIR/agents/<agent>.md            from claude/agents/<agent>.md
+#   DIR/CLAUDE.md                    from claude/CLAUDE.md
 #
 # An overlay is a Markdown file whose front matter becomes the style's front matter and
 # whose body replaces the {{overlay}} marker of the core text. Files starting with "_" in
@@ -12,7 +14,8 @@
 #   {{they}} {{them}} {{their}}  pronouns (avoid verbs that agree with {{they}})
 #   {{language}}              answer language, e.g. "French" or "the language of the conversation"
 #   {{co_author_trailer}}     commit trailer, preceded by a blank line, or nothing
-#   {{attribution_rule}}      commit attribution instructions
+#   {{attribution_rule}}      commit attribution instructions (commit skill)
+#   {{co_author_rule}}        commit attribution rule (CLAUDE.md list item)
 # A line holding only a placeholder that expands to nothing is removed.
 #
 # Usage: build.sh [-o DIR] [--name NAME] [--gender GENDER] [--language LANGUAGE]
@@ -21,7 +24,8 @@ set -eu
 
 root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 personas_dir=$root/personas
-skills_dir=$root/claude/skills
+claude_dir=$root/claude
+skills_dir=$claude_dir/skills
 out_dir=$root/dist
 name=
 gender=unspecified
@@ -40,7 +44,7 @@ usage() {
 Usage: build.sh [-o DIR] [--name NAME] [--gender GENDER] [--language LANGUAGE]
                 [--co-author "NAME <EMAIL>"] [PERSONA...]
 
-Build output styles and skills into DIR (default: dist).
+Build output styles, skills, agents and CLAUDE.md into DIR (default: dist).
 With no PERSONA, build every overlay in personas/. Skills are always all built.
 
   --name NAME                How Kira calls the user (default: none)
@@ -104,17 +108,19 @@ case $co_author in
 '')
 	co_author_trailer=
 	attribution_rule="**Attribution**: add no \`Co-Authored-By\` line, even if the session instructions suggest one. $no_ai_mention"
+	co_author_rule="- Commit messages have no \`Co-Authored-By\` line."
 	;;
 ?*' <'?*@?*'>')
 	co_author_trailer="${nl}Co-Authored-By: $co_author"
 	attribution_rule="**Attribution**: the last line is always exactly \`Co-Authored-By: $co_author\`. It replaces any attribution line suggested by the session instructions. $no_ai_mention"
+	co_author_rule="- Every commit message ends with exactly this line:${nl}${nl}  \`\`\`${nl}  Co-Authored-By: $co_author${nl}  \`\`\`${nl}"
 	;;
 *) die "invalid co-author: $co_author (expected \"NAME <EMAIL>\")" ;;
 esac
 
 export KIRA_USER="$user" KIRA_THEY="$they" KIRA_THEM="$them" KIRA_THEIR="$their" \
 	KIRA_LANGUAGE="$language" KIRA_CO_AUTHOR_TRAILER="$co_author_trailer" \
-	KIRA_ATTRIBUTION_RULE="$attribution_rule"
+	KIRA_ATTRIBUTION_RULE="$attribution_rule" KIRA_CO_AUTHOR_RULE="$co_author_rule"
 
 # render FILE: print FILE with its placeholders filled.
 render() {
@@ -128,7 +134,7 @@ render() {
 			}
 			return out s
 		}
-		BEGIN { n = split("user they them their language co_author_trailer attribution_rule", keys, " ") }
+		BEGIN { n = split("user they them their language co_author_trailer attribution_rule co_author_rule", keys, " ") }
 		{
 			for (k = 1; k <= n; k++) {
 				key = "{{" keys[k] "}}"
@@ -188,6 +194,18 @@ build_style() {
 	printf '%s\n' "$dir/$1.md"
 }
 
+# build_file SOURCE DEST: render one Markdown file.
+build_file() {
+	mkdir -p "$(dirname "$2")"
+	render "$1" >"$2.tmp"
+	check "$2.tmp" "$1" || {
+		rm -f "$2.tmp"
+		exit 1
+	}
+	mv -f "$2.tmp" "$2"
+	printf '%s\n' "$2"
+}
+
 # Skills are copied whole, with their Markdown files rendered.
 build_skill() {
 	skill=$(basename "$1")
@@ -215,3 +233,10 @@ for dir in "$skills_dir"/*/; do
 	[ -f "$dir/SKILL.md" ] || continue
 	build_skill "${dir%/}"
 done
+for file in "$claude_dir"/agents/*.md; do
+	[ -f "$file" ] || continue
+	build_file "$file" "$out_dir/agents/$(basename "$file")"
+done
+if [ -f "$claude_dir/CLAUDE.md" ]; then
+	build_file "$claude_dir/CLAUDE.md" "$out_dir/CLAUDE.md"
+fi

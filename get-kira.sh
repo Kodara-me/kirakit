@@ -4,9 +4,9 @@
 # From a clone, files are symlinked back to the clone by default. When piped from curl,
 # the repository is fetched into a temporary directory and files are copied.
 #
-# Output styles and skills are personalized from a profile: how Kira calls the user, the
-# user's gender, the answer language and the commit co-author. The installer asks once (on
-# the terminal, even when piped from curl) and saves the answers in
+# Output styles, skills, agents and CLAUDE.md are personalized from a profile: how Kira
+# calls the user, the user's gender, the answer language and the commit co-author. The
+# installer asks once (on the terminal, even when piped from curl) and saves the answers in
 # $CLAUDE_DIR/.kirakit-profile for later runs.
 #
 # Usage: get-kira.sh [options] (see --help)
@@ -17,15 +17,24 @@ KIRAKIT_REF=${KIRAKIT_REF:-main}
 CLAUDE_DIR=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
 
 dry_run=0
+uninstall=0
 mode=
 only=
 personas=
+github_target=
 work=
 backup_dir=
 build_dir=
 reconfigure=0
+installed=
+originals_new=
 profile=$CLAUDE_DIR/.kirakit-profile
+manifest=$CLAUDE_DIR/.kirakit-manifest
+originals=$CLAUDE_DIR/.kirakit-originals
 profile_keys='name gender language co_author'
+nl='
+'
+tab=$(printf '\t')
 
 log() {
 	printf 'kirakit: %s\n' "$*"
@@ -47,13 +56,18 @@ Options:
   --language LANGUAGE        Answer language, or auto to follow the conversation
   --co-author "NAME <EMAIL>" Add this Co-Authored-By trailer to commits
   --no-co-author             Add no Co-Authored-By trailer to commits
+  --default-style PERSONA    Output style selected in settings.json (default: kira-cozy)
   --reconfigure              Ask all profile questions again
   --persona NAME             Install only this persona (repeatable; default: all)
-  --only COMPONENT           Install one component: styles, claude (skills) or github
+  --only COMPONENT           styles, claude (CLAUDE.md, settings, agents, skills) or github
+  --target DIR               Repository for --only github (default: the current one)
   --link                     Symlink files to the local clone (default from a clone)
   --copy                     Copy files (default without a clone)
-  --uninstall                Remove installed files (not implemented yet)
+  --uninstall                Remove what kirakit installed in the configuration directory
   -h, --help                 Show this help
+
+Without --only, styles and claude are installed. The github component copies issue and pull
+request templates, workflows and Copilot instructions into a repository's .github directory.
 
 Profile options are asked once and saved in \$CLAUDE_CONFIG_DIR/.kirakit-profile.
 
@@ -85,7 +99,8 @@ work_dir() {
 	fi
 }
 
-# Move an existing file or symlink into this run's backup directory.
+# backup PATH [ROOT [PREFIX] [cp]]: move PATH (or copy it, with "cp") into this run's
+# backup directory, under PREFIX followed by PATH relative to ROOT.
 backup() {
 	if [ -z "$backup_dir" ]; then
 		# Never reuse the directory of an earlier run started within the same second.
@@ -97,11 +112,15 @@ backup() {
 			n=$((n + 1))
 		done
 	fi
-	rel=${1#"$CLAUDE_DIR"/}
-	dest=$backup_dir/$rel
+	rel=${1#"${2:-$CLAUDE_DIR}"/}
+	dest=$backup_dir/${3-}$rel
 	log "backup: $1 -> $dest"
 	run mkdir -p "$(dirname -- "$dest")"
-	run mv -- "$1" "$dest"
+	if [ "${4-}" = cp ]; then
+		run cp -p -- "$1" "$dest"
+	else
+		run mv -- "$1" "$dest"
+	fi
 }
 
 # Whether TARGET is already an identical copy of SOURCE (a file or a directory).
@@ -115,9 +134,19 @@ same_copy() {
 	fi
 }
 
-# install_file SOURCE TARGET: link or copy SOURCE (a file or a directory) to TARGET,
-# backing up anything else there.
+# listed FILE PATH: whether PATH is the first field of a line of FILE.
+listed() {
+	[ -f "$1" ] && awk -F "$tab" -v path="$2" '$1 == path { found = 1; exit } END { exit !found }' "$1"
+}
+
+# install_file SOURCE TARGET [ROOT PREFIX]: link or copy SOURCE (a file or a directory) to
+# TARGET, backing up anything else there. Targets in the configuration directory (no ROOT)
+# are recorded in the manifest for --uninstall, with the backup of what was there before
+# kirakit so that --uninstall can restore it.
 install_file() {
+	if [ -z "${3-}" ]; then
+		installed="$installed$2$nl"
+	fi
 	if [ "$mode" = link ]; then
 		if [ -L "$2" ] && [ "$(readlink "$2")" = "$1" ]; then
 			log "up to date: $2"
@@ -129,7 +158,10 @@ install_file() {
 	fi
 
 	if [ -e "$2" ] || [ -L "$2" ]; then
-		backup "$2"
+		backup "$2" "${3-}" "${4-}"
+		if [ -z "${3-}" ] && ! listed "$manifest" "$2" && ! listed "$originals" "$2"; then
+			originals_new="$originals_new$2$tab$dest$nl"
+		fi
 	fi
 	run mkdir -p "$(dirname -- "$2")"
 	if [ "$mode" = link ]; then
@@ -229,6 +261,7 @@ load_profile() {
 		gender) saved_gender=$value ;;
 		language) saved_language=$value ;;
 		co_author) saved_co_author=$value ;;
+		style) saved_style=$value ;;
 		esac
 	done <"$profile"
 }
@@ -247,6 +280,7 @@ setup_profile() {
 	user_gender=${opt_gender-${saved_gender-unspecified}}
 	user_language=${opt_language-${saved_language-auto}}
 	co_author=${opt_co_author-${saved_co_author-}}
+	default_style=${opt_style-${saved_style:-kira-cozy}}
 
 	missing=
 	for key in $profile_keys; do
@@ -271,17 +305,17 @@ setup_profile() {
 
 	if [ -n "${saved_co_author+set}" ] && [ "$user_name" = "${saved_name-}" ] &&
 		[ "$user_gender" = "${saved_gender-}" ] && [ "$user_language" = "${saved_language-}" ] &&
-		[ "$co_author" = "$saved_co_author" ]; then
+		[ "$co_author" = "$saved_co_author" ] && [ "$default_style" = "${saved_style-}" ]; then
 		return
 	fi
 	log "save profile: $profile"
 	if [ "$dry_run" -eq 1 ]; then
-		printf '[dry-run] write name=%s gender=%s language=%s co_author=%s to %s\n' \
-			"$user_name" "$user_gender" "$user_language" "$co_author" "$profile"
+		printf '[dry-run] write name=%s gender=%s language=%s co_author=%s style=%s to %s\n' \
+			"$user_name" "$user_gender" "$user_language" "$co_author" "$default_style" "$profile"
 	else
 		mkdir -p "$CLAUDE_DIR"
-		printf 'name=%s\ngender=%s\nlanguage=%s\nco_author=%s\n' \
-			"$user_name" "$user_gender" "$user_language" "$co_author" >"$profile"
+		printf 'name=%s\ngender=%s\nlanguage=%s\nco_author=%s\nstyle=%s\n' \
+			"$user_name" "$user_gender" "$user_language" "$co_author" "$default_style" >"$profile"
 	fi
 }
 
@@ -318,19 +352,142 @@ install_styles() {
 	done
 }
 
-# Skills are directories holding a SKILL.md, installed as a whole.
-install_skills() {
+# Set "outputStyle" in settings.json to the default style, leaving every other setting as it
+# is: Claude Code writes to this file too, so it is edited in place, never replaced.
+set_output_style() {
+	settings=$CLAUDE_DIR/settings.json
+	value=$(sed -n 's/^name: //p' "$build_dir/output-styles/$default_style.md" | head -n 1)
+	case $value in
+	'' | *'"'* | *'\'*) die "cannot use the name of $default_style as outputStyle: $value" ;;
+	esac
+	line="\"outputStyle\": \"$value\""
+	if [ -f "$settings" ] && grep -qF "$line" "$settings"; then
+		log "up to date: $settings (outputStyle)"
+		return
+	fi
+
+	work_dir
+	new=$work/settings.json
+	if [ ! -s "$settings" ] || [ "$(tr -d ' \t\r\n' <"$settings")" = '{}' ]; then
+		printf '{\n  %s\n}\n' "$line" >"$new"
+	elif grep -q '"outputStyle"[[:space:]]*:' "$settings"; then
+		escaped=$(printf '%s\n' "$line" | sed 's/[&|\\]/\\&/g')
+		sed "s|\"outputStyle\"[[:space:]]*:[[:space:]]*\"[^\"]*\"|$escaped|" "$settings" >"$new"
+	else
+		awk -v line="$line" '
+			!done && (i = index($0, "{")) {
+				print substr($0, 1, i)
+				print "  " line ","
+				rest = substr($0, i + 1)
+				if (rest ~ /[^ \t]/) print rest
+				done = 1
+				next
+			}
+			{ print }' "$settings" >"$new"
+	fi
+
+	if [ -f "$settings" ]; then
+		backup "$settings" "$CLAUDE_DIR" '' cp
+	fi
+	log "set outputStyle: $value in $settings"
+	if [ "$dry_run" -eq 0 ]; then
+		mkdir -p "$CLAUDE_DIR"
+		# Write in place to keep the file's permissions and any symlink.
+		cat "$new" >"$settings"
+	fi
+}
+
+install_claude() {
+	if [ -f "$build_dir/CLAUDE.md" ]; then
+		install_file "$(built CLAUDE.md)" "$CLAUDE_DIR/CLAUDE.md"
+	fi
+	for file in "$src"/claude/agents/*.md; do
+		[ -f "$file" ] || continue
+		agent=$(basename "$file")
+		install_file "$(built "agents/$agent")" "$CLAUDE_DIR/agents/$agent"
+	done
+	# Skills are directories holding a SKILL.md, installed as a whole.
 	for dir in "$src"/claude/skills/*/; do
 		[ -f "$dir/SKILL.md" ] || continue
 		skill=$(basename "$dir")
 		install_file "$(built "skills/$skill")" "$CLAUDE_DIR/skills/$skill"
 	done
+	set_output_style
+}
+
+# Copy github/ into the target repository's .github directory. Files are always copied:
+# they belong to that repository and are committed there.
+install_github() {
+	if [ -z "$github_target" ]; then
+		github_target=$(git rev-parse --show-toplevel 2>/dev/null) ||
+			die "--only github needs a Git repository: run it from one or pass --target DIR"
+	fi
+	[ -d "$github_target" ] || die "not a directory: $github_target"
+	github_target=$(CDPATH='' cd -- "$github_target" && pwd)
+	log "github target: $github_target/.github"
+	mode=copy
+	find "$src/github" -type f ! -name .gitkeep | sort | while IFS= read -r file; do
+		rel=${file#"$src/github/"}
+		install_file "$file" "$github_target/.github/$rel" "$github_target" \
+			"github/$(basename "$github_target")/"
+	done
+}
+
+# Merge this run's targets into the manifest read by --uninstall, and the backups of files
+# that were there before kirakit into the list of originals.
+write_manifest() {
+	[ -n "$installed" ] || return 0
+	if [ "$dry_run" -eq 1 ]; then
+		printf '[dry-run] record installed files in %s\n' "$manifest"
+		return
+	fi
+	{
+		if [ -f "$manifest" ]; then
+			cat "$manifest"
+		fi
+		printf '%s' "$installed"
+	} | sort -u >"$manifest.tmp"
+	mv -f "$manifest.tmp" "$manifest"
+	if [ -n "$originals_new" ]; then
+		printf '%s' "$originals_new" >>"$originals"
+	fi
+}
+
+# Remove what the manifest lists: symlinks are deleted, copies are moved to the backups, and
+# files that were there before kirakit are restored.
+uninstall_all() {
+	[ -f "$manifest" ] || die "nothing to uninstall: $manifest not found"
+	while IFS= read -r path; do
+		case $path in
+		'') continue ;;
+		*/../* | */..) log "skip: $path" && continue ;;
+		"$CLAUDE_DIR"/*) ;;
+		*) log "skip (outside $CLAUDE_DIR): $path" && continue ;;
+		esac
+		if [ -L "$path" ]; then
+			log "remove link: $path"
+			run rm -f -- "$path"
+		elif [ -e "$path" ]; then
+			backup "$path"
+		fi
+		original=
+		if [ -f "$originals" ]; then
+			original=$(awk -F "$tab" -v path="$path" '$1 == path { print $2; exit }' "$originals")
+		fi
+		if [ -n "$original" ] && { [ -e "$original" ] || [ -L "$original" ]; }; then
+			log "restore: $original -> $path"
+			run mv -- "$original" "$path"
+		fi
+	done <"$manifest"
+	log "remove manifest: $manifest"
+	run rm -f -- "$manifest" "$originals"
+	log "kept: $profile, $CLAUDE_DIR/.kirakit-backups and the outputStyle setting"
 }
 
 while [ $# -gt 0 ]; do
 	case $1 in
 	--dry-run) dry_run=1 ;;
-	--name | --gender | --language | --co-author | --persona | --only)
+	--name | --gender | --language | --co-author | --default-style | --persona | --only | --target)
 		[ $# -ge 2 ] || die "missing value for $1"
 		case $1 in
 		--name) opt_name=$2 ;;
@@ -345,11 +502,15 @@ while [ $# -gt 0 ]; do
 			[ -n "$2" ] && valid_co_author "$2" || die "invalid co-author: $2 (expected \"NAME <EMAIL>\")"
 			opt_co_author=$2
 			;;
-		--persona)
+		--default-style | --persona)
 			case $2 in
 			'' | -* | *[!A-Za-z0-9_-]*) die "invalid persona name: $2" ;;
 			esac
-			personas="$personas $2"
+			if [ "$1" = --persona ]; then
+				personas="$personas $2"
+			else
+				opt_style=$2
+			fi
 			;;
 		--only)
 			case $2 in
@@ -357,6 +518,7 @@ while [ $# -gt 0 ]; do
 			*) die "unknown component: $2 (expected styles, claude or github)" ;;
 			esac
 			;;
+		--target) github_target=$2 ;;
 		esac
 		shift
 		;;
@@ -364,7 +526,7 @@ while [ $# -gt 0 ]; do
 	--reconfigure) reconfigure=1 ;;
 	--link) mode=link ;;
 	--copy) mode=copy ;;
-	--uninstall) die "--uninstall is not implemented yet" ;;
+	--uninstall) uninstall=1 ;;
 	-h | --help)
 		usage
 		exit 0
@@ -374,15 +536,17 @@ while [ $# -gt 0 ]; do
 	shift
 done
 
-case $only in
-github) die "component '$only' is not implemented yet" ;;
-esac
-
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
 [ "$dry_run" -eq 0 ] || log "dry run: nothing will be changed"
+
+if [ "$uninstall" -eq 1 ]; then
+	uninstall_all
+	log "done"
+	exit 0
+fi
 
 # Use the clone this script lives in, if any; otherwise fetch the repository.
 src=
@@ -407,22 +571,30 @@ if [ -z "$src" ]; then
 fi
 [ -n "$mode" ] || mode=link
 
-for persona in $personas; do
+for persona in $personas ${opt_style-}; do
 	[ -f "$src/personas/$persona.md" ] || die "unknown persona: $persona"
 done
 
 log "source: $src ($mode mode)"
-log "target: $CLAUDE_DIR"
 
+if [ "$only" = github ]; then
+	install_github
+	log "done"
+	exit 0
+fi
+
+log "target: $CLAUDE_DIR"
 setup_profile
-log "profile: ${user_name:-(no name)}, $user_gender, language $user_language, co-author ${co_author:-none}"
+[ -f "$src/personas/$default_style.md" ] || die "unknown default style: $default_style"
+log "profile: ${user_name:-(no name)}, $user_gender, language $user_language, co-author ${co_author:-none}, style $default_style"
 build
 
 if [ -z "$only" ] || [ "$only" = styles ]; then
 	install_styles
 fi
 if [ -z "$only" ] || [ "$only" = claude ]; then
-	install_skills
+	install_claude
 fi
+write_manifest
 
 log "done"
