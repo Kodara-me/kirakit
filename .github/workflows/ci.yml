@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck get-kira.sh scripts/*.sh
+
+  psscriptanalyzer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Analyze get-kira.ps1
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+          $results = Invoke-ScriptAnalyzer -Path get-kira.ps1 -Settings ./PSScriptAnalyzerSettings.psd1
+          $results | Format-Table -AutoSize
+          if ($results) { exit 1 }
+
+  sh:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            shell: dash
+          - os: ubuntu-latest
+            shell: bash --posix
+          - os: macos-latest
+            shell: sh
+          - os: macos-latest
+            shell: zsh --emulate sh
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dry run
+        env:
+          CLAUDE_CONFIG_DIR: ${{ runner.temp }}/claude
+        run: ${{ matrix.shell }} ./get-kira.sh --dry-run --name CI --gender unspecified --language auto --no-co-author
+      - name: End-to-end tests
+        run: sh scripts/test.sh '${{ matrix.shell }}'
+
+  powershell:
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [powershell, pwsh]
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dry run
+        env:
+          CLAUDE_CONFIG_DIR: ${{ runner.temp }}\claude
+        run: ./get-kira.ps1 -DryRun -Name CI -Gender unspecified -Language auto -NoCoAuthor
+      - name: Install, rerun, uninstall
+        env:
+          CLAUDE_CONFIG_DIR: ${{ runner.temp }}\claude
+        run: |
+          ./get-kira.ps1 -Name CI -Gender female -Language French -CoAuthor 'Kira <kira@example.com>'
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $styles = Join-Path $env:CLAUDE_CONFIG_DIR 'output-styles'
+          if (-not (Test-Path (Join-Path $styles 'kira-cozy.md'))) { throw 'styles not installed' }
+          $settings = Get-Content (Join-Path $env:CLAUDE_CONFIG_DIR 'settings.json') -Raw
+          if (-not $settings.Contains('"outputStyle": "Kira (cozy)"')) { throw 'outputStyle not set' }
+          $rerun = ./get-kira.ps1 *>&1 | Out-String
+          if ($rerun -match 'kirakit: (copy|link|backup|set|save)') { throw "rerun changed files:`n$rerun" }
+          ./get-kira.ps1 -Uninstall
+          if (Test-Path (Join-Path $styles 'kira-cozy.md')) { throw 'uninstall left styles' }
+
+  parity:
+    # get-kira.ps1 reimplements the build: its output must match build.sh byte for byte.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install with both installers
+        run: |
+          CLAUDE_CONFIG_DIR="$RUNNER_TEMP/sh" sh get-kira.sh --copy --name Alex --gender female \
+            --language French --co-author 'Kira <kira@example.com>'
+          CLAUDE_CONFIG_DIR="$RUNNER_TEMP/ps" pwsh -File get-kira.ps1 -Copy -Name Alex -Gender female \
+            -Language French -CoAuthor 'Kira <kira@example.com>'
+          CLAUDE_CONFIG_DIR="$RUNNER_TEMP/sh-generic" sh get-kira.sh --copy </dev/null
+          CLAUDE_CONFIG_DIR="$RUNNER_TEMP/ps-generic" pwsh -File get-kira.ps1 -Copy </dev/null
+      - name: Compare
+        run: |
+          for pair in sh:ps sh-generic:ps-generic; do
+            a=$RUNNER_TEMP/${pair%%:*} b=$RUNNER_TEMP/${pair##*:}
+            for path in output-styles skills CLAUDE.md settings.json; do
+              diff -r "$a/$path" "$b/$path"
+            done
+            diff "$a/.kirakit-profile" "$b/.kirakit-profile" || [ ! -e "$a/.kirakit-profile" ]
+          done

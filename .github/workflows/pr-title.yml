@@ -1,0 +1,11 @@
+name: PR title
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions: {}
+
+jobs:
+  conventional-commits:
+    uses: ./.github/workflows/conventional-pr-title.yml
