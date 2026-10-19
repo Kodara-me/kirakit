@@ -4,6 +4,9 @@
 #
 # Usage: scripts/test.sh [SHELL]   (the shell running the scripts, default: sh; it may hold
 #                                   options, such as "bash --posix")
+#
+# Single-quoted "$1" and backquotes below are meant for sh -c and Markdown.
+# shellcheck disable=SC2016
 set -eu
 
 root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)

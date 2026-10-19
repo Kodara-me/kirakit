@@ -358,7 +358,7 @@ set_output_style() {
 	settings=$CLAUDE_DIR/settings.json
 	value=$(sed -n 's/^name: //p' "$build_dir/output-styles/$default_style.md" | head -n 1)
 	case $value in
-	'' | *'"'* | *'\'*) die "cannot use the name of $default_style as outputStyle: $value" ;;
+	'' | *'"'* | *\\*) die "cannot use the name of $default_style as outputStyle: $value" ;;
 	esac
 	line="\"outputStyle\": \"$value\""
 	if [ -f "$settings" ] && grep -qF "$line" "$settings"; then
@@ -499,7 +499,9 @@ while [ $# -gt 0 ]; do
 			;;
 		--language) opt_language=$2 ;;
 		--co-author)
-			[ -n "$2" ] && valid_co_author "$2" || die "invalid co-author: $2 (expected \"NAME <EMAIL>\")"
+			if [ -z "$2" ] || ! valid_co_author "$2"; then
+				die "invalid co-author: $2 (expected \"NAME <EMAIL>\")"
+			fi
 			opt_co_author=$2
 			;;
 		--default-style | --persona)
@@ -524,7 +526,7 @@ while [ $# -gt 0 ]; do
 		;;
 	--no-co-author) opt_co_author= ;;
 	--reconfigure) reconfigure=1 ;;
-	--link) mode=link ;;
+	--link) mode='link' ;;
 	--copy) mode=copy ;;
 	--uninstall) uninstall=1 ;;
 	-h | --help)
@@ -569,7 +571,7 @@ if [ -z "$src" ]; then
 	src=$work/repo
 	mode=copy
 fi
-[ -n "$mode" ] || mode=link
+[ -n "$mode" ] || mode='link'
 
 for persona in $personas ${opt_style-}; do
 	[ -f "$src/personas/$persona.md" ] || die "unknown persona: $persona"

@@ -103,6 +103,7 @@ case $language in
 '' | auto) language='the language of the conversation' ;;
 esac
 
+# shellcheck disable=SC2016 # backquotes are Markdown, not command substitutions
 no_ai_mention='No mention of Claude, Anthropic or a model in the message (no `noreply@anthropic.com`, no "Generated with …").'
 case $co_author in
 '')
