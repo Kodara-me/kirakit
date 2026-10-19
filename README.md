@@ -29,7 +29,7 @@ cd kirakit
 Linux and macOS, without a clone (files are copied):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jstmichel/kirakit/main/get-kira.sh | sh
+curl -fsSL https://github.com/jstmichel/kirakit/releases/latest/download/get-kira.sh | sh
 ```
 
 Windows, from a clone (files are copied; pass `-Link` for symbolic links, which need
@@ -43,11 +43,13 @@ Developer Mode):
 Windows, without a clone:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jstmichel/kirakit/main/get-kira.ps1)))
+& ([scriptblock]::Create((irm https://github.com/jstmichel/kirakit/releases/latest/download/get-kira.ps1)))
 ```
 
-To install a fixed version, use the tag instead of `main` in the URL and set `KIRAKIT_REF`
-to the same tag.
+These URLs always serve the installer of the latest release, which installs that release.
+For a fixed version, replace `latest/download` with `download/v0.2.2` (or any other tag). To
+pass options through the pipe, use `sh -s -- --dry-run` or append `-DryRun` after the last
+parenthesis.
 
 ### What gets installed
 
@@ -90,6 +92,8 @@ Environment variables:
 
 - `CLAUDE_CONFIG_DIR` — Claude Code configuration directory (default: `~/.claude`)
 - `KIRAKIT_REPO`, `KIRAKIT_REF` — repository and branch or tag fetched without a clone
+  (default: the release the installer comes from, otherwise the latest `vX.Y.Z` tag; set
+  `KIRAKIT_REF=main` for unreleased changes)
 
 ### Profile
 
@@ -180,6 +184,12 @@ jobs:
 
 `conventional-pr-title.yml` fails when a pull request title does not follow Conventional
 Commits (`types` input: allowed types, separated by `|`).
+
+## Releases
+
+Push a signed `vX.Y.Z` tag and publish a GitHub release for it: the `release.yml` workflow
+attaches `get-kira.sh` and `get-kira.ps1`, stamped with the tag, which is what the
+`latest/download` URLs serve.
 
 ## Development
 
