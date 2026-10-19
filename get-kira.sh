@@ -4,7 +4,11 @@
 # From a clone, files are symlinked back to the clone by default. When piped from curl,
 # the repository is fetched into a temporary directory and files are copied.
 #
-# Usage: get-kira.sh [--dry-run] [--persona NAME]... [--only COMPONENT] [--link | --copy]
+# The output styles are personalized with the user's name and gender. The installer asks
+# for them once (on the terminal, even when piped from curl) and saves them in
+# $CLAUDE_DIR/.kirakit-profile for later runs.
+#
+# Usage: get-kira.sh [--dry-run] [--name NAME] [--gender GENDER] [--persona NAME]...
 set -eu
 
 KIRAKIT_REPO=${KIRAKIT_REPO:-https://github.com/jstmichel/kirakit.git}
@@ -17,6 +21,11 @@ only=
 personas=
 work=
 backup_dir=
+reconfigure=0
+profile=$CLAUDE_DIR/.kirakit-profile
+user_name=
+user_gender=
+saved=0
 
 log() {
 	printf 'kirakit: %s\n' "$*"
@@ -33,6 +42,9 @@ Usage: get-kira.sh [options]
 
 Options:
   --dry-run          Print what would change, change nothing
+  --name NAME        How Kira calls you (asked once, then saved)
+  --gender GENDER    male, female, nonbinary or unspecified (asked once, then saved)
+  --reconfigure      Ask for name and gender again
   --persona NAME     Install only this persona (repeatable; default: all)
   --only COMPONENT   Install one component: styles, claude or github
   --link             Symlink files to the local clone (default from a clone)
@@ -112,6 +124,84 @@ install_file() {
 	fi
 }
 
+# Whether questions can be asked: true on a terminal, even when stdin is a pipe from curl.
+can_prompt() {
+	(: </dev/tty) 2>/dev/null
+}
+
+ask_name() {
+	printf 'How should Kira call you? [%s] ' "$1" >/dev/tty
+	IFS= read -r answer </dev/tty || answer=
+	printf '%s\n' "${answer:-$1}"
+}
+
+ask_gender() {
+	case $1 in
+	male) default=1 ;;
+	female) default=2 ;;
+	nonbinary) default=3 ;;
+	*) default=4 ;;
+	esac
+	cat >/dev/tty <<EOF
+How should Kira refer to you?
+  1) male (he/him)
+  2) female (she/her)
+  3) non-binary (they/them)
+  4) prefer not to say (they/them)
+EOF
+	while :; do
+		printf 'Choice [%s] ' "$default" >/dev/tty
+		IFS= read -r answer </dev/tty || answer=
+		case ${answer:-$default} in
+		1) echo male && return ;;
+		2) echo female && return ;;
+		3) echo nonbinary && return ;;
+		4) echo unspecified && return ;;
+		esac
+	done
+}
+
+load_profile() {
+	[ -f "$profile" ] || return 0
+	saved=1
+	while IFS='=' read -r key value; do
+		case $key in
+		name) saved_name=$value ;;
+		gender) saved_gender=$value ;;
+		esac
+	done <"$profile"
+}
+
+# Resolve name and gender from options, the saved profile, then questions.
+setup_profile() {
+	load_profile
+	user_name=${opt_name-${saved_name-}}
+	user_gender=${opt_gender-${saved_gender-}}
+
+	if [ "$saved" -eq 0 ] || [ "$reconfigure" -eq 1 ]; then
+		if can_prompt; then
+			[ -n "${opt_name+set}" ] || user_name=$(ask_name "$user_name")
+			[ -n "${opt_gender+set}" ] || user_gender=$(ask_gender "$user_gender")
+		elif [ -z "${opt_name+set}" ] && [ -z "${opt_gender+set}" ]; then
+			log "no terminal to ask your name and gender: using a generic profile (see --name, --gender)"
+			user_gender=${user_gender:-unspecified}
+			return
+		fi
+	fi
+	user_gender=${user_gender:-unspecified}
+
+	if [ "$saved" -eq 1 ] && [ "$user_name" = "${saved_name-}" ] && [ "$user_gender" = "${saved_gender-}" ]; then
+		return
+	fi
+	log "save profile: $profile"
+	if [ "$dry_run" -eq 1 ]; then
+		printf '[dry-run] write name=%s gender=%s to %s\n' "$user_name" "$user_gender" "$profile"
+	else
+		mkdir -p "$CLAUDE_DIR"
+		printf 'name=%s\ngender=%s\n' "$user_name" "$user_gender" >"$profile"
+	fi
+}
+
 install_styles() {
 	# Build into the clone for symlinks, into a temporary directory otherwise, so that a
 	# dry run never writes outside it.
@@ -123,7 +213,8 @@ install_styles() {
 	fi
 
 	# shellcheck disable=SC2086 # persona names are split on purpose
-	built=$(sh "$src/scripts/build-styles.sh" -o "$build_dir" $personas) || exit 1
+	built=$(sh "$src/scripts/build-styles.sh" -o "$build_dir" \
+		--name "$user_name" --gender "$user_gender" $personas) || exit 1
 
 	printf '%s\n' "$built" | while IFS= read -r file; do
 		name=$(basename "$file")
@@ -153,6 +244,20 @@ while [ $# -gt 0 ]; do
 		esac
 		shift
 		;;
+	--name)
+		[ $# -ge 2 ] || die "missing value for $1"
+		opt_name=$2
+		shift
+		;;
+	--gender)
+		[ $# -ge 2 ] || die "missing value for $1"
+		case $2 in
+		male | female | nonbinary | unspecified) opt_gender=$2 ;;
+		*) die "unknown gender: $2 (expected male, female, nonbinary or unspecified)" ;;
+		esac
+		shift
+		;;
+	--reconfigure) reconfigure=1 ;;
 	--link) mode=link ;;
 	--copy) mode=copy ;;
 	--uninstall) die "--uninstall is not implemented yet" ;;
@@ -201,6 +306,8 @@ fi
 log "source: $src ($mode mode)"
 log "target: $CLAUDE_DIR"
 
+setup_profile
+log "profile: ${user_name:-(no name)}, $user_gender"
 install_styles
 
 log "done"

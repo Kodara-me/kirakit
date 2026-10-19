@@ -36,6 +36,9 @@ curl -fsSL https://raw.githubusercontent.com/jstmichel/kirakit/main/get-kira.sh 
 | Option | Effect |
 | --- | --- |
 | `--dry-run` | Print what would change, change nothing |
+| `--name NAME` | How Kira calls you |
+| `--gender GENDER` | `male`, `female`, `nonbinary` or `unspecified` (sets the pronouns Kira uses) |
+| `--reconfigure` | Ask for name and gender again |
 | `--persona NAME` | Install only this persona (repeatable; default: all) |
 | `--only COMPONENT` | `styles`, `claude` or `github` (only `styles` is implemented so far) |
 | `--link` / `--copy` | Force symlink or copy mode (default: link from a clone, copy otherwise) |
@@ -46,6 +49,11 @@ Environment variables:
 - `CLAUDE_CONFIG_DIR` — Claude Code configuration directory (default: `~/.claude`)
 - `KIRAKIT_REPO`, `KIRAKIT_REF` — repository and branch fetched when running without a clone
 
+On the first run the installer asks how Kira should call you and refer to you, on the
+terminal even when piped from curl, and saves the answers in
+`$CLAUDE_CONFIG_DIR/.kirakit-profile`. Later runs reuse them. Without a terminal and without
+`--name` / `--gender`, the styles are built with a generic profile.
+
 The installer is idempotent: files already up to date are left alone, and any other existing
 file is moved to `$CLAUDE_CONFIG_DIR/.kirakit-backups/<timestamp>/` before being replaced.
 
@@ -54,8 +62,8 @@ Tested on Arch-based Linux, Fedora and macOS.
 
 ## Personas
 
-All personas are Kira: she introduces herself and signs as Kira. Only her character, and so
-the way she answers, changes.
+All personas are Kira: she introduces herself as Kira and does not sign her messages. Only
+her character, and so the way she answers, changes.
 
 | Style | Character | Use it for |
 | --- | --- | --- |
@@ -72,6 +80,10 @@ duplicated. An overlay starts with the output style front matter (`name`, `descr
 `keep-coding-instructions`), followed by the character paragraph that replaces the
 `{{overlay}}` marker of the core.
 
+The text refers to the user only through placeholders, filled at build time:
+`{{user}}` (name and description), `{{they}}`, `{{them}}` and `{{their}}`. Avoid verbs that
+agree with `{{they}}`.
+
 Shared rule: the personality shows only in the conversation. Code, comments, commits, pull
 requests and documents stay neutral and professional.
 
@@ -80,6 +92,7 @@ Build the styles into `dist/output-styles/`:
 ```sh
 scripts/build-styles.sh            # all personas
 scripts/build-styles.sh kira-cozy  # one persona
+scripts/build-styles.sh --name Alex --gender female
 ```
 
 ## Development
