@@ -7,16 +7,17 @@ machine with one command.
 
 | Path | Purpose |
 | --- | --- |
-| `personas/` | Claude Code output styles: `_core.md` holds the traits shared by every persona, each other file is an overlay (`kira-sassy.md`, …) |
-| `claude/` | Content for `~/.claude/`: `CLAUDE.md`, `settings.json`, `agents/`, `commands/`, `skills/` |
-| `github/` | Issue and PR templates, reusable workflows, Copilot instructions to copy into a repository |
-| `scripts/` | `build.sh`, which builds the personalized styles and skills into `dist/` |
+| `personas/` | Claude Code output styles: `_core.md` holds the traits shared by every persona, each other file is an overlay (`kira-cozy.md`, …) |
+| `claude/` | Content for `~/.claude/`: `CLAUDE.md`, `skills/`, `agents/` |
+| `github/` | Issue and pull request templates, a workflow and Copilot instructions to copy into a repository's `.github/` |
+| `.github/workflows/` | This repository's CI, and reusable workflows other repositories can call |
+| `scripts/` | `build.sh` (builds the personalized files into `dist/`) and `test.sh` (end-to-end tests) |
 | `get-kira.sh` | Installer for Linux and macOS (POSIX `sh`) |
-| `get-kira.ps1` | Installer for Windows (PowerShell 5+) — planned |
+| `get-kira.ps1` | Installer for Windows (PowerShell 5+, also runs on PowerShell 7) |
 
 ## Install
 
-From a clone (development machine, files are symlinked back to the clone):
+Linux and macOS, from a clone (files are symlinked back to the clone):
 
 ```sh
 git clone https://github.com/jstmichel/kirakit.git
@@ -25,13 +26,49 @@ cd kirakit
 ./get-kira.sh
 ```
 
-Without a clone (files are copied):
+Linux and macOS, without a clone (files are copied):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jstmichel/kirakit/main/get-kira.sh | sh -s -- --dry-run
+curl -fsSL https://raw.githubusercontent.com/jstmichel/kirakit/main/get-kira.sh | sh
 ```
 
+Windows, from a clone (files are copied; pass `-Link` for symbolic links, which need
+Developer Mode):
+
+```powershell
+.\get-kira.ps1 -DryRun
+.\get-kira.ps1
+```
+
+Windows, without a clone:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jstmichel/kirakit/main/get-kira.ps1)))
+```
+
+To install a fixed version, use the tag instead of `main` in the URL and set `KIRAKIT_REF`
+to the same tag.
+
+### What gets installed
+
+In `$CLAUDE_CONFIG_DIR` (default: `~/.claude`):
+
+| Path | Component |
+| --- | --- |
+| `output-styles/kira-*.md` | `styles` |
+| `CLAUDE.md`, `skills/*`, `agents/*` | `claude` |
+| `outputStyle` in `settings.json` | `claude` — only this key is changed; the file is edited in place |
+| `.kirakit-profile`, `.kirakit-manifest`, `.kirakit-originals` | Profile and the record used by `--uninstall` |
+| `.kirakit-backups/<timestamp>/` | Files that were replaced or removed |
+
+The `github` component is installed only on request (`--only github`), into a repository's
+`.github/`: issue templates (bug report, and a feature request written as a specification),
+a pull request template, Copilot instructions, and a workflow that checks pull request titles.
+
 ### Options
+
+`get-kira.ps1` takes the same options in PowerShell form (`-DryRun`, `-Name`, `-CoAuthor`, …;
+see `Get-Help .\get-kira.ps1 -Detailed`).
 
 | Option | Effect |
 | --- | --- |
@@ -39,23 +76,25 @@ curl -fsSL https://raw.githubusercontent.com/jstmichel/kirakit/main/get-kira.sh 
 | `--name NAME` | How Kira calls you |
 | `--gender GENDER` | `male`, `female`, `nonbinary` or `unspecified` (sets the pronouns Kira uses) |
 | `--language LANGUAGE` | Answer language, or `auto` to follow the conversation |
-| `--co-author "NAME <EMAIL>"` | Add this `Co-Authored-By` trailer to commits made with the `commit` skill |
+| `--co-author "NAME <EMAIL>"` | Add this `Co-Authored-By` trailer to commits |
 | `--no-co-author` | Add no `Co-Authored-By` trailer |
+| `--default-style PERSONA` | Style selected in `settings.json` (default: `kira-cozy`) |
 | `--reconfigure` | Ask all profile questions again |
 | `--persona NAME` | Install only this persona (repeatable; default: all) |
-| `--only COMPONENT` | `styles` (output styles), `claude` (skills so far) or `github` (planned); default: all |
-| `--link` / `--copy` | Force symlink or copy mode (default: link from a clone, copy otherwise) |
-| `--uninstall` | Remove installed files (planned) |
+| `--only COMPONENT` | `styles`, `claude` or `github`; default: `styles` and `claude` |
+| `--target DIR` | Repository for `--only github` (default: the current one) |
+| `--link` / `--copy` | Force symlink or copy mode |
+| `--uninstall` | Remove what kirakit installed and restore the files it replaced |
 
 Environment variables:
 
 - `CLAUDE_CONFIG_DIR` — Claude Code configuration directory (default: `~/.claude`)
-- `KIRAKIT_REPO`, `KIRAKIT_REF` — repository and branch fetched when running without a clone
+- `KIRAKIT_REPO`, `KIRAKIT_REF` — repository and branch or tag fetched without a clone
 
 ### Profile
 
-Output styles and skills are personalized. On the first run the installer asks, on the
-terminal even when piped from curl:
+Output styles, skills and `CLAUDE.md` are personalized. On the first run the installer asks,
+on the terminal even when piped from curl:
 
 - how Kira should call you, and your gender (for the pronouns she uses);
 - the answer language: `auto` (default) follows the language of the conversation;
@@ -66,11 +105,18 @@ questions that are not answered yet are asked. Options override the saved values
 `--reconfigure` asks everything again. Without a terminal, unanswered values fall back to
 defaults: no name, `unspecified`, `auto`, no co-author.
 
+### Updates, backups and uninstall
+
 The installer is idempotent: files already up to date are left alone, and any other existing
 file is moved to `$CLAUDE_CONFIG_DIR/.kirakit-backups/<timestamp>/` before being replaced.
+From a clone, update with `git pull` then run the installer again.
 
-Requirements: `git` and a POSIX shell with standard utilities (`awk`, `cmp`, `mktemp`).
-Tested on Arch-based Linux, Fedora and macOS.
+`--uninstall` removes the links and moves copies to the backups, then restores the files that
+were there before kirakit (for example your own `CLAUDE.md`). It keeps the profile, the
+backups and the `outputStyle` setting.
+
+Requirements: `git`, and a POSIX shell with standard utilities (`awk`, `sed`, `cmp`, `diff`,
+`mktemp`) or PowerShell 5+.
 
 ## Personas
 
@@ -92,47 +138,56 @@ duplicated. An overlay starts with the output style front matter (`name`, `descr
 `keep-coding-instructions`), followed by the character paragraph that replaces the
 `{{overlay}}` marker of the core.
 
-Personal details live only in the profile. The text uses placeholders, filled at build time:
+Shared rule: the personality shows only in the conversation. Code, comments, commits, pull
+requests and documents stay neutral and professional.
+
+## Skills
+
+`claude/skills/` holds Claude Code skills, one directory per skill with its `SKILL.md`:
+`commit`, `diffv`, `pull`, `push` and `test`. They answer in the profile's language, and
+`commit` follows its co-author setting. Other skills already in `$CLAUDE_CONFIG_DIR/skills/`
+are left untouched. Agents in `claude/agents/` are installed the same way.
+
+## Placeholders
+
+Personal details live only in the profile. Every Markdown file under `personas/` and
+`claude/` can use these placeholders, filled at build time:
 
 | Placeholder | Value |
 | --- | --- |
 | `{{user}}` | Name and description, e.g. "Alex, a female staff software developer" |
 | `{{they}}`, `{{them}}`, `{{their}}` | Pronouns; avoid verbs that agree with `{{they}}` |
 | `{{language}}` | Answer language, e.g. "French" or "the language of the conversation" |
-| `{{co_author_trailer}}`, `{{attribution_rule}}` | Commit attribution, used by the `commit` skill |
+| `{{co_author_trailer}}`, `{{attribution_rule}}` | Commit attribution in the `commit` skill |
+| `{{co_author_rule}}` | Commit attribution rule in `CLAUDE.md` |
 
-A line holding only a placeholder that expands to nothing is removed.
-
-Shared rule: the personality shows only in the conversation. Code, comments, commits, pull
-requests and documents stay neutral and professional.
-
-Build the styles and skills into `dist/` (the installer does this for you):
+A line holding only a placeholder that expands to nothing is removed. Build the files into
+`dist/` by hand with:
 
 ```sh
-scripts/build.sh                   # all personas, generic profile
-scripts/build.sh kira-cozy         # one persona
 scripts/build.sh --name Alex --gender female --language French --co-author "Kira <kira@example.com>"
 ```
 
-## Skills
+## Reusable workflows
 
-`claude/skills/` holds Claude Code skills, one directory per skill with its `SKILL.md`:
-`commit`, `diffv`, `pull`, `push` and `test`. They are built like the styles, so they answer
-in the profile's language and `commit` follows its co-author setting. The installer links or
-copies each built directory to `$CLAUDE_CONFIG_DIR/skills/`; other skills already there are
-left untouched.
+Other repositories can call the workflows in `.github/workflows/`:
+
+```yaml
+jobs:
+  conventional-commits:
+    uses: jstmichel/kirakit/.github/workflows/conventional-pr-title.yml@v0.2.0
+```
+
+`conventional-pr-title.yml` fails when a pull request title does not follow Conventional
+Commits (`types` input: allowed types, separated by `|`).
 
 ## Development
 
+- `scripts/test.sh [SHELL]` runs the end-to-end tests in a temporary directory, with `sh` by
+  default (`scripts/test.sh dash`, `scripts/test.sh "bash --posix"`).
 - Shell scripts must pass `shellcheck` and stay POSIX (`sh`, BSD and GNU utilities).
-- PowerShell scripts must pass `PSScriptAnalyzer`.
-- CI runs the installer with `--dry-run` on Ubuntu, macOS and Windows.
-
-## Roadmap
-
-1. Repository skeleton, style build, `get-kira.sh` for output styles
-2. Personas: cozy, sassy, focus, mentor, review, gremlin, hype; skills
-3. `get-kira.ps1`
-4. Claude Code configuration (`claude/`), including the default output style, Kira (cozy)
-   ([#1](https://github.com/jstmichel/kirakit/issues/1)), and GitHub configuration (`github/`)
-5. `--uninstall` and CI
+- `get-kira.ps1` must pass `PSScriptAnalyzer` with `PSScriptAnalyzerSettings.psd1`, stay ASCII
+  and run on Windows PowerShell 5.1.
+- `get-kira.ps1` reimplements `build.sh`: CI checks that both produce the same files.
+- CI runs the tests on Ubuntu (`dash`, `bash --posix`) and macOS (`sh`, `zsh`), and the
+  PowerShell installer on Windows (PowerShell 5.1 and 7).
