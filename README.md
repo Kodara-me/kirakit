@@ -79,5 +79,6 @@ scripts/build-styles.sh kira-sassy # one persona
 1. Repository skeleton, `kira-sassy` persona, style build, `get-kira.sh` for output styles
 2. `kira-focus`, `kira-mentor`, `kira-review` personas
 3. `get-kira.ps1`
-4. Claude Code configuration (`claude/`) and GitHub configuration (`github/`)
+4. Claude Code configuration (`claude/`), including the default output style
+   ([#1](https://github.com/jstmichel/kirakit/issues/1)), and GitHub configuration (`github/`)
 5. `--uninstall` and CI
