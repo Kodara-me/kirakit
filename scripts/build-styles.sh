@@ -2,7 +2,7 @@
 # Build Claude Code output styles from personas/_core.md and one overlay per persona.
 #
 # An overlay is a Markdown file whose front matter becomes the style's front matter and
-# whose body replaces the {{overlay}} line of the core text. Files starting with "_" are
+# whose body replaces the {{overlay}} marker of the core text. Files starting with "_" are
 # not personas.
 #
 # Usage: build-styles.sh [-o DIR] [PERSONA...]
@@ -48,7 +48,7 @@ done
 
 core=$personas_dir/_core.md
 [ -f "$core" ] || die "missing $core"
-grep -qx '{{overlay}}' "$core" || die "$core: missing {{overlay}} line"
+grep -qF '{{overlay}}' "$core" || die "$core: missing {{overlay}} marker"
 
 if [ $# -eq 0 ]; then
 	for file in "$personas_dir"/*.md; do
@@ -72,7 +72,10 @@ build_one() {
 		# Front matter, delimiters included.
 		awk '{ print } NR > 1 && $0 == "---" { exit }' "$overlay"
 		printf '\n'
-		awk -v body="$body" '$0 == "{{overlay}}" { while ((getline line < body) > 0) print line; next } { print }' "$core"
+		awk -v body="$body" '
+			BEGIN { while ((getline line < body) > 0) text = (n++ ? text "\n" : "") line }
+			i = index($0, "{{overlay}}") { $0 = substr($0, 1, i - 1) text substr($0, i + 11) }
+			{ print }' "$core"
 	} >"$tmp"
 	rm -f "$body"
 	mv -f "$tmp" "$out_dir/$1.md"
