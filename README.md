@@ -148,9 +148,19 @@ requests and documents stay neutral and professional.
 ## Skills
 
 `claude/skills/` holds Claude Code skills, one directory per skill with its `SKILL.md`:
-`commit`, `diffv`, `pull`, `push` and `test`. They answer in the profile's language, and
-`commit` follows its co-author setting. Other skills already in `$CLAUDE_CONFIG_DIR/skills/`
-are left untouched. Agents in `claude/agents/` are installed the same way.
+`commit`, `diffv`, `pull`, `push`, `spec` and `test`. They answer in the profile's language,
+and `commit` follows its co-author setting. Other skills already in
+`$CLAUDE_CONFIG_DIR/skills/` are left untouched. Agents in `claude/agents/` are installed the
+same way.
+
+## Specifications
+
+Features are specified in GitHub issues, in the format of the feature request form:
+Context, Requirements (`R1`, `R2`, …), Design, Tasks and Open questions. Each task is a
+sub-issue of the specification. The format is defined in `claude/skills/spec/SKILL.md`; the
+`spec` skill writes a specification one phase at a time and creates the sub-issues with
+`gh` (a version whose `gh issue create` has `--parent`). `claude/CLAUDE.md` holds the rules
+for working from a specification.
 
 ## Placeholders
 

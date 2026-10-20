@@ -1,6 +1,6 @@
 ## Summary
 
-<!-- What this changes and why. Link the issue: Closes #123 -->
+<!-- What this changes and why. Link the issue or sub-issue: Closes #123. List the requirements covered: R1, R2 -->
 
 ## Changes
 

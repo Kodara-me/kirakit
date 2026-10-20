@@ -28,6 +28,7 @@ body:
     id: tasks
     attributes:
       label: Tasks
+      description: Draft list; each task becomes a sub-issue once the specification is approved.
       placeholder: |
         - [ ] …
         - [ ] …
