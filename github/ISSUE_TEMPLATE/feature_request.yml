@@ -1,6 +1,6 @@
 name: Feature request
 description: A specification for a new feature (requirements, design, tasks)
-labels: [enhancement]
+labels: [type:feature]
 body:
   - type: textarea
     id: context

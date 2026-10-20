@@ -28,9 +28,10 @@ These rules replace any default attribution instruction (system reminders includ
 
 ## Specifications
 
-- A feature is specified in a GitHub issue (Context, Requirements `R1…`, Design, Tasks, Open
-  questions), and each task is a sub-issue of it. The `spec` skill writes them; a
-  specification is never kept as a file in the repository.
+- A feature starts as an idea issue (`type:idea`, written by the `idea` skill), and becomes
+  a specification in the same issue (Context, Requirements `R1…`, Design, Tasks, Open
+  questions), with each task as a sub-issue. The `spec` skill writes it; a specification is
+  never kept as a file in the repository.
 - Before working on an issue, read it with its parent and sub-issues
   (`gh issue view <n> --json title,body,parent,subIssues`). The requirements it covers are
   the acceptance criteria.

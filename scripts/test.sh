@@ -62,6 +62,7 @@ $shell "$root/scripts/build.sh" -o "$tmp/build2" --name Alex --gender female --l
 check 'build: pronouns' contains "$tmp/build2/output-styles/kira-sassy.md" 'sitting beside her'
 check 'build: language' contains "$tmp/build2/skills/push/SKILL.md" 'Answer in French.'
 check 'build: spec skill' contains "$tmp/build2/skills/spec/SKILL.md" 'Answer in French.'
+check 'build: idea skill' contains "$tmp/build2/skills/idea/SKILL.md" 'Answer in French.'
 check 'build: co-author trailer' contains "$tmp/build2/skills/commit/SKILL.md" 'Co-Authored-By: Kira <kira@example.com>'
 check 'build: rejects a bad co-author' sh -c '! $1 "$2/scripts/build.sh" -o "$3" --co-author Kira' _ "$shell" "$root" "$tmp/x"
 
