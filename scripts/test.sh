@@ -365,6 +365,18 @@ $shell "$root/scripts/build.sh" -o "$tmp/analyst-no-login" --analyst >/dev/null
 check 'analyst skills: no prefix without an analyst account' \
 	sh -c '! grep -q GH_TOKEN "$1" "$2"' _ "$tmp/analyst-no-login/skills/idea/SKILL.md" "$tmp/analyst-no-login/skills/spec/SKILL.md"
 
+# --- the team in the git rules (#15 R6, R7, R8) --------------------------------------------
+
+rules=$tmp/iris-build/rules/git.md
+check 'team rules: section with an analyst' contains "$rules" '## The team'
+check 'team rules: the analyst never commits' contains "$rules" 'Iris never commits, pushes or opens a pull request'
+check "team rules: the analyst's account" contains "$rules" 'GH_TOKEN=$(gh auth token --user iris-bot)'
+check 'team rules: who writes the rest' contains "$rules" 'The assistant writes everything else: pull requests'
+check 'team rules: gaps asked, not decided' contains "$rules" 'it does not decide alone: it asks the analyst'
+check 'team rules: no account lines without a login' sh -c 'grep -q "## The team" "$1" && ! grep -q "On GitHub, the analyst" "$1"' _ \
+	"$tmp/analyst-no-login/rules/git.md"
+check 'team rules: no section without an analyst' sh -c '! grep -q "The team\|Iris" "$1"' _ "$tmp/iris-none/rules/git.md"
+
 # --- dry run -------------------------------------------------------------------------------
 
 claude=$tmp/dry

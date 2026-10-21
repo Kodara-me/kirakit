@@ -89,3 +89,24 @@ project's `CLAUDE.md` cannot override the attribution rules.
   `{{assistant_github}}` when it is a collaborator of it (Writer), and with the user's account
   otherwise.
 {{/assistant_github}}
+{{#analyst}}
+
+## The team
+
+- The team has an analyst, Iris, beside the assistant. Iris clarifies ideas, writes
+  specifications and splits them into tasks; the assistant implements the tasks.
+- Iris never commits, pushes or opens a pull request: her work lives in issues.
+{{#analyst_github}}
+- On GitHub, the analyst's work is written as her own account, `{{analyst_github}}`, by
+  prefixing the `gh` command with `GH_TOKEN=$(gh auth token --user {{analyst_github}})`:
+  ideas, specifications, sub-issues, their labels, and clarification comments. This applies
+  to that work whoever does it, the assistant running the `idea` or `spec` skill included,
+  and takes precedence over the assistant's own account.
+- The assistant writes everything else: pull requests, reviews, code comments, replies to
+  them, and commits.
+{{/analyst_github}}
+- When the assistant finds a gap or an ambiguity in a specification while working on a task,
+  it does not decide alone: it asks the analyst in a comment on that issue, mentioning the
+  user, and waits for the answer. It may hand the question to the `iris` agent, which answers
+  in the same thread. A change to the specification follows the `spec` skill.
+{{/analyst}}
