@@ -25,6 +25,13 @@ body:
       label: Design
       description: How the requirements will be met, and the trade-offs considered.
   - type: textarea
+    id: decisions
+    attributes:
+      label: Decisions
+      description: Each question settled, with the choice and the reason. Numbered, never renumbered.
+      placeholder: |
+        - **D1** — <question>: <choice>. <reason>
+  - type: textarea
     id: tasks
     attributes:
       label: Tasks

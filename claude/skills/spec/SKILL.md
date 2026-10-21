@@ -1,6 +1,6 @@
 ---
 name: spec
-description: Turns an idea into a feature specification (context, requirements, design, tasks) in a GitHub issue, one phase at a time, and creates each task as a sub-issue. Starts from an idea issue, an existing specification to resume, a specification file, or a description. Use when the user asks to specify, spec out, clarify or plan a feature or an idea.
+description: Turns an idea into a feature specification (context, requirements, design, decisions, tasks) in a GitHub issue, settling on its own the questions that have a good answer and asking only about real trade-offs, and creates each task as a sub-issue. Starts from an idea issue, an existing specification to resume, a specification file, or a description. Use when the user asks to specify, spec out, clarify or plan a feature or an idea.
 argument-hint: "[issue number or URL, path to a specification file, or a description]"
 allowed-tools: Bash(gh issue view:*), Bash(gh issue list:*), Bash(gh label list:*), Bash(gh repo view:*), Bash(git log:*), Bash(git status:*), Read, Grep, Glob
 ---
@@ -38,6 +38,10 @@ The problem to solve and why it matters now.
 
 How the requirements will be met, and the trade-offs considered.
 
+### Decisions
+
+- **D1** — <question>: <choice>. <reason>
+
 ### Tasks
 
 Tracked as sub-issues.
@@ -52,6 +56,9 @@ Tracked as sub-issues.
   is a single testable statement of observable behavior, not of implementation.
 - **Design** names the modules touched, the data and interfaces, and the alternatives
   rejected with the reason. It stays short; link files as `path:line` when useful.
+- **Decisions** records every question settled without the user (step 2), and the user's
+  answers, with the question, the choice and the reason. They are numbered `D1`, `D2`, …
+  and never renumbered, like the requirements; `None` when there are none.
 - **Open questions** lists what is still undecided, or `None`.
 
 Each task is a sub-issue of the parent:
@@ -87,6 +94,9 @@ Read `$ARGUMENTS`:
     Problem or opportunity, Desired outcome, …): start with step 2.
   - A **specification**: resume at the first phase whose section is missing, empty, or
     `_To be written._`. Show what is already there in two or three lines first.
+  - Read its comments too (`gh issue view <n> --comments`). When the user answered a
+    comment of questions (step 2), take those answers and resume where the questions
+    stopped, without asking for them again in the conversation.
 - **A file** (a specification kept in the repository): read it and map its content onto
   the format, then resume like a specification. Once the issue exists, offer to delete the
   file in a separate commit.
@@ -96,34 +106,46 @@ Read `$ARGUMENTS`:
 Read the code that the feature touches before writing anything, so the specification
 matches the repository.
 
-## 2. Clarify an idea
+## 2. Settle the questions
 
-Before writing any requirement:
+Before writing any requirement, compare the idea with the code: what already exists, what
+is missing (`path:line`). Then take the idea's open questions and the ones the analysis
+raised, and sort each one:
 
-- Restate the idea in two or three sentences: the problem, the outcome, who is affected.
-- Say what already exists in the code and what is missing, with `path:line` links.
-- Answer the idea's open questions that the code settles, and list the rest, with the new
-  questions the analysis raised. Ask them all at once, most important first, and propose
-  an answer for each one when there is a sensible default.
+- **Settle it** when it has a good answer: the code, an existing convention, the text of
+  the idea or an earlier decision settles it, or its options are easy to change later.
+  Record the choice and its reason under Decisions.
+- **Ask the user** only when its options trade off things the user values (scope, cost,
+  experience), when the choice is hard to reverse (public interface, data, accounts,
+  permissions, security, release), or when it goes beyond the idea.
 
-Wait for the answers, then go on to step 3. The idea's content feeds the specification:
-problem and outcome go to Context, together with who is affected and why now; questions
-still unanswered go to Open questions.
+Ask those questions all at once, in a single comment on the issue (`gh issue comment <n>
+--body-file <file>`) that mentions the user (`@<login>`, from `gh api user --jq .login`):
+each question with its options and your recommendation, most important first, ending with
+a short question such as "Can I go on?". In the conversation, show only one line with the
+comment's link. Without an issue yet, ask them in the conversation instead.
 
-## 3. Write it one phase at a time
+Wait only for the answers that block the specification; the other questions go to Open
+questions with your recommendation, and the writing goes on. The idea's content feeds the
+specification: problem and outcome go to Context, together with who is affected and why
+now.
 
-Show each phase in the conversation and wait for the user's approval before the next one.
-Ask the questions that block a phase; record the others under Open questions.
+## 3. Write the specification
+
+Write the three phases in one pass, without stopping for approval:
 
 1. **Context and requirements.**
-2. **Design.**
+2. **Design and decisions.**
 3. **Tasks**: the list of sub-issues, with their titles, the requirements each one covers
    and their "Done when". Check that every requirement is covered.
 
+When the user asks to work phase by phase, show each phase in the conversation and wait for
+their approval before the next one.
+
 ## 4. Publish
 
-Publish when the tasks are approved, or after any approved phase if the user asks; the
-phases not written yet hold `_To be written._`. Show what will be created or edited, and ask
+Publish when the specification is written, or after any approved phase when working phase
+by phase; the phases not written yet hold `_To be written._`. Show what will be created or edited, and ask
 for confirmation before any `gh issue create` or `gh issue edit`. Then:
 
 - Parent: `gh issue create --title "<title>" --body-file <file>`, or

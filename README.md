@@ -276,8 +276,8 @@ a gap Kira finds while coding goes back to Iris as a comment instead of being se
 silently. The team stays small on purpose.
 
 Iris is calm, precise and curious. She asks "why" before "how", restates what she
-understood, points out gaps and contradictions, and proposes a default answer for each open
-question.
+understood, points out gaps and contradictions, settles the questions that have a good
+answer and records them, and asks only about real trade-offs.
 
 - **Talk to her** by switching the session's output style to `Iris` (`/config`), or start
   one with `claude --settings '{"outputStyle":"Iris"}'`. Switch back to a Kira style the
@@ -309,10 +309,11 @@ A feature goes through one GitHub issue, from idea to specification:
 1. **Idea** (`type:idea`, `status:needs-clarification`): the problem and the desired
    outcome, in the format of the "Idea" issue form. The `idea` skill captures one without
    analyzing it.
-2. **Specification** (`type:feature`, then `status:specified`): `/spec #<n>` clarifies the
-   idea against the code, then rewrites the issue as Context, Requirements (`R1`, `R2`, …),
-   Design, Tasks and Open questions, one phase at a time. It can publish after any phase
-   and resume later at the first section not written yet.
+2. **Specification** (`type:feature`, then `status:specified`): `/spec #<n>` checks the
+   idea against the code, settles the questions that have a good answer, asks the others in
+   a single comment on the issue, then rewrites the issue as Context, Requirements (`R1`,
+   `R2`, …), Design, Decisions (`D1`, …), Tasks and Open questions in one pass. Phase by
+   phase stays available on request, and it resumes later from the answers on the issue.
 3. **Tasks** (`type:task`): each task is a sub-issue of the specification, created with
    `gh` (a version whose `gh issue create` has `--parent`).
 

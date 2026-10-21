@@ -84,6 +84,17 @@ $shell "$root/scripts/build.sh" -o "$tmp/build2" --name Alex --gender female --l
 check 'build: pronouns' contains "$tmp/build2/output-styles/kira-sassy.md" 'sitting beside her'
 check 'build: language' contains "$tmp/build2/skills/push/SKILL.md" 'Answer in French.'
 check 'build: spec skill' contains "$tmp/build2/skills/spec/SKILL.md" 'Answer in French.'
+spec_skill=$tmp/build2/skills/spec/SKILL.md
+check 'spec: settles what has a good answer (#51 R2)' contains "$spec_skill" 'the code, an existing convention, the text of'
+check 'spec: asks only about real trade-offs (#51 R3)' contains "$spec_skill" 'when the choice is hard to reverse (public interface, data, accounts,'
+check 'spec: questions in a single comment (#51 R4)' contains "$spec_skill" 'in a single comment on the issue'
+check 'spec: one line in the chat (#51 R4)' contains "$spec_skill" 'show only one line with the'
+check 'spec: resumes from the answers on the issue (#51 R5)' contains "$spec_skill" 'When the user answered a'
+check 'spec: written in one pass (#51 R6)' sh -c 'grep -q "in one pass, without stopping for approval" "$1" && ! grep -q "one phase at a time" "$1"' _ "$spec_skill"
+check 'spec: phase by phase on request (#51 R6)' contains "$spec_skill" 'When the user asks to work phase by phase'
+check 'spec: a Decisions section (#51 R7)' sh -c 'grep -qx "### Decisions" "$1" && grep -qF -- "- **D1** — <question>: <choice>. <reason>" "$1"' _ "$spec_skill"
+form=$root/github/ISSUE_TEMPLATE/feature_request.yml
+check 'form: decisions between design and tasks (#51 R12)' sh -c 'test "$(grep -o "id: [a-z]*" "$1" | tr "\n" " ")" = "id: context id: requirements id: design id: decisions id: tasks id: questions "' _ "$form"
 check 'build: idea skill' contains "$tmp/build2/skills/idea/SKILL.md" 'Answer in French.'
 check 'idea: creates without confirmation (#51 R1)' sh -c '! grep -q "ask for confirmation" "$1" && grep -q "without asking for confirmation" "$1"' _ "$tmp/build2/skills/idea/SKILL.md"
 check 'idea: a duplicate still asks (#51 R1)' contains "$tmp/build2/skills/idea/SKILL.md" 'show it and ask whether to go on'
