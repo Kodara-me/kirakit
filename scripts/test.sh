@@ -1,6 +1,7 @@
 #!/bin/sh
 # End-to-end tests for build.sh and get-kira.sh. Everything happens in a temporary
-# directory: the real Claude Code configuration is never touched.
+# directory: the real Claude Code configuration is never touched, nor the clone's dist/,
+# which a link install points to.
 #
 # Usage: scripts/test.sh [SHELL]   (the shell running the scripts, default: sh; it may hold
 #                                   options, such as "bash --posix")
@@ -9,12 +10,28 @@
 # shellcheck disable=SC2016
 set -eu
 
-root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+clone=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 shell=${1:-sh}
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/kirakit-test.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 failures=0
 claude=
+
+# The scripts run from a copy of the working tree, uncommitted changes included, so that
+# link mode builds into the copy's dist/.
+root=$tmp/src
+(cd "$clone" && git ls-files -co --exclude-standard | while IFS= read -r file; do
+	[ -f "$file" ] || continue
+	mkdir -p "$root/$(dirname "$file")"
+	cp -p "$file" "$root/$file"
+done)
+
+# A fingerprint of the clone's dist/, compared at the end.
+dist_fingerprint() {
+	[ -d "$clone/dist" ] || return 0
+	(cd "$clone" && find dist -type f -exec cksum {} + | sort)
+}
+dist_before=$(dist_fingerprint)
 
 check() {
 	description=$1
@@ -343,13 +360,9 @@ check 'github: needs a repository' sh -c 'cd "$1" && ! CLAUDE_CONFIG_DIR="$2" $3
 
 # --- without a clone (curl) ----------------------------------------------------------------
 
-# Commit the working tree into a scratch repository, so uncommitted changes are tested too.
-mkdir "$tmp/remote"
-(cd "$root" && git ls-files -co --exclude-standard | while IFS= read -r file; do
-	[ -f "$file" ] || continue
-	mkdir -p "$tmp/remote/$(dirname "$file")"
-	cp -p "$file" "$tmp/remote/$file"
-done)
+# Commit the copy of the working tree into a scratch repository.
+cp -Rp "$root" "$tmp/remote"
+rm -rf "$tmp/remote/dist"
 git -C "$tmp/remote" init -q -b main
 git -C "$tmp/remote" -c core.safecrlf=false add -A
 git -C "$tmp/remote" -c user.name=test -c user.email=test@example.com -c commit.gpgsign=false \
@@ -376,6 +389,10 @@ check 'ref: highest release tag by default' test "$(fetched "$root/get-kira.sh")
 sed 's/^KIRAKIT_VERSION=$/KIRAKIT_VERSION=v0.9.0/' "$root/get-kira.sh" >"$tmp/stamped.sh"
 check 'ref: a stamped copy installs its own version' test "$(fetched "$tmp/stamped.sh")" = v0.9.0
 check 'ref: KIRAKIT_REF wins' test "$(KIRAKIT_REF=main fetched "$tmp/stamped.sh")" = main
+
+# --- the clone -----------------------------------------------------------------------------
+
+check "clone: dist/ unchanged" test "$(dist_fingerprint)" = "$dist_before"
 
 if [ "$failures" -gt 0 ]; then
 	printf '%s test(s) failed\n' "$failures"
