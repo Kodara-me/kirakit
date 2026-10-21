@@ -659,7 +659,7 @@ function Install-KiraBuilt([string]$Relative, [string]$Destination) {
     if (Test-Path -LiteralPath (Join-Path $script:BuildDir $Relative.Replace('/', $Sep))) {
         Install-KiraFile (Get-KiraBuiltPath $Relative) $Destination
     } elseif (Test-KiraListed $ManifestPath $Destination) {
-        Remove-KiraInstalled $Destination
+        Uninstall-KiraFile $Destination
         $script:Removed.Add($Destination)
     }
 }
@@ -831,7 +831,7 @@ function Save-KiraManifest {
 
 # Remove a file kirakit installed (a symbolic link is deleted, a copy is moved to the
 # backups) and restore what was there before kirakit.
-function Remove-KiraInstalled([string]$Path) {
+function Uninstall-KiraFile([string]$Path) {
     if (Get-KiraLinkTarget $Path) {
         Write-KiraLog "remove link: $Path"
         if ($DryRun) { Write-DryRun "remove $Path" } else { (Get-Item -LiteralPath $Path -Force).Delete() }
@@ -860,7 +860,7 @@ function Invoke-KiraUninstall {
             Write-KiraLog "skip: $path"
             continue
         }
-        Remove-KiraInstalled $path
+        Uninstall-KiraFile $path
     }
     Write-KiraLog "remove manifest: $ManifestPath"
     if ($DryRun) {
