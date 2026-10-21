@@ -90,7 +90,8 @@ $Sep = [IO.Path]::DirectorySeparatorChar
 $ProfilePath = Join-Path $ClaudeDir '.kirakit-profile'
 $ManifestPath = Join-Path $ClaudeDir '.kirakit-manifest'
 $OriginalsPath = Join-Path $ClaudeDir '.kirakit-originals'
-$PlaceholderKeys = @('user', 'they', 'them', 'their', 'language', 'co_author_trailer', 'attribution_rule', 'co_author_rule')
+$PlaceholderKeys = @('user', 'they', 'them', 'their', 'language', 'co_author_trailer', 'attribution_rule', 'co_author_rule',
+    'co_author', 'assistant_name', 'assistant_email', 'assistant_signing_key', 'assistant_github')
 
 $script:Work = $null
 $script:BackupDir = $null
@@ -386,7 +387,10 @@ function Get-KiraProfile {
 # --- Build (mirrors scripts/build.sh) -------------------------------------------------------
 
 function Get-KiraValue($UserProfile) {
-    foreach ($value in @($UserProfile.name, $UserProfile.language, $UserProfile.co_author)) {
+    $assistant = [string]$UserProfile.assistant
+    $signingKey = [string]$UserProfile.assistant_signing_key
+    $github = [string]$UserProfile.assistant_github
+    foreach ($value in @($UserProfile.name, $UserProfile.language, $UserProfile.co_author, $assistant, $signingKey)) {
         if ($value -match "`n|\{\{|\}\}") { throw "invalid value: $value" }
     }
     switch ($UserProfile.gender) {
@@ -414,17 +418,48 @@ function Get-KiraValue($UserProfile) {
     } else {
         throw "invalid co-author: $coAuthorValue (expected `"NAME <EMAIL>`")"
     }
+    if ($assistant -eq '') {
+        $assistantName = ''; $assistantEmail = ''
+    } elseif ($assistant -match '^(.+) <(.+@.+)>$') {
+        $assistantName = $Matches[1]; $assistantEmail = $Matches[2]
+    } else {
+        throw "invalid assistant: $assistant (expected `"NAME <EMAIL>`")"
+    }
+    if ($github -cmatch '[^A-Za-z0-9-]') { throw "invalid GitHub login: $github" }
     return @{
         user = $user; they = $they; them = $them; their = $their; language = $answerLanguage
         co_author_trailer = $trailer; attribution_rule = $attribution; co_author_rule = $rule
+        co_author = $coAuthorValue; assistant_name = $assistantName; assistant_email = $assistantEmail
+        assistant_signing_key = $signingKey; assistant_github = $github
     }
 }
 
 # Fill the placeholders of LINES; a line holding only a placeholder that expands to nothing
-# is removed.
-function Format-KiraLine([string[]]$Lines, $Values) {
+# is removed. Lines between {{#KEY}} and {{/KEY}} are kept only when KEY is not empty, and
+# lines between {{^KEY}} and {{/KEY}} only when it is (mirrors render in scripts/build.sh).
+function Format-KiraLine([string[]]$Lines, $Values, [string]$Origin) {
     $out = New-Object System.Collections.Generic.List[string]
-    foreach ($line in $Lines) {
+    $open = New-Object System.Collections.Generic.List[string]
+    $shown = New-Object System.Collections.Generic.List[bool]
+    $hidden = 0
+    for ($n = 0; $n -lt $Lines.Count; $n++) {
+        $line = $Lines[$n]
+        if ($line -cmatch '^\{\{([#^/])([a-z_]+)\}\}$') {
+            $kind = $Matches[1]; $key = $Matches[2]
+            if ($PlaceholderKeys -cnotcontains $key) { throw "${Origin}:$($n + 1): unknown block $key" }
+            if ($kind -eq '/') {
+                if ($open.Count -eq 0 -or $open[$open.Count - 1] -cne $key) { throw "${Origin}:$($n + 1): unexpected {{/$key}}" }
+                if (-not $shown[$shown.Count - 1]) { $hidden-- }
+                $open.RemoveAt($open.Count - 1); $shown.RemoveAt($shown.Count - 1)
+            } else {
+                $set = [string]$Values[$key] -ne ''
+                $visible = if ($kind -eq '#') { $set } else { -not $set }
+                $open.Add($key); $shown.Add($visible)
+                if (-not $visible) { $hidden++ }
+            }
+            continue
+        }
+        if ($hidden -gt 0) { continue }
         $keep = $true
         foreach ($key in $PlaceholderKeys) {
             $placeholder = '{{' + $key + '}}'
@@ -433,11 +468,12 @@ function Format-KiraLine([string[]]$Lines, $Values) {
         }
         if ($keep) { $out.Add($line) }
     }
+    if ($open.Count -gt 0) { throw "${Origin}:end: missing {{/$($open[$open.Count - 1])}}" }
     return $out.ToArray()
 }
 
 function Write-KiraRendered([string]$Path, [string[]]$Lines, $Values, [string]$Origin) {
-    $text = Join-KiraLine @(Format-KiraLine $Lines $Values)
+    $text = Join-KiraLine @(Format-KiraLine $Lines $Values $Origin)
     if ($text -match '\{\{[^}]*\}\}') { throw "${Origin}: unknown placeholder $($Matches[0])" }
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Path) | Out-Null
     Write-KiraText $Path $text

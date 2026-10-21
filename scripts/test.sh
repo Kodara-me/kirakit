@@ -66,6 +66,59 @@ check 'build: idea skill' contains "$tmp/build2/skills/idea/SKILL.md" 'Answer in
 check 'build: co-author trailer' contains "$tmp/build2/skills/commit/SKILL.md" 'Co-Authored-By: Kira <kira@example.com>'
 check 'build: rejects a bad co-author' sh -c '! $1 "$2/scripts/build.sh" -o "$3" --co-author Kira' _ "$shell" "$root" "$tmp/x"
 
+# Conditional blocks and assistant placeholders, on a copy of the sources with a test skill.
+blocks=$tmp/blocks-src
+mkdir -p "$blocks/claude/skills/blocks"
+cp -R "$root/scripts" "$root/personas" "$blocks/"
+cp "$root/claude/CLAUDE.md" "$blocks/claude/"
+cat >"$blocks/claude/skills/blocks/SKILL.md" <<'EOF'
+first
+{{#assistant_github}}
+github {{assistant_github}}
+{{#assistant_signing_key}}
+key {{assistant_signing_key}}
+{{/assistant_signing_key}}
+{{/assistant_github}}
+{{^assistant_github}}
+no github
+{{/assistant_github}}
+assistant {{assistant_name}} <{{assistant_email}}>
+last
+EOF
+
+# build_blocks DIR OPTION...: build the copy into DIR.
+build_blocks() {
+	out=$1
+	shift
+	$shell "$blocks/scripts/build.sh" -o "$out" "$@" >/dev/null 2>&1
+}
+
+# same_lines FILE LINE...: whether FILE holds exactly these lines.
+same_lines() {
+	file=$1
+	shift
+	printf '%s\n' "$@" | cmp -s - "$file"
+}
+
+build_blocks "$tmp/blocks-all" --assistant 'Kira <kira@example.com>' --assistant-github kira-bot \
+	--assistant-signing-key /keys/kira.pub
+check 'blocks: kept when set, nested too' same_lines "$tmp/blocks-all/skills/blocks/SKILL.md" \
+	first 'github kira-bot' 'key /keys/kira.pub' 'assistant Kira <kira@example.com>' last
+build_blocks "$tmp/blocks-nokey" --assistant 'Kira <kira@example.com>' --assistant-github kira-bot
+check 'blocks: nested block dropped when empty' same_lines "$tmp/blocks-nokey/skills/blocks/SKILL.md" \
+	first 'github kira-bot' 'assistant Kira <kira@example.com>' last
+build_blocks "$tmp/blocks-none"
+check 'blocks: inverted block kept when empty' same_lines "$tmp/blocks-none/skills/blocks/SKILL.md" \
+	first 'no github' 'assistant  <>' last
+check 'build: rejects a bad assistant' sh -c '! $1 "$2/scripts/build.sh" -o "$3" --assistant Kira' _ "$shell" "$root" "$tmp/x"
+check 'build: rejects a bad GitHub login' sh -c '! $1 "$2/scripts/build.sh" -o "$3" --assistant-github "a b"' _ "$shell" "$root" "$tmp/x"
+printf '{{#assistant_github}}\nopen\n' >"$blocks/claude/skills/blocks/SKILL.md"
+check 'blocks: rejects an unclosed block' sh -c '! $1 "$2/scripts/build.sh" -o "$3"' _ "$shell" "$blocks" "$tmp/x"
+printf 'text\n{{/assistant_github}}\n' >"$blocks/claude/skills/blocks/SKILL.md"
+check 'blocks: rejects an unopened block' sh -c '! $1 "$2/scripts/build.sh" -o "$3"' _ "$shell" "$blocks" "$tmp/x"
+printf '{{#nothing}}\n{{/nothing}}\n' >"$blocks/claude/skills/blocks/SKILL.md"
+check 'blocks: rejects an unknown key' sh -c '! $1 "$2/scripts/build.sh" -o "$3"' _ "$shell" "$blocks" "$tmp/x"
+
 # --- dry run -------------------------------------------------------------------------------
 
 claude=$tmp/dry

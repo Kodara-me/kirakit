@@ -182,9 +182,25 @@ Personal details live only in the profile. Every Markdown file under `personas/`
 | `{{language}}` | Answer language, e.g. "French" or "the language of the conversation" |
 | `{{co_author_trailer}}`, `{{attribution_rule}}` | Commit attribution in the `commit` skill |
 | `{{co_author_rule}}` | Commit attribution rule in `CLAUDE.md` |
+| `{{co_author}}` | The co-author, "NAME <EMAIL>", or nothing |
+| `{{assistant_name}}`, `{{assistant_email}}` | The assistant's git identity, or nothing |
+| `{{assistant_signing_key}}` | Path to the assistant's public SSH signing key, or nothing |
+| `{{assistant_github}}` | The assistant's GitHub login, or nothing |
 
-A line holding only a placeholder that expands to nothing is removed. Build the files into
-`dist/` by hand with:
+A line holding only a placeholder that expands to nothing is removed.
+
+Conditional blocks keep or drop whole lines. Lines between `{{#KEY}}` and `{{/KEY}}` are kept
+only when the placeholder `KEY` is not empty, and lines between `{{^KEY}}` and `{{/KEY}}` only
+when it is. Each marker stands on a line of its own and is removed; blocks can nest, and an
+unknown key or an unbalanced marker fails the build:
+
+```markdown
+{{#assistant_github}}
+Pull requests are assigned to `{{assistant_github}}`.
+{{/assistant_github}}
+```
+
+Build the files into `dist/` by hand with:
 
 ```sh
 scripts/build.sh --name Alex --gender female --language French --co-author "Kira <kira@example.com>"
