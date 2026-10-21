@@ -287,6 +287,43 @@ kira --copy >/dev/null
 check 'migrate: no co-author means no trailers' profile_has 'co_author_trailer=no'
 check 'migrate: no assistant' profile_has 'assistant_name='
 
+# --- attribution in settings.json (R11) ----------------------------------------------------
+
+attribution='"attribution": {"commit": "", "pr": ""}'
+
+claude=$tmp/attribution
+mkdir -p "$claude"
+printf '{\n  "keep": true\n}\n' >"$claude/settings.json"
+cp "$claude/settings.json" "$tmp/settings.orig"
+kira_profile --copy >"$tmp/attribution.log"
+check 'attribution: set' contains "$claude/settings.json" "$attribution"
+check 'attribution: other settings kept' contains "$claude/settings.json" '"keep": true'
+check 'attribution: original backed up once' sh -c 'cmp -s "$1" "$(find "$2/.kirakit-backups" -name settings.json | head -n 1)"' _ \
+	"$tmp/settings.orig" "$claude"
+check 'attribution: rerun changes nothing' unchanged kira --copy
+kira --uninstall >/dev/null
+check 'attribution: kept by uninstall' contains "$claude/settings.json" "$attribution"
+
+claude=$tmp/attribution-same
+mkdir -p "$claude"
+printf '{\n  "attribution": {\n    "pr": "",\n    "commit": ""\n  }\n}\n' >"$claude/settings.json"
+kira_profile --copy >"$tmp/attribution-same.log"
+check 'attribution: same value in another layout is up to date' grep -q 'up to date: .*(attribution)' "$tmp/attribution-same.log"
+
+claude=$tmp/attribution-mine
+mkdir -p "$claude"
+printf '{\n  "attribution": {"commit": "Mine"}\n}\n' >"$claude/settings.json"
+kira_profile --copy >"$tmp/attribution-mine.log"
+check 'attribution: a user value is warned about' grep -q 'already sets "attribution"; left unchanged' "$tmp/attribution-mine.log"
+check 'attribution: a user value is left unchanged' contains "$claude/settings.json" '"attribution": {"commit": "Mine"}'
+
+claude=$tmp/attribution-dry
+mkdir -p "$claude"
+printf '{\n  "keep": true\n}\n' >"$claude/settings.json"
+kira_profile --dry-run >"$tmp/attribution-dry.log"
+check 'attribution: dry run reports' grep -q 'set attribution' "$tmp/attribution-dry.log"
+check 'attribution: dry run writes nothing' sh -c '! grep -q attribution "$1"' _ "$claude/settings.json"
+
 # --- no terminal ---------------------------------------------------------------------------
 
 claude=$tmp/generic

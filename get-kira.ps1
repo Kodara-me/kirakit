@@ -108,6 +108,7 @@ $script:BackupDir = $null
 $script:Mode = 'copy'
 $script:Src = $null
 $script:BuildDir = $null
+$script:SettingsBackedUp = $false
 $script:Installed = New-Object System.Collections.Generic.List[string]
 $script:OriginalsNew = New-Object System.Collections.Generic.List[string]
 
@@ -654,6 +655,60 @@ function Install-KiraStyle {
 
 # Set "outputStyle" in settings.json to the default style, leaving every other setting as it
 # is: Claude Code writes to this file too, so it is edited in place, never replaced.
+# Copy settings.json to the backups once per run, before its first change.
+function Backup-KiraSetting([string]$Settings) {
+    if ((Test-Path -LiteralPath $Settings) -and -not $script:SettingsBackedUp) {
+        Backup-KiraPath -Path $Settings -CopyOnly | Out-Null
+        $script:SettingsBackedUp = $true
+    }
+}
+
+# TEXT with ENTRY as the first setting, or a new object (mirrors insert_setting in get-kira.sh).
+function Add-KiraSetting([string]$Entry, [string]$Text) {
+    if ($Text -eq '' -or ($Text -replace '\s', '') -eq '{}') {
+        return '{' + $Nl + '  ' + $Entry + $Nl + '}' + $Nl
+    }
+    $out = New-Object System.Collections.Generic.List[string]
+    $done = $false
+    foreach ($line in @(Split-KiraLine $Text)) {
+        $i = $line.IndexOf('{')
+        if (-not $done -and $i -ge 0) {
+            $out.Add($line.Substring(0, $i + 1))
+            $out.Add('  ' + $Entry + ',')
+            $rest = $line.Substring($i + 1)
+            if ($rest -match '[^ \t]') { $out.Add($rest) }
+            $done = $true
+            continue
+        }
+        $out.Add($line)
+    }
+    return Join-KiraLine $out.ToArray()
+}
+
+# R11: turn off the attribution Claude Code suggests, so the git rules are the only ones. An
+# "attribution" setting the user wrote is left alone (mirrors set_attribution in get-kira.sh).
+function Set-KiraAttribution {
+    $settings = Join-Path $ClaudeDir 'settings.json'
+    $entry = '"attribution": {"commit": "", "pr": ""}'
+    $text = if (Test-Path -LiteralPath $settings) { Read-KiraText $settings } else { '' }
+    $flat = $text -replace '\s', ''
+    if ($flat.Contains('"attribution":{"commit":"","pr":""}') -or $flat.Contains('"attribution":{"pr":"","commit":""}')) {
+        Write-KiraLog "up to date: $settings (attribution)"
+        return
+    }
+    if ($flat.Contains('"attribution":')) {
+        Write-KiraLog "warning: $settings already sets `"attribution`"; left unchanged. For the git rules alone to apply, set it by hand to: $entry"
+        return
+    }
+    $new = Add-KiraSetting $entry $text
+    Backup-KiraSetting $settings
+    Write-KiraLog "set attribution: commit and pr off in $settings"
+    if (-not $DryRun) {
+        Initialize-KiraDirectory $ClaudeDir
+        Write-KiraText $settings $new
+    }
+}
+
 function Install-KiraOutputStyle([string]$Style) {
     $settings = Join-Path $ClaudeDir 'settings.json'
     $styleFile = Join-Path (Join-Path $script:BuildDir 'output-styles') "$Style.md"
@@ -668,29 +723,13 @@ function Install-KiraOutputStyle([string]$Style) {
     $text = if ($exists) { Read-KiraText $settings } else { '' }
     if ($text.Contains($entry)) { Write-KiraLog "up to date: $settings (outputStyle)"; return }
 
-    if ($text -eq '' -or ($text -replace '\s', '') -eq '{}') {
-        $new = '{' + $Nl + '  ' + $entry + $Nl + '}' + $Nl
-    } elseif ($text -match '"outputStyle"\s*:') {
+    if ($text -match '"outputStyle"\s*:') {
         $new = [regex]::Replace($text, '"outputStyle"\s*:\s*"[^"]*"', $entry.Replace('$', '$$'))
     } else {
-        $out = New-Object System.Collections.Generic.List[string]
-        $done = $false
-        foreach ($line in @(Split-KiraLine $text)) {
-            $i = $line.IndexOf('{')
-            if (-not $done -and $i -ge 0) {
-                $out.Add($line.Substring(0, $i + 1))
-                $out.Add('  ' + $entry + ',')
-                $rest = $line.Substring($i + 1)
-                if ($rest -match '[^ \t]') { $out.Add($rest) }
-                $done = $true
-                continue
-            }
-            $out.Add($line)
-        }
-        $new = Join-KiraLine $out.ToArray()
+        $new = Add-KiraSetting $entry $text
     }
 
-    if ($exists) { Backup-KiraPath -Path $settings -CopyOnly | Out-Null }
+    Backup-KiraSetting $settings
     Write-KiraLog "set outputStyle: $value in $settings"
     if (-not $DryRun) {
         Initialize-KiraDirectory $ClaudeDir
@@ -724,6 +763,7 @@ function Install-KiraClaude([string]$Style) {
         }
     }
     Install-KiraOutputStyle $Style
+    Set-KiraAttribution
 }
 
 # Copy github\ into the target repository's .github directory. Files are always copied:
@@ -800,7 +840,7 @@ function Invoke-KiraUninstall {
         Remove-Item -LiteralPath $ManifestPath -Force
         if (Test-Path -LiteralPath $OriginalsPath) { Remove-Item -LiteralPath $OriginalsPath -Force }
     }
-    Write-KiraLog "kept: $ProfilePath, $(Join-Path $ClaudeDir '.kirakit-backups') and the outputStyle setting"
+    Write-KiraLog "kept: $ProfilePath, $(Join-Path $ClaudeDir '.kirakit-backups') and the outputStyle and attribution settings"
 }
 
 # --- Main -----------------------------------------------------------------------------------

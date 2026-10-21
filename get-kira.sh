@@ -482,6 +482,62 @@ install_styles() {
 	done
 }
 
+# Copy settings.json to the backups once per run, before its first change.
+backup_settings() {
+	if [ -f "$settings" ] && [ -z "${settings_backed_up-}" ]; then
+		backup "$settings" "$CLAUDE_DIR" '' cp
+		settings_backed_up=1
+	fi
+}
+
+# insert_setting LINE FILE: print FILE with LINE as the first setting, or a new object.
+insert_setting() {
+	if [ ! -s "$2" ] || [ "$(tr -d ' \t\r\n' <"$2")" = '{}' ]; then
+		printf '{\n  %s\n}\n' "$1"
+		return
+	fi
+	awk -v line="$1" '
+		!done && (i = index($0, "{")) {
+			print substr($0, 1, i)
+			print "  " line ","
+			rest = substr($0, i + 1)
+			if (rest ~ /[^ \t]/) print rest
+			done = 1
+			next
+		}
+		{ print }' "$2"
+}
+
+# R11: turn off the attribution Claude Code suggests, so the git rules are the only ones. An
+# "attribution" setting the user wrote is left alone: without a JSON parser, it cannot be
+# merged safely.
+set_attribution() {
+	settings=$CLAUDE_DIR/settings.json
+	line='"attribution": {"commit": "", "pr": ""}'
+	if [ -f "$settings" ]; then
+		flat=$(tr -d ' \t\r\n' <"$settings")
+		case $flat in
+		*'"attribution":{"commit":"","pr":""}'* | *'"attribution":{"pr":"","commit":""}'*)
+			log "up to date: $settings (attribution)"
+			return
+			;;
+		*'"attribution":'*)
+			log "warning: $settings already sets \"attribution\"; left unchanged. For the git rules alone to apply, set it by hand to: $line"
+			return
+			;;
+		esac
+	fi
+	work_dir
+	insert_setting "$line" "$settings" >"$work/settings.json"
+	backup_settings
+	log "set attribution: commit and pr off in $settings"
+	if [ "$dry_run" -eq 0 ]; then
+		mkdir -p "$CLAUDE_DIR"
+		# Write in place to keep the file's permissions and any symlink.
+		cat "$work/settings.json" >"$settings"
+	fi
+}
+
 # Set "outputStyle" in settings.json to the default style, leaving every other setting as it
 # is: Claude Code writes to this file too, so it is edited in place, never replaced.
 set_output_style() {
@@ -498,27 +554,14 @@ set_output_style() {
 
 	work_dir
 	new=$work/settings.json
-	if [ ! -s "$settings" ] || [ "$(tr -d ' \t\r\n' <"$settings")" = '{}' ]; then
-		printf '{\n  %s\n}\n' "$line" >"$new"
-	elif grep -q '"outputStyle"[[:space:]]*:' "$settings"; then
+	if [ -s "$settings" ] && grep -q '"outputStyle"[[:space:]]*:' "$settings"; then
 		escaped=$(printf '%s\n' "$line" | sed 's/[&|\\]/\\&/g')
 		sed "s|\"outputStyle\"[[:space:]]*:[[:space:]]*\"[^\"]*\"|$escaped|" "$settings" >"$new"
 	else
-		awk -v line="$line" '
-			!done && (i = index($0, "{")) {
-				print substr($0, 1, i)
-				print "  " line ","
-				rest = substr($0, i + 1)
-				if (rest ~ /[^ \t]/) print rest
-				done = 1
-				next
-			}
-			{ print }' "$settings" >"$new"
+		insert_setting "$line" "$settings" >"$new"
 	fi
 
-	if [ -f "$settings" ]; then
-		backup "$settings" "$CLAUDE_DIR" '' cp
-	fi
+	backup_settings
 	log "set outputStyle: $value in $settings"
 	if [ "$dry_run" -eq 0 ]; then
 		mkdir -p "$CLAUDE_DIR"
@@ -549,6 +592,7 @@ install_claude() {
 		install_file "$(built "skills/$skill")" "$CLAUDE_DIR/skills/$skill"
 	done
 	set_output_style
+	set_attribution
 }
 
 # Copy github/ into the target repository's .github directory. Files are always copied:
@@ -617,7 +661,7 @@ uninstall_all() {
 	done <"$manifest"
 	log "remove manifest: $manifest"
 	run rm -f -- "$manifest" "$originals"
-	log "kept: $profile, $CLAUDE_DIR/.kirakit-backups and the outputStyle setting"
+	log "kept: $profile, $CLAUDE_DIR/.kirakit-backups and the outputStyle and attribution settings"
 }
 
 while [ $# -gt 0 ]; do

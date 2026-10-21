@@ -75,6 +75,7 @@ jobs:
           if (-not (Test-Path (Join-Path $styles 'kira-cozy.md'))) { throw 'styles not installed' }
           $settings = Get-Content (Join-Path $env:CLAUDE_CONFIG_DIR 'settings.json') -Raw
           if (-not $settings.Contains('"outputStyle": "Kira (cozy)"')) { throw 'outputStyle not set' }
+          if (-not $settings.Contains('"attribution": {"commit": "", "pr": ""}')) { throw 'attribution not set' }
           $rerun = ./get-kira.ps1 *>&1 | Out-String
           if ($rerun -match 'kirakit: (copy|link|backup|set|save)') { throw "rerun changed files:`n$rerun" }
           ./get-kira.ps1 -Uninstall
