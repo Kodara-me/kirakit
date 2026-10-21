@@ -16,6 +16,9 @@ tmp=$(mktemp -d "${TMPDIR:-/tmp}/kirakit-test.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 failures=0
 claude=
+# The launchers' Konsole color schemes go to $XDG_DATA_HOME/konsole: never the real one.
+XDG_DATA_HOME=$tmp/data
+export XDG_DATA_HOME
 
 # The scripts run from a copy of the working tree, uncommitted changes included, so that
 # link mode builds into the copy's dist/.
@@ -47,7 +50,7 @@ check() {
 # The shell is split on purpose, to allow options.
 # shellcheck disable=SC2086
 kira() {
-	CLAUDE_CONFIG_DIR=$claude $shell "$root/get-kira.sh" "$@" </dev/null
+	CLAUDE_CONFIG_DIR=$claude XDG_DATA_HOME=$claude-data $shell "$root/get-kira.sh" "$@" </dev/null
 }
 
 # kira with a complete profile, so that nothing is asked.
@@ -408,6 +411,59 @@ check 'team rules: gaps asked, not decided' contains "$rules" 'it does not decid
 check 'team rules: no account lines without a login' sh -c 'grep -q "## The team" "$1" && ! grep -q "On GitHub, the analyst" "$1"' _ \
 	"$tmp/analyst-no-login/rules/git.md"
 check 'team rules: no section without an analyst' sh -c '! grep -q "The team\|Iris" "$1"' _ "$tmp/iris-none/rules/git.md"
+
+# --- launchers: Konsole color schemes (#36 R4, R6, R7, R8, R16, R17) -----------------------
+
+claude=$tmp/launchers
+schemes=$claude-data/konsole
+kira_profile --copy --no-analyst >/dev/null
+check 'launchers: assistant scheme installed (#36 R6)' contains "$schemes/kirakit-assistant.colorscheme" 'Color=54,49,74'
+check 'launchers: no analyst scheme without an analyst (#36 R6)' test ! -e "$schemes/kirakit-analyst.colorscheme"
+kira --copy --analyst >/dev/null
+check 'launchers: analyst scheme with an analyst (#36 R6)' contains "$schemes/kirakit-analyst.colorscheme" 'Color=61,51,58'
+check 'launchers: no template marker left (#36 R6)' no_placeholder "$schemes"
+check 'launchers: recorded in the manifest (#36 R8)' grep -qxF "$schemes/kirakit-analyst.colorscheme" "$claude/.kirakit-manifest"
+check 'launchers: rerun changes nothing' unchanged kira --copy
+kira --copy --no-analyst >/dev/null
+check 'launchers: analyst scheme removed with the analyst (#36 R4)' test ! -e "$schemes/kirakit-analyst.colorscheme"
+check 'launchers: assistant scheme kept (#36 R4)' test -f "$schemes/kirakit-assistant.colorscheme"
+check 'launchers: analyst scheme out of the manifest (#36 R4)' sh -c '! grep -q kirakit-analyst "$1"' _ "$claude/.kirakit-manifest"
+kira --uninstall >/dev/null
+check 'launchers: uninstall removes the schemes (#36 R8)' sh -c '! ls "$1"/kirakit-* >/dev/null 2>&1' _ "$schemes"
+
+claude=$tmp/launchers-mine
+schemes=$claude-data/konsole
+mkdir -p "$schemes"
+printf 'mine\n' >"$schemes/kirakit-assistant.colorscheme"
+printf 'other\n' >"$schemes/Other.colorscheme"
+kira_profile --dry-run >"$tmp/launchers-dry.log"
+check 'launchers: dry run reports the backup (#36 R17)' grep -q "backup: $schemes/kirakit-assistant.colorscheme" "$tmp/launchers-dry.log"
+check 'launchers: dry run changes nothing (#36 R17)' contains "$schemes/kirakit-assistant.colorscheme" 'mine'
+kira_profile >/dev/null
+check 'launchers: linked in link mode (#36 R16)' test -L "$schemes/kirakit-assistant.colorscheme"
+check 'launchers: an existing scheme is backed up (#36 R7)' sh -c 'grep -rqx mine "$1/.kirakit-backups"' _ "$claude"
+kira --uninstall >/dev/null
+check 'launchers: uninstall restores it (#36 R7)' contains "$schemes/kirakit-assistant.colorscheme" 'mine'
+check 'launchers: uninstall leaves other schemes (#36 R8)' contains "$schemes/Other.colorscheme" 'other'
+
+claude=$tmp/launchers-dry
+kira_profile --dry-run >"$tmp/launchers-dry2.log"
+check 'launchers: dry run reports the schemes (#36 R17)' grep -q "$claude-data/konsole/kirakit-assistant.colorscheme" "$tmp/launchers-dry2.log"
+check 'launchers: dry run writes no scheme (#36 R17)' test ! -e "$claude-data"
+
+claude=$tmp/launchers-only
+kira_profile --only launchers >/dev/null
+check 'launchers: --only launchers (#36 R16)' test -f "$claude-data/konsole/kirakit-assistant.colorscheme"
+check 'launchers: --only launchers installs nothing else (#36 R16)' test ! -e "$claude/output-styles"
+claude=$tmp/launchers-styles
+kira_profile --only styles >/dev/null
+check 'launchers: not with --only styles (#36 R16)' test ! -e "$claude-data"
+
+# The shell is split on purpose, to allow options.
+# shellcheck disable=SC2086
+env -u XDG_DATA_HOME HOME="$tmp/home" CLAUDE_CONFIG_DIR="$tmp/launchers-home" $shell "$root/get-kira.sh" \
+	--name Alex --gender female --language auto --no-co-author --only launchers </dev/null >/dev/null
+check 'launchers: ~/.local/share/konsole by default (#36 R6)' test -f "$tmp/home/.local/share/konsole/kirakit-assistant.colorscheme"
 
 # --- dry run -------------------------------------------------------------------------------
 

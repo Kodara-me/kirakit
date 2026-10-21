@@ -6,6 +6,7 @@
 #   DIR/rules/<rules>.md             from claude/rules/<rules>.md
 #   DIR/CLAUDE.md                    from claude/CLAUDE.md
 #   DIR/output-styles/<member>.md    and DIR/agents/<member>.md from team/<member>.md
+#   DIR/konsole/<scheme>.colorscheme from launchers/konsole/<scheme>.colorscheme
 #
 # An overlay is a Markdown file whose front matter becomes the style's front matter and
 # whose body replaces the {{overlay}} marker of the core text. Files starting with "_" in
@@ -283,7 +284,7 @@ build_style() {
 	printf '%s\n' "$dir/$1.md"
 }
 
-# build_file SOURCE DEST: render one Markdown file.
+# build_file SOURCE DEST: render one file.
 build_file() {
 	mkdir -p "$(dirname "$2")"
 	render "$1" >"$2.tmp" || {
@@ -402,3 +403,7 @@ done
 if [ -f "$claude_dir/CLAUDE.md" ]; then
 	build_file "$claude_dir/CLAUDE.md" "$out_dir/CLAUDE.md"
 fi
+for file in "$root"/launchers/konsole/*.colorscheme; do
+	[ -f "$file" ] || continue
+	build_file "$file" "$out_dir/konsole/$(basename "$file")"
+done

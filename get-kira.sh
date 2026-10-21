@@ -35,6 +35,7 @@ removed=
 profile=$CLAUDE_DIR/.kirakit-profile
 manifest=$CLAUDE_DIR/.kirakit-manifest
 originals=$CLAUDE_DIR/.kirakit-originals
+konsole_dir=${XDG_DATA_HOME:-$HOME/.local/share}/konsole
 profile_keys='name gender language assistant assistant_signing_key assistant_github co_author_trailer analyst analyst_github'
 nl='
 '
@@ -70,20 +71,23 @@ Options:
   --default-style PERSONA    Output style selected in settings.json (default: kira-cozy)
   --reconfigure              Ask all profile questions again
   --persona NAME             Install only this persona (repeatable; default: all)
-  --only COMPONENT           styles, claude (CLAUDE.md, rules, settings, agents, skills) or github
+  --only COMPONENT           styles, claude (CLAUDE.md, rules, settings, agents, skills),
+                             launchers (Konsole color schemes) or github
   --target DIR               Repository for --only github (default: the current one)
   --link                     Symlink files to the local clone (default from a clone)
   --copy                     Copy files (default without a clone)
-  --uninstall                Remove what kirakit installed in the configuration directory
+  --uninstall                Remove what kirakit installed, Konsole color schemes included
   -h, --help                 Show this help
 
-Without --only, styles and claude are installed. The github component copies issue and pull
-request templates, workflows and Copilot instructions into a repository's .github directory.
+Without --only, styles, claude and launchers are installed. The github component copies issue
+and pull request templates, workflows and Copilot instructions into a repository's .github
+directory.
 
 Profile options are asked once and saved in \$CLAUDE_CONFIG_DIR/.kirakit-profile.
 
 Environment:
   CLAUDE_CONFIG_DIR  Claude Code configuration directory (default: ~/.claude)
+  XDG_DATA_HOME      Where the Konsole color schemes go, in konsole/ (default: ~/.local/share)
   KIRAKIT_REPO       Repository fetched without a clone (default: $KIRAKIT_REPO)
   KIRAKIT_REF        Branch or tag fetched without a clone (default: the latest release)
 EOF
@@ -111,7 +115,8 @@ work_dir() {
 }
 
 # backup PATH [ROOT [PREFIX] [cp]]: move PATH (or copy it, with "cp") into this run's
-# backup directory, under PREFIX followed by PATH relative to ROOT.
+# backup directory, under PREFIX followed by PATH relative to ROOT. A path outside ROOT,
+# such as a Konsole color scheme, is kept whole under "outside".
 backup() {
 	if [ -z "$backup_dir" ]; then
 		# Never reuse the directory of an earlier run started within the same second.
@@ -123,7 +128,10 @@ backup() {
 			n=$((n + 1))
 		done
 	fi
-	rel=${1#"${2:-$CLAUDE_DIR}"/}
+	case $1 in
+	"${2:-$CLAUDE_DIR}"/*) rel=${1#"${2:-$CLAUDE_DIR}"/} ;;
+	*) rel=outside$1 ;;
+	esac
 	dest=$backup_dir/${3-}$rel
 	log "backup: $1 -> $dest"
 	run mkdir -p "$(dirname -- "$dest")"
@@ -536,6 +544,16 @@ install_styles() {
 	done
 }
 
+# The launchers' Konsole color schemes. They live outside the configuration directory, but
+# are recorded in the manifest like the rest, so that --uninstall removes them.
+install_launchers() {
+	for file in "$src"/launchers/konsole/*.colorscheme; do
+		[ -f "$file" ] || continue
+		scheme=$(basename "$file")
+		install_built "konsole/$scheme" "$konsole_dir/$scheme"
+	done
+}
+
 # Copy settings.json to the backups once per run, before its first change.
 backup_settings() {
 	if [ -f "$settings" ] && [ -z "${settings_backed_up-}" ]; then
@@ -680,6 +698,8 @@ write_manifest() {
 		printf '[dry-run] record installed files in %s\n' "$manifest"
 		return
 	fi
+	# --only launchers may install nothing in the configuration directory itself.
+	mkdir -p -- "$CLAUDE_DIR"
 	{
 		if [ -f "$manifest" ]; then
 			cat "$manifest"
@@ -729,7 +749,7 @@ uninstall_all() {
 		case $path in
 		'') continue ;;
 		*/../* | */..) log "skip: $path" && continue ;;
-		"$CLAUDE_DIR"/*) ;;
+		"$CLAUDE_DIR"/* | "$konsole_dir"/kirakit-*.colorscheme) ;;
 		*) log "skip (outside $CLAUDE_DIR): $path" && continue ;;
 		esac
 		remove_installed "$path"
@@ -786,8 +806,8 @@ while [ $# -gt 0 ]; do
 			;;
 		--only)
 			case $2 in
-			styles | claude | github) only=$2 ;;
-			*) die "unknown component: $2 (expected styles, claude or github)" ;;
+			styles | claude | launchers | github) only=$2 ;;
+			*) die "unknown component: $2 (expected styles, claude, launchers or github)" ;;
 			esac
 			;;
 		--target) github_target=$2 ;;
@@ -870,6 +890,9 @@ if [ -z "$only" ] || [ "$only" = styles ]; then
 fi
 if [ -z "$only" ] || [ "$only" = claude ]; then
 	install_claude
+fi
+if [ -z "$only" ] || [ "$only" = launchers ]; then
+	install_launchers
 fi
 write_manifest
 
