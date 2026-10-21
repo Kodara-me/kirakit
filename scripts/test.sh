@@ -517,7 +517,10 @@ check 'members: analyst removed with the analyst (#36 R4)' test ! -e "$bin/analy
 mkdir -p "$tmp/shadow"
 printf '#!/bin/sh\n' >"$tmp/shadow/assistant"
 chmod +x "$tmp/shadow/assistant"
-(PATH="$tmp/shadow:$bin:$PATH" && kira --copy >"$tmp/members-path.log")
+# The shell is split on purpose, to allow options.
+# shellcheck disable=SC2086
+env PATH="$tmp/shadow:$bin:$PATH" CLAUDE_CONFIG_DIR="$claude" HOME="$claude-home" XDG_DATA_HOME="$claude-data" \
+	$shell "$root/get-kira.sh" --copy </dev/null >"$tmp/members-path.log"
 check 'members: warns about a command earlier in PATH (#36 R15)' \
 	grep -q "warning: $tmp/shadow/assistant comes before $bin/assistant" "$tmp/members-path.log"
 check 'members: no PATH warning when the bin directory is on it (#36 R15)' \
