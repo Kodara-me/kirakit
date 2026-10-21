@@ -308,6 +308,50 @@ CLAUDE_CONFIG_DIR=$claude $shell "$optional/get-kira.sh" --copy --name Alex --ge
 	--no-co-author --analyst-github iris-bot </dev/null >/dev/null
 check 'analyst: passed to the build' contains "$claude/agents/analyst.md" 'For iris-bot.'
 
+# --- IRIS, a team member (#15 R1, R2, R11, R4, R9) -----------------------------------------
+
+$shell "$root/scripts/build.sh" -o "$tmp/iris-build" --name Alex --gender female --analyst \
+	--analyst-github iris-bot >/dev/null
+iris_style=$tmp/iris-build/output-styles/iris.md
+iris_agent=$tmp/iris-build/agents/iris.md
+check 'iris build: style named IRIS' grep -qx 'name: IRIS' "$iris_style"
+check 'iris build: style keeps the coding instructions' grep -qx 'keep-coding-instructions: true' "$iris_style"
+check 'iris build: agent named iris' grep -qx 'name: iris' "$iris_agent"
+check 'iris build: agent says when to delegate' grep -q '^description: Use IRIS to clarify an idea' "$iris_agent"
+check 'iris build: no delegate key left' sh -c '! grep -q "^delegate:" "$1" "$2"' _ "$iris_style" "$iris_agent"
+check 'iris build: introduces IRIS' contains "$iris_style" 'You are IRIS (Ideas, Requirements, Issues, Specs)'
+check 'iris build: personalized' contains "$iris_style" 'The user is Alex, a female staff software developer.'
+check 'iris build: no placeholder' sh -c '! grep -q "{{" "$1" "$2"' _ "$iris_style" "$iris_agent"
+tail -n +6 "$iris_agent" >"$tmp/iris-agent-body"
+check 'iris build: one body for both' sh -c 'tail -n +7 "$1" | cmp -s - "$2"' _ "$iris_style" "$tmp/iris-agent-body"
+$shell "$root/scripts/build.sh" -o "$tmp/iris-none" >/dev/null
+check 'iris build: no style without an analyst' test ! -e "$tmp/iris-none/output-styles/iris.md"
+check 'iris build: no agent without an analyst' test ! -e "$tmp/iris-none/agents/iris.md"
+
+mkdir -p "$blocks/team"
+printf '%s\n' --- 'name: Bad' 'description: no delegate' --- '' 'Body.' >"$blocks/team/bad.md"
+check 'iris build: rejects a member without delegate' sh -c '! $1 "$2/scripts/build.sh" -o "$3" >/dev/null 2>&1' _ "$shell" "$blocks" "$tmp/x"
+rm -r "$blocks/team"
+
+# flag is --copy, or empty for link mode: split on purpose.
+# shellcheck disable=SC2086
+for mode in copy link; do
+	claude=$tmp/iris-$mode
+	flag=
+	[ "$mode" = copy ] && flag=--copy
+	kira_profile $flag --analyst-github iris-bot >/dev/null
+	check "iris $mode: style installed" contains "$claude/output-styles/iris.md" 'You are IRIS'
+	check "iris $mode: agent installed" contains "$claude/agents/iris.md" 'name: iris'
+	check "iris $mode: rerun changes nothing" unchanged kira $flag
+	kira $flag --no-analyst >/dev/null
+	check "iris $mode: style removed without an analyst" sh -c '! test -e "$1" && ! test -L "$1"' _ "$claude/output-styles/iris.md"
+	check "iris $mode: agent removed without an analyst" sh -c '! test -e "$1" && ! test -L "$1"' _ "$claude/agents/iris.md"
+	kira $flag --analyst >/dev/null
+	kira --uninstall >/dev/null
+	check "iris $mode: uninstall removes the style" sh -c '! test -e "$1" && ! test -L "$1"' _ "$claude/output-styles/iris.md"
+	check "iris $mode: uninstall removes the agent" sh -c '! test -e "$1" && ! test -L "$1"' _ "$claude/agents/iris.md"
+done
+
 # --- dry run -------------------------------------------------------------------------------
 
 claude=$tmp/dry

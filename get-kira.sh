@@ -528,6 +528,12 @@ install_styles() {
 		fi
 		install_built "output-styles/$persona.md" "$CLAUDE_DIR/output-styles/$persona.md"
 	done
+	# Team members (team/NAME.md) have an output style and an agent; --persona is for Kira's.
+	for file in "$src"/team/*.md; do
+		[ -f "$file" ] || continue
+		member=$(basename "$file" .md)
+		install_built "output-styles/$member.md" "$CLAUDE_DIR/output-styles/$member.md"
+	done
 }
 
 # Copy settings.json to the backups once per run, before its first change.
@@ -623,6 +629,11 @@ install_claude() {
 		install_built CLAUDE.md "$CLAUDE_DIR/CLAUDE.md"
 	fi
 	for file in "$src"/claude/agents/*.md; do
+		[ -f "$file" ] || continue
+		agent=$(basename "$file")
+		install_built "agents/$agent" "$CLAUDE_DIR/agents/$agent"
+	done
+	for file in "$src"/team/*.md; do
 		[ -f "$file" ] || continue
 		agent=$(basename "$file")
 		install_built "agents/$agent" "$CLAUDE_DIR/agents/$agent"

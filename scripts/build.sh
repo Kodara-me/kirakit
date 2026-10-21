@@ -5,6 +5,7 @@
 #   DIR/agents/<agent>.md            from claude/agents/<agent>.md
 #   DIR/rules/<rules>.md             from claude/rules/<rules>.md
 #   DIR/CLAUDE.md                    from claude/CLAUDE.md
+#   DIR/output-styles/<member>.md    and DIR/agents/<member>.md from team/<member>.md
 #
 # An overlay is a Markdown file whose front matter becomes the style's front matter and
 # whose body replaces the {{overlay}} marker of the core text. Files starting with "_" in
@@ -301,6 +302,58 @@ build_file() {
 	printf '%s\n' "$2"
 }
 
+# front_matter FILE KEY: the value of KEY in the front matter of FILE.
+front_matter() {
+	awk -v key="$2: " 'NR > 1 && $0 == "---" { exit } index($0, key) == 1 { print substr($0, length(key) + 1); exit }' "$1"
+}
+
+# build_member FILE: render a team member's persona (team/NAME.md), written once, into both an
+# output style and an agent with the same body. Its front matter holds the style's name and
+# description, and "delegate", the agent's description: when to hand work to this member.
+build_member() {
+	member=$(basename "$1" .md)
+	rendered=$out_dir/.$member.member.tmp
+	body=$out_dir/.$member.body.tmp
+	style=$out_dir/output-styles/$member.md
+	agent=$out_dir/agents/$member.md
+	render "$1" >"$rendered" || {
+		rm -f "$rendered"
+		exit 1
+	}
+	if blank "$rendered"; then
+		rm -f "$rendered" "$style" "$agent"
+		return
+	fi
+	check "$rendered" "$1" || {
+		rm -f "$rendered"
+		exit 1
+	}
+	title=$(front_matter "$rendered" name)
+	description=$(front_matter "$rendered" description)
+	delegate=$(front_matter "$rendered" delegate)
+	if [ "$(head -n 1 "$rendered")" != --- ] || [ -z "$title" ] || [ -z "$description" ] || [ -z "$delegate" ]; then
+		rm -f "$rendered"
+		die "$1: missing front matter with name, description and delegate"
+	fi
+	# Body, without the blank lines that follow the front matter.
+	awk 'body && (started || $0 != "") { started = 1; print } NR > 1 && $0 == "---" { body = 1 }' "$rendered" >"$body"
+	mkdir -p "$out_dir/agents"
+	{
+		printf '%s
+' --- "name: $title" "description: $description" 'keep-coding-instructions: true' --- ''
+		cat "$body"
+	} >"$style.tmp"
+	{
+		printf '%s
+' --- "name: $member" "description: $delegate" --- ''
+		cat "$body"
+	} >"$agent.tmp"
+	rm -f "$rendered" "$body"
+	mv -f "$style.tmp" "$style"
+	mv -f "$agent.tmp" "$agent"
+	printf '%s\n%s\n' "$style" "$agent"
+}
+
 # Skills are copied whole, with their Markdown files rendered.
 build_skill() {
 	skill=$(basename "$1")
@@ -329,6 +382,10 @@ build_skill() {
 mkdir -p "$out_dir/output-styles" "$out_dir/skills"
 for persona in "$@"; do
 	build_style "$persona"
+done
+for file in "$root"/team/*.md; do
+	[ -f "$file" ] || continue
+	build_member "$file"
 done
 for dir in "$skills_dir"/*/; do
 	[ -f "$dir/SKILL.md" ] || continue

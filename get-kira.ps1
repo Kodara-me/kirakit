@@ -635,6 +635,42 @@ function Build-KiraStyle([string]$Out, [string]$PersonaName, [string[]]$CoreLine
     Write-KiraRendered (Join-Path (Join-Path $Out 'output-styles') "$PersonaName.md") $merged.ToArray() $Values $overlay
 }
 
+# Render a team member's persona (team\NAME.md), written once, into both an output style and
+# an agent with the same body (mirrors build_member in scripts/build.sh).
+function Build-KiraMember([string]$Out, [string]$Path, $Values) {
+    $member = [IO.Path]::GetFileNameWithoutExtension($Path)
+    $style = Join-Path (Join-Path $Out 'output-styles') "$member.md"
+    $agent = Join-Path (Join-Path $Out 'agents') "$member.md"
+    $lines = @(Format-KiraLine @(Split-KiraLine (Read-KiraText $Path)) $Values $Path)
+    $text = Join-KiraLine $lines
+    if ($text -notmatch '\S') {
+        foreach ($file in @($style, $agent)) { if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file -Force } }
+        return
+    }
+    if ($text -match '\{\{[^}]*\}\}') { throw "${Path}: unknown placeholder $($Matches[0])" }
+    $end = -1
+    if ($lines[0] -eq '---') {
+        for ($i = 1; $i -lt $lines.Count; $i++) { if ($lines[$i] -eq '---') { $end = $i; break } }
+    }
+    $fields = @{}
+    for ($i = 1; $i -lt $end; $i++) {
+        $j = $lines[$i].IndexOf(': ')
+        if ($j -gt 0 -and -not $fields.ContainsKey($lines[$i].Substring(0, $j))) { $fields[$lines[$i].Substring(0, $j)] = $lines[$i].Substring($j + 2) }
+    }
+    if ($end -lt 0 -or -not $fields['name'] -or -not $fields['description'] -or -not $fields['delegate']) {
+        throw "${Path}: missing front matter with name, description and delegate"
+    }
+    # Body, without the blank lines that follow the front matter.
+    $body = New-Object System.Collections.Generic.List[string]
+    for ($i = $end + 1; $i -lt $lines.Count; $i++) {
+        if ($body.Count -eq 0 -and $lines[$i] -eq '') { continue }
+        $body.Add($lines[$i])
+    }
+    foreach ($file in @($style, $agent)) { New-Item -ItemType Directory -Force -Path (Split-Path -Parent $file) | Out-Null }
+    Write-KiraText $style (Join-KiraLine (@('---', "name: $($fields.name)", "description: $($fields.description)", 'keep-coding-instructions: true', '---', '') + $body.ToArray()))
+    Write-KiraText $agent (Join-KiraLine (@('---', "name: $member", "description: $($fields.delegate)", '---', '') + $body.ToArray()))
+}
+
 function Build-KiraOutput($UserProfile) {
     if ($script:Mode -eq 'link' -and -not $DryRun) {
         $script:BuildDir = Join-Path $script:Src 'dist'
@@ -651,6 +687,10 @@ function Build-KiraOutput($UserProfile) {
     foreach ($file in Get-ChildItem -LiteralPath (Join-Path $script:Src 'personas') -Filter '*.md' -File) {
         if ($file.BaseName.StartsWith('_')) { continue }
         Build-KiraStyle $out $file.BaseName $coreLines $values
+    }
+    $team = Join-Path $script:Src 'team'
+    if (Test-Path -LiteralPath $team) {
+        foreach ($file in Get-ChildItem -LiteralPath $team -Filter '*.md' -File) { Build-KiraMember $out $file.FullName $values }
     }
 
     $claude = Join-Path $script:Src 'claude'
@@ -714,6 +754,13 @@ function Install-KiraStyle {
         if ($styleName.StartsWith('_')) { continue }
         if ($Persona.Count -gt 0 -and $Persona -notcontains $styleName) { continue }
         Install-KiraBuilt "output-styles/$styleName.md" (Join-Path (Join-Path $ClaudeDir 'output-styles') "$styleName.md")
+    }
+    # Team members (team\NAME.md) have an output style and an agent; -Persona is for Kira's.
+    $team = Join-Path $script:Src 'team'
+    if (Test-Path -LiteralPath $team) {
+        foreach ($file in Get-ChildItem -LiteralPath $team -Filter '*.md' -File | Sort-Object Name) {
+            Install-KiraBuilt "output-styles/$($file.Name)" (Join-Path (Join-Path $ClaudeDir 'output-styles') $file.Name)
+        }
     }
 }
 
@@ -808,6 +855,12 @@ function Install-KiraClaude([string]$Style) {
     $agents = Join-Path (Join-Path $script:Src 'claude') 'agents'
     if (Test-Path -LiteralPath $agents) {
         foreach ($file in Get-ChildItem -LiteralPath $agents -Filter '*.md' -File | Sort-Object Name) {
+            Install-KiraBuilt "agents/$($file.Name)" (Join-Path (Join-Path $ClaudeDir 'agents') $file.Name)
+        }
+    }
+    $team = Join-Path $script:Src 'team'
+    if (Test-Path -LiteralPath $team) {
+        foreach ($file in Get-ChildItem -LiteralPath $team -Filter '*.md' -File | Sort-Object Name) {
             Install-KiraBuilt "agents/$($file.Name)" (Join-Path (Join-Path $ClaudeDir 'agents') $file.Name)
         }
     }
