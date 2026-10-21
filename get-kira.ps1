@@ -387,9 +387,9 @@ function Get-KiraProfile {
 # --- Build (mirrors scripts/build.sh) -------------------------------------------------------
 
 function Get-KiraValue($UserProfile) {
-    $assistant = [string]$UserProfile.assistant
-    $signingKey = [string]$UserProfile.assistant_signing_key
-    $github = [string]$UserProfile.assistant_github
+    $assistant = [string]$UserProfile['assistant']
+    $signingKey = [string]$UserProfile['assistant_signing_key']
+    $github = [string]$UserProfile['assistant_github']
     foreach ($value in @($UserProfile.name, $UserProfile.language, $UserProfile.co_author, $assistant, $signingKey)) {
         if ($value -match "`n|\{\{|\}\}") { throw "invalid value: $value" }
     }

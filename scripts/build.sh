@@ -141,7 +141,7 @@ case $co_author in
 esac
 
 case $assistant in
-'') assistant_name= assistant_email= ;;
+'') assistant_name='' assistant_email='' ;;
 ?*' <'?*@?*'>')
 	assistant_name=${assistant% <*}
 	assistant_email=${assistant##*<}
