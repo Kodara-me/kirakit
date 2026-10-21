@@ -314,8 +314,13 @@ A feature goes through one GitHub issue, from idea to specification:
    a single comment on the issue, then rewrites the issue as Context, Requirements (`R1`,
    `R2`, …), Design, Decisions (`D1`, …), Tasks and Open questions in one pass. Phase by
    phase stays available on request, and it resumes later from the answers on the issue.
-3. **Tasks** (`type:task`): each task is a sub-issue of the specification, created with
-   `gh` (a version whose `gh issue create` has `--parent`).
+   An idea the analyst's account cannot edit gets its specification in a new issue, and is
+   closed with a link to it.
+3. **Tasks** (`type:task`, `status:ready`): each task is a sub-issue of the specification,
+   created with `gh` (a version whose `gh issue create` has `--parent`), assigned to the
+   assistant's account when there is one. The specification is published without
+   confirmation, with a summary comment listing the tasks and the decisions made alone; the
+   user reverses a decision by replying on the issue.
 
 The formats are defined in `claude/skills/idea/SKILL.md` and `claude/skills/spec/SKILL.md`;
 `claude/CLAUDE.md` holds the rules for working from a specification.

@@ -10,7 +10,9 @@ Claude Code loads on its own from the rules folder.
 - A feature starts as an idea issue (`type:idea`, written by the `idea` skill), and becomes
   a specification in the same issue (Context, Requirements `R1…`, Design, Tasks, Open
   questions), with each task as a sub-issue. The `spec` skill writes it; a specification is
-  never kept as a file in the repository.
+  never kept as a file in the repository. When the analyst's account did not write the idea
+  and cannot edit it, the specification is a new issue that links to the idea, and the idea
+  is closed with a comment pointing to it.
 - Before working on an issue, read it with its parent and sub-issues
   (`gh issue view <n> --json title,body,parent,subIssues`). The requirements it covers are
   the acceptance criteria.

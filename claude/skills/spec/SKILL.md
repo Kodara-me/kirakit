@@ -145,29 +145,51 @@ their approval before the next one.
 ## 4. Publish
 
 Publish when the specification is written, or after any approved phase when working phase
-by phase; the phases not written yet hold `_To be written._`. Show what will be created or edited, and ask
-for confirmation before any `gh issue create` or `gh issue edit`. Then:
+by phase; the phases not written yet hold `_To be written._`. Publish without asking for
+confirmation:
 
 - Parent: `gh issue create --title "<title>" --body-file <file>`, or
   `gh issue edit <n> --title "<title>" --body-file <file>` for an existing issue. An idea
   becomes the specification in place: same issue, `[IDEA] ` removed from the title, body
   rewritten in the format above.
+{{#analyst_github}}
+- An idea whose issue was not written by `{{analyst_github}}` (its `author.login`) cannot
+  be edited by the analyst. Write the specification in a new issue instead, with the
+  idea's content moved into it and its Context starting with "From the idea #<idea>.".
+  Then close the idea with a comment pointing to it: `gh issue close <idea> --comment
+  "Specified in #<new>."`.
+{{/analyst_github}}
 - Labels on the parent, with `gh issue edit --add-label / --remove-label`:
   - add `type:feature`, and remove `type:idea`;
   - once the tasks are published, add `status:specified` and remove
     `status:needs-clarification`.
 - Sub-issues, in the order they should be done: `gh issue create --parent <parent> --title
-  "<title>" --body-file <file> --label type:task`. An existing issue becomes a sub-issue
-  with `gh issue edit <parent> --add-sub-issue <n>`.
-- Before adding a label, check it with `gh label list`. If it is missing, offer to create
-  it (`gh label create`); if the user declines, go on without it.
+  "<title>" --body-file <file> --label type:task --label status:ready`. An existing issue
+  becomes a sub-issue with `gh issue edit <parent> --add-sub-issue <n>`, and gets the same
+  labels.
+{{#assistant_github}}
+- Assign every sub-issue to the developer's account: `--assignee {{assistant_github}}`.
+{{/assistant_github}}
+- Before adding a label, check it with `gh label list`, and create a missing one without
+  asking (`gh label create`).
 - Write bodies to temporary files outside the repository, never into the working tree.
+
+Once the tasks are published, post a summary comment on the parent that mentions the user
+(`@<login>`): the tasks (number, title, requirements covered) and the decisions made alone
+(number and one line each).
 
 End with the parent's URL, the list of sub-issues (number and title) if any, and the next
 phase to write if the specification is not complete.
 
 ## Changing a specification
 
-When the user asks to change a published specification, edit the parent body and the
-affected sub-issues the same way, with the same confirmation. A change to the requirements
-updates the "Covers" line of every task concerned.
+When the user asks to change a published specification, or reverses a decision on the
+issue, edit the parent body and the affected sub-issues the same way, without asking for
+confirmation:
+
+- A reversed decision stays, struck through (`~~**D2** — …~~`), and a new one records the
+  user's choice.
+- A change to the requirements updates the "Covers" line of every task concerned.
+- An affected task with no open pull request (`gh pr list --state open --search "<n>"`)
+  loses `status:ready` (`gh issue edit <n> --remove-label status:ready`) until its body is
+  updated, and gets it back once it is.

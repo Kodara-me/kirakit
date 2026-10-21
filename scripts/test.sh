@@ -93,6 +93,14 @@ check 'spec: resumes from the answers on the issue (#51 R5)' contains "$spec_ski
 check 'spec: written in one pass (#51 R6)' sh -c 'grep -q "in one pass, without stopping for approval" "$1" && ! grep -q "one phase at a time" "$1"' _ "$spec_skill"
 check 'spec: phase by phase on request (#51 R6)' contains "$spec_skill" 'When the user asks to work phase by phase'
 check 'spec: a Decisions section (#51 R7)' sh -c 'grep -qx "### Decisions" "$1" && grep -qF -- "- **D1** — <question>: <choice>. <reason>" "$1"' _ "$spec_skill"
+check 'spec: publishes without confirmation (#51 R8)' sh -c 'grep -q "Publish without asking for" "$1" && ! grep -q "ask for confirmation" "$1" && ! grep -q "the same confirmation" "$1"' _ "$spec_skill"
+check 'spec: tasks marked Ready (#51 R8)' contains "$spec_skill" '--label type:task --label status:ready'
+check 'spec: no assignee without an assistant account (#51 R8)' sh -c '! grep -q -- "--assignee" "$1"' _ "$spec_skill"
+check 'spec: summary comment (#51 R9)' contains "$spec_skill" 'post a summary comment on the parent that mentions the user'
+check 'spec: a reversal applied (#51 R10)' contains "$spec_skill" 'or reverses a decision on the'
+check 'spec: affected tasks lose Ready (#51 R10)' contains "$spec_skill" 'loses `status:ready`'
+check 'spec: no new issue without an analyst account (#51 R13)' sh -c '! grep -q "Specified in #" "$1"' _ "$spec_skill"
+check 'CLAUDE.md: specification in a new issue (#51 R13)' contains "$tmp/build2/CLAUDE.md" 'the specification is a new issue that links to the idea'
 form=$root/github/ISSUE_TEMPLATE/feature_request.yml
 check 'form: decisions between design and tasks (#51 R12)' sh -c 'test "$(grep -o "id: [a-z]*" "$1" | tr "\n" " ")" = "id: context id: requirements id: design id: decisions id: tasks id: questions "' _ "$form"
 check 'build: idea skill' contains "$tmp/build2/skills/idea/SKILL.md" 'Answer in French.'
@@ -383,6 +391,8 @@ for skill in idea spec; do
 	check "analyst skills: $skill unchanged without an analyst" \
 		sh -c '! grep -q GH_TOKEN "$1" && grep -q "gh issue create --title" "$1"' _ "$tmp/iris-none/skills/$skill/SKILL.md"
 done
+check 'spec: tasks assigned to the developer (#51 R8)' contains "$tmp/build3/skills/spec/SKILL.md" '`--assignee kira-bot`'
+check "spec: new issue for an idea not by the analyst (#51 R13)" sh -c 'grep -q "not written by \`iris-bot\`" "$1" && grep -q "Specified in #<new>." "$1"' _ "$tmp/iris-build/skills/spec/SKILL.md"
 $shell "$root/scripts/build.sh" -o "$tmp/analyst-no-login" --analyst >/dev/null
 check 'analyst skills: no prefix without an analyst account' \
 	sh -c '! grep -q GH_TOKEN "$1" "$2"' _ "$tmp/analyst-no-login/skills/idea/SKILL.md" "$tmp/analyst-no-login/skills/spec/SKILL.md"
