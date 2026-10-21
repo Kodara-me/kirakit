@@ -74,7 +74,7 @@ With no PERSONA, build every overlay in personas/. Skills are always all built.
   --assistant-signing-key PATH
                              The assistant's public SSH signing key (default: none)
   --assistant-github LOGIN   The assistant's GitHub account (default: none)
-  --analyst                  The team has an analyst, IRIS (default: no)
+  --analyst                  The team has an analyst, Iris (default: no)
   --analyst-github LOGIN     The analyst's GitHub account, with --analyst (default: none)
 EOF
 }

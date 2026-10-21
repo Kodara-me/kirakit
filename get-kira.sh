@@ -64,7 +64,7 @@ Options:
   --assistant-github LOGIN   The assistant's own GitHub account (empty: none)
   --co-author "NAME <EMAIL>" Same as --assistant, with Co-Authored-By trailers
   --no-co-author             Add no Co-Authored-By trailer to commits
-  --analyst                  Add IRIS, an analyst for ideas and specifications, to the team
+  --analyst                  Add Iris, an analyst for ideas and specifications, to the team
   --no-analyst               No analyst: Kira writes ideas and specifications herself
   --analyst-github LOGIN     The analyst's own GitHub account (implies --analyst; empty: none)
   --default-style PERSONA    Output style selected in settings.json (default: kira-cozy)
@@ -301,7 +301,7 @@ ask_github() {
 
 ask_analyst() {
 	while :; do
-		case $(ask 'Add IRIS, an analyst who clarifies ideas and writes specifications? (y/n)' "$1") in
+		case $(ask 'Add Iris, an analyst who clarifies ideas and writes specifications? (y/n)' "$1") in
 		[Yy]*) echo yes && return ;;
 		[Nn]*) echo no && return ;;
 		esac

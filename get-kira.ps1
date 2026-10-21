@@ -43,7 +43,7 @@ Same as -Assistant, with Co-Authored-By trailers.
 .PARAMETER NoCoAuthor
 Add no Co-Authored-By trailer to commits.
 .PARAMETER Analyst
-Add IRIS, an analyst for ideas and specifications, to the team.
+Add Iris, an analyst for ideas and specifications, to the team.
 .PARAMETER NoAnalyst
 No analyst: Kira writes ideas and specifications herself.
 .PARAMETER AnalystGithub
@@ -352,7 +352,7 @@ function Read-KiraGithub([string]$Whose, [string]$Current) {
 
 function Read-KiraAnalyst([string]$Current) {
     while ($true) {
-        $answer = Read-KiraAnswer 'Add IRIS, an analyst who clarifies ideas and writes specifications? (y/n)' $Current
+        $answer = Read-KiraAnswer 'Add Iris, an analyst who clarifies ideas and writes specifications? (y/n)' $Current
         if ($answer -match '^[Yy]') { return 'yes' }
         if ($answer -match '^[Nn]') { return 'no' }
     }

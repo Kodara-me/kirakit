@@ -124,7 +124,7 @@ jobs:
             for path in output-styles skills rules CLAUDE.md settings.json; do
               diff -r "$a/$path" "$b/$path"
             done
-            # Agents exist only for some profiles (IRIS with an analyst); both or neither.
+            # Agents exist only for some profiles (Iris with an analyst); both or neither.
             if [ -e "$a/agents" ] || [ -e "$b/agents" ]; then diff -r "$a/agents" "$b/agents"; fi
             diff "$a/.kirakit-profile" "$b/.kirakit-profile" || [ ! -e "$a/.kirakit-profile" ]
           done

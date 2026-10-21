@@ -308,18 +308,18 @@ CLAUDE_CONFIG_DIR=$claude $shell "$optional/get-kira.sh" --copy --name Alex --ge
 	--no-co-author --analyst-github iris-bot </dev/null >/dev/null
 check 'analyst: passed to the build' contains "$claude/agents/analyst.md" 'For iris-bot.'
 
-# --- IRIS, a team member (#15 R1, R2, R11, R4, R9) -----------------------------------------
+# --- Iris, a team member (#15 R1, R2, R11, R4, R9) -----------------------------------------
 
 $shell "$root/scripts/build.sh" -o "$tmp/iris-build" --name Alex --gender female --analyst \
 	--analyst-github iris-bot >/dev/null
 iris_style=$tmp/iris-build/output-styles/iris.md
 iris_agent=$tmp/iris-build/agents/iris.md
-check 'iris build: style named IRIS' grep -qx 'name: IRIS' "$iris_style"
+check 'iris build: style named Iris' grep -qx 'name: Iris' "$iris_style"
 check 'iris build: style keeps the coding instructions' grep -qx 'keep-coding-instructions: true' "$iris_style"
 check 'iris build: agent named iris' grep -qx 'name: iris' "$iris_agent"
-check 'iris build: agent says when to delegate' grep -q '^description: Use IRIS to clarify an idea' "$iris_agent"
+check 'iris build: agent says when to delegate' grep -q '^description: Use Iris to clarify an idea' "$iris_agent"
 check 'iris build: no delegate key left' sh -c '! grep -q "^delegate:" "$1" "$2"' _ "$iris_style" "$iris_agent"
-check 'iris build: introduces IRIS' contains "$iris_style" 'You are IRIS (Ideas, Requirements, Issues, Specs)'
+check 'iris build: introduces Iris' contains "$iris_style" 'You are Iris, the team'\''s analyst'
 check 'iris build: personalized' contains "$iris_style" 'The user is Alex, a female staff software developer.'
 check 'iris build: no placeholder' sh -c '! grep -q "{{" "$1" "$2"' _ "$iris_style" "$iris_agent"
 tail -n +6 "$iris_agent" >"$tmp/iris-agent-body"
@@ -340,7 +340,7 @@ for mode in copy link; do
 	flag=
 	[ "$mode" = copy ] && flag=--copy
 	kira_profile $flag --analyst-github iris-bot >/dev/null
-	check "iris $mode: style installed" contains "$claude/output-styles/iris.md" 'You are IRIS'
+	check "iris $mode: style installed" contains "$claude/output-styles/iris.md" 'You are Iris'
 	check "iris $mode: agent installed" contains "$claude/agents/iris.md" 'name: iris'
 	check "iris $mode: rerun changes nothing" unchanged kira $flag
 	kira $flag --no-analyst >/dev/null
