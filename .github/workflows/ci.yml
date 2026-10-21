@@ -91,6 +91,10 @@ jobs:
             --language French --co-author 'Kira <kira@example.com>'
           CLAUDE_CONFIG_DIR="$RUNNER_TEMP/ps" pwsh -File get-kira.ps1 -Copy -Name Alex -Gender female \
             -Language French -CoAuthor 'Kira <kira@example.com>'
+          CLAUDE_CONFIG_DIR="$RUNNER_TEMP/sh-assistant" sh get-kira.sh --copy --name Alex --gender male \
+            --language auto --assistant 'Kira <kira@example.com>' --assistant-github kira-bot --no-co-author
+          CLAUDE_CONFIG_DIR="$RUNNER_TEMP/ps-assistant" pwsh -File get-kira.ps1 -Copy -Name Alex -Gender male \
+            -Language auto -Assistant 'Kira <kira@example.com>' -AssistantGithub kira-bot -NoCoAuthor
           CLAUDE_CONFIG_DIR="$RUNNER_TEMP/sh-generic" sh get-kira.sh --copy </dev/null
           CLAUDE_CONFIG_DIR="$RUNNER_TEMP/ps-generic" pwsh -File get-kira.ps1 -Copy </dev/null
       - name: Same release tag picked without a clone
@@ -109,7 +113,7 @@ jobs:
             grep -F '(v0.10.0)'
       - name: Compare
         run: |
-          for pair in sh:ps sh-generic:ps-generic; do
+          for pair in sh:ps sh-assistant:ps-assistant sh-generic:ps-generic; do
             a=$RUNNER_TEMP/${pair%%:*} b=$RUNNER_TEMP/${pair##*:}
             for path in output-styles skills CLAUDE.md settings.json; do
               diff -r "$a/$path" "$b/$path"

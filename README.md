@@ -78,7 +78,10 @@ see `Get-Help .\get-kira.ps1 -Detailed`).
 | `--name NAME` | How Kira calls you |
 | `--gender GENDER` | `male`, `female`, `nonbinary` or `unspecified` (sets the pronouns Kira uses) |
 | `--language LANGUAGE` | Answer language, or `auto` to follow the conversation |
-| `--co-author "NAME <EMAIL>"` | Add this `Co-Authored-By` trailer to commits |
+| `--assistant "NAME <EMAIL>"` | The assistant's git identity: its own commits, and its trailer in yours |
+| `--assistant-signing-key PATH` | The assistant's public SSH signing key (empty: it never commits as itself) |
+| `--assistant-github LOGIN` | The assistant's own GitHub account (empty: none) |
+| `--co-author "NAME <EMAIL>"` | Same as `--assistant`, with `Co-Authored-By` trailers |
 | `--no-co-author` | Add no `Co-Authored-By` trailer |
 | `--default-style PERSONA` | Style selected in `settings.json` (default: `kira-cozy`) |
 | `--reconfigure` | Ask all profile questions again |
@@ -102,12 +105,17 @@ on the terminal even when piped from curl:
 
 - how Kira should call you, and your gender (for the pronouns she uses);
 - the answer language: `auto` (default) follows the language of the conversation;
-- whether commits get a `Co-Authored-By` trailer, and if so its name and email.
+- the assistant: its name and email, the path to its public SSH signing key and its GitHub
+  login (both optional), and whether commits get `Co-Authored-By` trailers.
+
+A profile saved by an earlier version, with a `co_author` value, is migrated: the co-author
+becomes the assistant, with trailers.
 
 The answers are saved in `$CLAUDE_CONFIG_DIR/.kirakit-profile` and reused by later runs; only
 questions that are not answered yet are asked. Options override the saved values, and
 `--reconfigure` asks everything again. Without a terminal, unanswered values fall back to
-defaults: no name, `unspecified`, `auto`, no co-author.
+defaults: no name, `unspecified`, `auto`, no assistant; the optional assistant values default
+to empty, and trailers to yes when there is an assistant.
 
 ### Updates, backups and uninstall
 

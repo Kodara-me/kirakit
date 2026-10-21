@@ -137,7 +137,7 @@ check 'link: skills are links' test -L "$claude/skills/commit"
 check 'link: CLAUDE.md is a link' test -L "$claude/CLAUDE.md"
 check 'link: outputStyle set' contains "$claude/settings.json" '"outputStyle": "Kira (cozy)"'
 check 'link: other settings kept' contains "$claude/settings.json" '"keep": true'
-check 'link: profile saved' contains "$claude/.kirakit-profile" 'co_author=Kira <kira@example.com>'
+check 'link: profile saved' contains "$claude/.kirakit-profile" 'assistant_email=kira@example.com'
 check 'link: rerun changes nothing' unchanged kira
 kira --uninstall >/dev/null
 check 'uninstall: links removed' test ! -e "$claude/output-styles/kira-cozy.md"
@@ -154,6 +154,73 @@ check 'copy: rerun changes nothing' unchanged kira --copy
 kira --uninstall >/dev/null
 check 'uninstall: copies moved to backups' test ! -e "$claude/skills/commit"
 check 'uninstall: backups kept' test -d "$claude/.kirakit-backups"
+
+# --- assistant profile ---------------------------------------------------------------------
+
+# profile_has KEY=VALUE: whether the profile of $claude holds this line.
+profile_has() {
+	grep -qxF -- "$1" "$claude/.kirakit-profile"
+}
+
+claude=$tmp/assistant
+mkdir -p "$tmp/keys"
+: >"$tmp/keys/kira" && : >"$tmp/keys/kira.pub"
+kira --copy --name Alex --gender female --language auto --co-author 'Kira <kira@example.com>' \
+	--assistant-signing-key "$tmp/keys/kira.pub" --assistant-github kira-bot >"$tmp/assistant.log"
+check 'assistant: name saved' profile_has 'assistant_name=Kira'
+check 'assistant: email saved' profile_has 'assistant_email=kira@example.com'
+check 'assistant: signing key saved' profile_has "assistant_signing_key=$tmp/keys/kira.pub"
+check 'assistant: GitHub login saved' profile_has 'assistant_github=kira-bot'
+check 'assistant: --co-author asks for trailers' profile_has 'co_author_trailer=yes'
+check 'assistant: no co_author key' sh -c '! grep -q "^co_author=" "$1"' _ "$claude/.kirakit-profile"
+check 'assistant: no warning with both keys' sh -c '! grep -q warning "$1"' _ "$tmp/assistant.log"
+check 'assistant: trailer in the commit skill' contains "$claude/skills/commit/SKILL.md" 'Co-Authored-By: Kira <kira@example.com>'
+check 'assistant: rerun changes nothing' unchanged kira --copy
+
+# Without a terminal, the optional assistant values default to empty, and trailers to yes.
+claude=$tmp/assistant-only
+kira --copy --name Alex --gender female --language auto --assistant 'Kira <kira@example.com>' >/dev/null
+check 'assistant only: profile saved' profile_has 'assistant_name=Kira'
+check 'assistant only: no signing key' profile_has 'assistant_signing_key='
+check 'assistant only: trailers by default' profile_has 'co_author_trailer=yes'
+check 'assistant only: trailer in the commit skill' contains "$claude/skills/commit/SKILL.md" 'Co-Authored-By: Kira <kira@example.com>'
+check 'assistant only: rerun changes nothing' unchanged kira --copy
+
+claude=$tmp/assistant-no-trailer
+kira_profile --copy --no-co-author >/dev/null
+check 'no trailer: saved' profile_has 'co_author_trailer=no'
+check 'no trailer: assistant kept' profile_has 'assistant_name=Kira'
+check 'no trailer: commit skill has none' contains "$claude/skills/commit/SKILL.md" 'add no `Co-Authored-By` line'
+
+# R8: the installer warns about a missing key and never creates one.
+claude=$tmp/missing-key
+kira_profile --copy --assistant-signing-key "$tmp/keys/none.pub" >"$tmp/missing-key.log" 2>&1
+check 'missing key: warned' grep -q 'signing key .* does not exist' "$tmp/missing-key.log"
+check 'missing key: not created' test ! -e "$tmp/keys/none.pub"
+: >"$tmp/keys/public-only.pub"
+kira_profile --copy --assistant-signing-key "$tmp/keys/public-only.pub" >"$tmp/public-only.log" 2>&1
+check 'missing private key: warned' grep -q 'no private key next to' "$tmp/public-only.log"
+status=0
+kira_profile --copy --assistant-github 'a b' >/dev/null 2>&1 || status=$?
+check 'bad GitHub login: rejected' test "$status" -ne 0
+
+# R2: profiles saved before the assistant identity are migrated without asking.
+claude=$tmp/migrate
+mkdir -p "$claude"
+printf 'name=Alex\ngender=male\nlanguage=auto\nco_author=Kira <kira@example.com>\nstyle=kira-cozy\n' \
+	>"$claude/.kirakit-profile"
+kira --copy >/dev/null
+check 'migrate: assistant from co_author' profile_has 'assistant_email=kira@example.com'
+check 'migrate: trailers kept' profile_has 'co_author_trailer=yes'
+check 'migrate: co_author dropped' sh -c '! grep -q "^co_author=" "$1"' _ "$claude/.kirakit-profile"
+check 'migrate: other values kept' profile_has 'name=Alex'
+
+claude=$tmp/migrate-none
+mkdir -p "$claude"
+printf 'name=Alex\ngender=male\nlanguage=auto\nco_author=\nstyle=kira-cozy\n' >"$claude/.kirakit-profile"
+kira --copy >/dev/null
+check 'migrate: no co-author means no trailers' profile_has 'co_author_trailer=no'
+check 'migrate: no assistant' profile_has 'assistant_name='
 
 # --- no terminal ---------------------------------------------------------------------------
 
