@@ -313,6 +313,7 @@ valid_github() {
 # Expand a leading "~/" so that the saved path does not depend on the shell.
 expand_home() {
 	case $1 in
+	# shellcheck disable=SC2088 # a literal "~/", expanded here
 	'~/'*) printf '%s/%s\n' "$HOME" "${1#'~/'}" ;;
 	*) printf '%s\n' "$1" ;;
 	esac
@@ -410,7 +411,7 @@ setup_profile() {
 		esac
 	done
 	if [ -z "$assistant" ]; then
-		assistant_signing_key= assistant_github= co_author_trailer=no
+		assistant_signing_key='' assistant_github='' co_author_trailer=no
 	fi
 	assistant_signing_key=$(expand_home "$assistant_signing_key")
 	if [ -n "$assistant" ]; then
