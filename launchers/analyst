@@ -1,0 +1,5 @@
+{{#analyst}}
+#!/bin/sh
+# Start Claude Code as {{analyst_style}}, the team's analyst.
+exec "$(dirname -- "$0")/kirakit-session" '{{analyst_style}}' '{{analyst_style}}' kirakit-analyst "$@"
+{{/analyst}}

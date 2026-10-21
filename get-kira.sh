@@ -69,14 +69,16 @@ Options:
   --no-analyst               No analyst: Kira writes ideas and specifications herself
   --analyst-github LOGIN     The analyst's own GitHub account (implies --analyst; empty: none)
   --default-style PERSONA    Output style selected in settings.json (default: kira-cozy)
+  --assistant-style PERSONA  Style of the assistant launcher (default: the default style)
+  --bin-dir DIR              Where the launchers go (default: ~/.local/bin)
   --reconfigure              Ask all profile questions again
   --persona NAME             Install only this persona (repeatable; default: all)
   --only COMPONENT           styles, claude (CLAUDE.md, rules, settings, agents, skills),
-                             launchers (Konsole color schemes) or github
+                             launchers (assistant, analyst, Konsole color schemes) or github
   --target DIR               Repository for --only github (default: the current one)
   --link                     Symlink files to the local clone (default from a clone)
   --copy                     Copy files (default without a clone)
-  --uninstall                Remove what kirakit installed, Konsole color schemes included
+  --uninstall                Remove what kirakit installed, launchers included
   -h, --help                 Show this help
 
 Without --only, styles, claude and launchers are installed. The github component copies issue
@@ -357,6 +359,8 @@ load_profile() {
 		analyst) saved_analyst=$value ;;
 		analyst_github) saved_analyst_github=$value ;;
 		style) saved_style=$value ;;
+		assistant_style) saved_assistant_style=$value ;;
+		bin_dir) saved_bin_dir=$value ;;
 		esac
 	done <"$profile"
 	# Profiles before the analyst: the team had none, and the question is not asked again.
@@ -405,6 +409,13 @@ setup_profile() {
 	if [ -n "$assistant" ]; then default_trailer=yes; else default_trailer=no; fi
 	co_author_trailer=${opt_co_author_trailer-${saved_co_author_trailer-$default_trailer}}
 	default_style=${opt_style-${saved_style:-kira-cozy}}
+	# Empty: the assistant launcher follows the default style.
+	assistant_style=${opt_assistant_style-${saved_assistant_style-}}
+	bin_dir=$(expand_home "${opt_bin_dir-${saved_bin_dir:-$HOME/.local/bin}}")
+	case $bin_dir in
+	/*) ;;
+	*) die "the bin directory must be an absolute path: $bin_dir" ;;
+	esac
 
 	missing=
 	for key in $profile_keys; do
@@ -465,7 +476,7 @@ setup_profile() {
 	fi
 
 	[ -z "${no_save-}" ] || return 0
-	profile_text="name=$user_name${nl}gender=$user_gender${nl}language=$user_language${nl}assistant_name=$assistant_name${nl}assistant_email=$assistant_email${nl}assistant_signing_key=$assistant_signing_key${nl}assistant_github=$assistant_github${nl}co_author_trailer=$co_author_trailer${nl}analyst=$analyst${nl}analyst_github=$analyst_github${nl}style=$default_style"
+	profile_text="name=$user_name${nl}gender=$user_gender${nl}language=$user_language${nl}assistant_name=$assistant_name${nl}assistant_email=$assistant_email${nl}assistant_signing_key=$assistant_signing_key${nl}assistant_github=$assistant_github${nl}co_author_trailer=$co_author_trailer${nl}analyst=$analyst${nl}analyst_github=$analyst_github${nl}style=$default_style${nl}assistant_style=$assistant_style${nl}bin_dir=$bin_dir"
 	if [ -f "$profile" ] && [ "$(cat "$profile")" = "$profile_text" ]; then
 		return
 	fi
@@ -503,7 +514,8 @@ build() {
 	sh "$src/scripts/build.sh" -o "$build_dir" --name "$user_name" --gender "$user_gender" \
 		--language "$user_language" --co-author "$co_author" --assistant "$assistant" \
 		--assistant-signing-key "$assistant_signing_key" --assistant-github "$assistant_github" \
-		$analyst_flag --analyst-github "$analyst_github" >/dev/null || exit 1
+		$analyst_flag --analyst-github "$analyst_github" --assistant-style "${assistant_style:-$default_style}" \
+		>/dev/null || exit 1
 }
 
 # built PATH: where an installed file comes from; symlinks always point into the clone.
@@ -544,13 +556,38 @@ install_styles() {
 	done
 }
 
-# The launchers' Konsole color schemes. They live outside the configuration directory, but
-# are recorded in the manifest like the rest, so that --uninstall removes them.
+# The launchers and their Konsole color schemes. They live outside the configuration
+# directory, but are recorded in the manifest like the rest, so that --uninstall removes them.
 install_launchers() {
+	launchers=
+	for file in "$src"/launchers/*; do
+		[ -f "$file" ] || continue
+		launcher=$(basename "$file")
+		install_built "bin/$launcher" "$bin_dir/$launcher"
+		[ ! -e "$build_dir/bin/$launcher" ] || launchers="$launchers $launcher"
+	done
+	# Launchers an earlier run put in another bin directory.
+	if [ -f "$manifest" ]; then
+		while IFS= read -r path; do
+			case $path in "$CLAUDE_DIR"/* | "$konsole_dir"/* | "$bin_dir"/*) continue ;; esac
+			[ -f "$src/launchers/${path##*/}" ] || continue
+			remove_installed "$path"
+			removed="$removed$path$nl"
+		done <"$manifest"
+	fi
 	for file in "$src"/launchers/konsole/*.colorscheme; do
 		[ -f "$file" ] || continue
 		scheme=$(basename "$file")
 		install_built "konsole/$scheme" "$konsole_dir/$scheme"
+	done
+	case ":$PATH:" in
+	*":$bin_dir:"*) ;;
+	*) log "warning: $bin_dir is not on your PATH; add it to start the launchers by name" ;;
+	esac
+	for launcher in $launchers; do
+		found=$(command -v "$launcher" 2>/dev/null) || continue
+		[ "$found" = "$bin_dir/$launcher" ] ||
+			log "warning: $found comes before $bin_dir/$launcher in your PATH"
 	done
 }
 
@@ -745,11 +782,14 @@ remove_installed() {
 # Remove what the manifest lists.
 uninstall_all() {
 	[ -f "$manifest" ] || die "nothing to uninstall: $manifest not found"
+	load_profile
+	bin_dir=${saved_bin_dir:-$HOME/.local/bin}
 	while IFS= read -r path; do
 		case $path in
 		'') continue ;;
 		*/../* | */..) log "skip: $path" && continue ;;
 		"$CLAUDE_DIR"/* | "$konsole_dir"/kirakit-*.colorscheme) ;;
+		"$bin_dir"/assistant | "$bin_dir"/analyst | "$bin_dir"/team | "$bin_dir"/kirakit-session) ;;
 		*) log "skip (outside $CLAUDE_DIR): $path" && continue ;;
 		esac
 		remove_installed "$path"
@@ -763,7 +803,8 @@ while [ $# -gt 0 ]; do
 	case $1 in
 	--dry-run) dry_run=1 ;;
 	--name | --gender | --language | --co-author | --assistant | --assistant-signing-key | \
-		--assistant-github | --analyst-github | --default-style | --persona | --only | --target)
+		--assistant-github | --analyst-github | --default-style | --persona | --only | --target | \
+		--assistant-style | --bin-dir)
 		[ $# -ge 2 ] || die "missing value for $1"
 		case $1 in
 		--name) opt_name=$2 ;;
@@ -794,15 +835,19 @@ while [ $# -gt 0 ]; do
 			valid_github "$2" || die "invalid GitHub login: $2"
 			opt_analyst_github=$2
 			;;
-		--default-style | --persona)
+		--default-style | --persona | --assistant-style)
 			case $2 in
 			'' | -* | *[!A-Za-z0-9_-]*) die "invalid persona name: $2" ;;
 			esac
-			if [ "$1" = --persona ]; then
-				personas="$personas $2"
-			else
-				opt_style=$2
-			fi
+			case $1 in
+			--persona) personas="$personas $2" ;;
+			--assistant-style) opt_assistant_style=$2 ;;
+			*) opt_style=$2 ;;
+			esac
+			;;
+		--bin-dir)
+			case $2 in '' | *"$nl"*) die "invalid bin directory: $2" ;; esac
+			opt_bin_dir=$2
 			;;
 		--only)
 			case $2 in
@@ -866,7 +911,7 @@ if [ -z "$src" ]; then
 fi
 [ -n "$mode" ] || mode='link'
 
-for persona in $personas ${opt_style-}; do
+for persona in $personas ${opt_style-} ${opt_assistant_style-}; do
 	[ -f "$src/personas/$persona.md" ] || die "unknown persona: $persona"
 done
 

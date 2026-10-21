@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# kirakit-session NAME STYLE SCHEME [ARGS...]: start Claude Code as a team member, in a session
+# named NAME with the output style STYLE, pass ARGS through, and exit with Claude Code's
+# status. SCHEME is the member's Konsole color scheme.
+set -u
+
+if [ $# -lt 3 ]; then
+	printf 'usage: kirakit-session NAME STYLE SCHEME [ARGS...]\n' >&2
+	exit 2
+fi
+name=$1
+style=$2
+shift 3
+
+claude -n "$name" --settings "{\"outputStyle\":\"$style\"}" "$@"

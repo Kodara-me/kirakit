@@ -7,6 +7,7 @@
 #   DIR/CLAUDE.md                    from claude/CLAUDE.md
 #   DIR/output-styles/<member>.md    and DIR/agents/<member>.md from team/<member>.md
 #   DIR/konsole/<scheme>.colorscheme from launchers/konsole/<scheme>.colorscheme
+#   DIR/bin/<launcher>               from launchers/<launcher>, executable
 #
 # An overlay is a Markdown file whose front matter becomes the style's front matter and
 # whose body replaces the {{overlay}} marker of the core text. Files starting with "_" in
@@ -22,6 +23,9 @@
 #   {{assistant_github}}      the assistant's GitHub login, or nothing
 #   {{analyst}}               "yes" when the team has an analyst, or nothing
 #   {{analyst_github}}        the analyst's GitHub login, or nothing
+#   {{assistant_style}}       the name of the assistant's output style, e.g. "Kira (cozy)"
+#   {{analyst_style}}         the name of the analyst's output style, "Iris"
+# In the launchers, {{assistant_name}} is "Kira" when the assistant has no git identity.
 # A line holding only a placeholder that expands to nothing is removed.
 #
 # Lines between {{#KEY}} and {{/KEY}} are kept only when KEY is not empty, and lines between
@@ -32,7 +36,8 @@
 # Usage: build.sh [-o DIR] [--name NAME] [--gender GENDER] [--language LANGUAGE]
 #                 [--co-author "NAME <EMAIL>"] [--assistant "NAME <EMAIL>"]
 #                 [--assistant-signing-key PATH] [--assistant-github LOGIN]
-#                 [--analyst] [--analyst-github LOGIN] [PERSONA...]
+#                 [--analyst] [--analyst-github LOGIN] [--assistant-style PERSONA]
+#                 [PERSONA...]
 set -eu
 
 root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
@@ -49,6 +54,7 @@ assistant_signing_key=
 assistant_github=
 analyst=
 analyst_github=
+assistant_style=kira-cozy
 nl='
 '
 
@@ -62,9 +68,11 @@ usage() {
 Usage: build.sh [-o DIR] [--name NAME] [--gender GENDER] [--language LANGUAGE]
                 [--co-author "NAME <EMAIL>"] [--assistant "NAME <EMAIL>"]
                 [--assistant-signing-key PATH] [--assistant-github LOGIN]
-                [--analyst] [--analyst-github LOGIN] [PERSONA...]
+                [--analyst] [--analyst-github LOGIN] [--assistant-style PERSONA]
+                [PERSONA...]
 
-Build output styles, skills, agents, rules and CLAUDE.md into DIR (default: dist).
+Build output styles, skills, agents, rules, CLAUDE.md and the launchers into DIR
+(default: dist).
 With no PERSONA, build every overlay in personas/. Skills are always all built.
 
   --name NAME                How Kira calls the user (default: none)
@@ -77,13 +85,14 @@ With no PERSONA, build every overlay in personas/. Skills are always all built.
   --assistant-github LOGIN   The assistant's GitHub account (default: none)
   --analyst                  The team has an analyst, Iris (default: no)
   --analyst-github LOGIN     The analyst's GitHub account, with --analyst (default: none)
+  --assistant-style PERSONA  The assistant launcher's output style (default: kira-cozy)
 EOF
 }
 
 while [ $# -gt 0 ]; do
 	case $1 in
 	-o | --out | --name | --gender | --language | --co-author | --assistant | \
-		--assistant-signing-key | --assistant-github | --analyst-github)
+		--assistant-signing-key | --assistant-github | --analyst-github | --assistant-style)
 		[ $# -ge 2 ] || die "missing value for $1"
 		case $1 in
 		--name) name=$2 ;;
@@ -94,6 +103,7 @@ while [ $# -gt 0 ]; do
 		--assistant-signing-key) assistant_signing_key=$2 ;;
 		--assistant-github) assistant_github=$2 ;;
 		--analyst-github) analyst_github=$2 ;;
+		--assistant-style) assistant_style=$2 ;;
 		*) out_dir=$2 ;;
 		esac
 		shift 2
@@ -161,10 +171,24 @@ done
 # The analyst's account means nothing without an analyst.
 [ -n "$analyst" ] || analyst_github=
 
+# The launchers start a member with the name of their output style.
+case $assistant_style in
+'' | -* | *[!A-Za-z0-9_-]*) die "invalid persona name: $assistant_style" ;;
+esac
+[ -f "$personas_dir/$assistant_style.md" ] || die "unknown persona: $assistant_style"
+assistant_style_name=$(sed -n 's/^name: //p' "$personas_dir/$assistant_style.md" | head -n 1)
+analyst_style_name=$(sed -n 's/^name: //p' "$root/team/iris.md" | head -n 1)
+for value in "$assistant_style_name" "$analyst_style_name" "$assistant_name"; do
+	case $value in
+	*\'* | *'"'* | *\\*) die "cannot use this name in a launcher: $value" ;;
+	esac
+done
+
 export KIRA_USER="$user" KIRA_THEY="$they" KIRA_THEM="$them" KIRA_THEIR="$their" \
 	KIRA_LANGUAGE="$language" KIRA_CO_AUTHOR="$co_author" KIRA_ASSISTANT_NAME="$assistant_name" \
 	KIRA_ASSISTANT_EMAIL="$assistant_email" KIRA_ASSISTANT_SIGNING_KEY="$assistant_signing_key" \
-	KIRA_ASSISTANT_GITHUB="$assistant_github" KIRA_ANALYST="$analyst" KIRA_ANALYST_GITHUB="$analyst_github"
+	KIRA_ASSISTANT_GITHUB="$assistant_github" KIRA_ANALYST="$analyst" KIRA_ANALYST_GITHUB="$analyst_github" \
+	KIRA_ASSISTANT_STYLE="$assistant_style_name" KIRA_ANALYST_STYLE="$analyst_style_name"
 
 # render FILE [ORIGIN]: print FILE with its placeholders filled and its blocks resolved;
 # errors name ORIGIN (default: FILE).
@@ -185,7 +209,7 @@ render() {
 			exit 1
 		}
 		BEGIN {
-			n = split("user they them their language co_author assistant_name assistant_email assistant_signing_key assistant_github analyst analyst_github", keys, " ")
+			n = split("user they them their language co_author assistant_name assistant_email assistant_signing_key assistant_github analyst analyst_github assistant_style analyst_style", keys, " ")
 			for (k = 1; k <= n; k++) known[keys[k]] = 1
 			depth = 0
 			hidden = 0
@@ -406,4 +430,15 @@ fi
 for file in "$root"/launchers/konsole/*.colorscheme; do
 	[ -f "$file" ] || continue
 	build_file "$file" "$out_dir/konsole/$(basename "$file")"
+done
+# The launchers name the assistant "Kira" when it has no git identity.
+for file in "$root"/launchers/*; do
+	[ -f "$file" ] || continue
+	launcher=$out_dir/bin/$(basename "$file")
+	# A subshell: some shells keep an assignment made before a function call.
+	(
+		KIRA_ASSISTANT_NAME=${assistant_name:-Kira}
+		build_file "$file" "$launcher"
+	)
+	[ ! -f "$launcher" ] || chmod +x "$launcher"
 done

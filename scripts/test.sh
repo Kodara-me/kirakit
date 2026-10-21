@@ -16,9 +16,11 @@ tmp=$(mktemp -d "${TMPDIR:-/tmp}/kirakit-test.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 failures=0
 claude=
-# The launchers' Konsole color schemes go to $XDG_DATA_HOME/konsole: never the real one.
+# The launchers go to ~/.local/bin and their Konsole color schemes to $XDG_DATA_HOME/konsole:
+# never the real ones.
+HOME=$tmp/home
 XDG_DATA_HOME=$tmp/data
-export XDG_DATA_HOME
+export HOME XDG_DATA_HOME
 
 # The scripts run from a copy of the working tree, uncommitted changes included, so that
 # link mode builds into the copy's dist/.
@@ -50,7 +52,7 @@ check() {
 # The shell is split on purpose, to allow options.
 # shellcheck disable=SC2086
 kira() {
-	CLAUDE_CONFIG_DIR=$claude XDG_DATA_HOME=$claude-data $shell "$root/get-kira.sh" "$@" </dev/null
+	CLAUDE_CONFIG_DIR=$claude HOME=$claude-home XDG_DATA_HOME=$claude-data $shell "$root/get-kira.sh" "$@" </dev/null
 }
 
 # kira with a complete profile, so that nothing is asked.
@@ -459,6 +461,83 @@ claude=$tmp/launchers-styles
 kira_profile --only styles >/dev/null
 check 'launchers: not with --only styles (#36 R16)' test ! -e "$claude-data"
 
+# --- launchers: assistant and analyst (#36 R1, R2, R4, R5, R7–R11, R15, R17) ---------------
+
+# A fake claude that records its arguments and exits with $FAKE_CLAUDE_STATUS.
+fakebin=$tmp/fakebin
+mkdir -p "$fakebin"
+printf '%s\n' '#!/bin/sh' 'printf "%s\n" "$@" >"$FAKE_CLAUDE_ARGS"' 'exit "${FAKE_CLAUDE_STATUS:-0}"' >"$fakebin/claude"
+chmod +x "$fakebin/claude"
+args=$tmp/claude-args
+# started LAUNCHER [ARGS...]: run LAUNCHER with the fake claude, then print what it received.
+started() {
+	PATH="$fakebin:$PATH" FAKE_CLAUDE_ARGS=$args "$@" >/dev/null
+	cat "$args"
+}
+expected() {
+	printf '%s\n' "$@"
+}
+
+claude=$tmp/members
+bin=$tmp/members-bin
+kira_profile --copy --bin-dir "$bin" --default-style kira-sassy --no-analyst >"$tmp/members.log"
+check 'members: assistant installed (#36 R1)' test -x "$bin/assistant"
+check 'members: helper installed (#36 R1)' test -x "$bin/kirakit-session"
+check 'members: no analyst without an analyst (#36 R2)' test ! -e "$bin/analyst"
+check 'members: assistant with the default style, name and arguments (#36 R9, R10)' \
+	test "$(started "$bin/assistant" --resume 'a b')" = "$(expected -n Kira --settings '{"outputStyle":"Kira (sassy)"}' --resume 'a b')"
+check "members: Claude Code's exit status (#36 R10)" \
+	sh -c 'PATH="$1:$PATH" FAKE_CLAUDE_ARGS="$2" FAKE_CLAUDE_STATUS=3 "$3/assistant"; test $? -eq 3' _ "$fakebin" "$args" "$bin"
+check 'members: bin directory saved (#36 R5)' profile_has "bin_dir=$bin"
+check 'members: warns when the bin directory is not on PATH (#36 R15)' \
+	grep -q "warning: $bin is not on your PATH" "$tmp/members.log"
+kira --copy --analyst >/dev/null
+check 'members: bin directory reused (#36 R5)' test -x "$bin/analyst"
+check 'members: analyst with her style and name (#36 R11)' \
+	test "$(started "$bin/analyst" -p hi)" = "$(expected -n Iris --settings '{"outputStyle":"Iris"}' -p hi)"
+kira --copy --assistant-style kira-focus >/dev/null
+check 'members: --assistant-style (#36 R9)' \
+	test "$(started "$bin/assistant")" = "$(expected -n Kira --settings '{"outputStyle":"Kira (focus)"}')"
+check 'members: assistant style saved (#36 R9)' profile_has 'assistant_style=kira-focus'
+check 'members: an unknown persona is refused (#36 R9)' sh -c '! "$@" >/dev/null 2>&1' _ \
+	env CLAUDE_CONFIG_DIR="$claude" HOME="$claude-home" XDG_DATA_HOME="$claude-data" $shell "$root/get-kira.sh" --assistant-style nope
+check 'members: a relative bin directory is refused (#36 R5)' sh -c '! "$@" >/dev/null 2>&1' _ \
+	env CLAUDE_CONFIG_DIR="$claude" HOME="$claude-home" XDG_DATA_HOME="$claude-data" $shell "$root/get-kira.sh" --bin-dir bin
+kira --copy --no-analyst >/dev/null
+check 'members: analyst removed with the analyst (#36 R4)' test ! -e "$bin/analyst"
+mkdir -p "$tmp/shadow"
+printf '#!/bin/sh\n' >"$tmp/shadow/assistant"
+chmod +x "$tmp/shadow/assistant"
+(PATH="$tmp/shadow:$bin:$PATH" && kira --copy >"$tmp/members-path.log")
+check 'members: warns about a command earlier in PATH (#36 R15)' \
+	grep -q "warning: $tmp/shadow/assistant comes before $bin/assistant" "$tmp/members-path.log"
+check 'members: no PATH warning when the bin directory is on it (#36 R15)' \
+	sh -c '! grep -q "is not on your PATH" "$1"' _ "$tmp/members-path.log"
+kira --copy --bin-dir "$tmp/members-bin2" >/dev/null
+check 'members: moved to the new bin directory (#36 R4, R5)' test -x "$tmp/members-bin2/assistant"
+check 'members: removed from the old bin directory (#36 R4)' sh -c '! ls "$1"/* >/dev/null 2>&1' _ "$bin"
+kira --uninstall >/dev/null
+check 'members: uninstall removes the launchers (#36 R8)' sh -c '! ls "$1"/* >/dev/null 2>&1' _ "$tmp/members-bin2"
+
+claude=$tmp/members-mine
+bin=$claude-home/.local/bin
+mkdir -p "$bin"
+printf 'mine\n' >"$bin/assistant"
+kira_profile --dry-run >"$tmp/members-dry.log"
+check 'members: dry run reports the launchers (#36 R17)' grep -q "backup: $bin/assistant" "$tmp/members-dry.log"
+check 'members: dry run changes nothing (#36 R17)' contains "$bin/assistant" 'mine'
+check 'members: dry run installs no helper (#36 R17)' test ! -e "$bin/kirakit-session"
+kira_profile >/dev/null
+check 'members: ~/.local/bin by default, linked (#36 R5)' test -L "$bin/assistant"
+check 'members: an existing launcher is backed up (#36 R7)' sh -c 'grep -rqx mine "$1/.kirakit-backups"' _ "$claude"
+kira --uninstall >/dev/null
+check 'members: uninstall restores it (#36 R7)' contains "$bin/assistant" 'mine'
+
+claude=$tmp/members-noid
+kira --copy --name Alex --gender female --language auto --no-co-author --bin-dir "$claude-bin" >/dev/null
+check 'members: the assistant is Kira without a git identity (#36 R10)' \
+	test "$(started "$claude-bin/assistant")" = "$(expected -n Kira --settings '{"outputStyle":"Kira (cozy)"}')"
+
 # The shell is split on purpose, to allow options.
 # shellcheck disable=SC2086
 env -u XDG_DATA_HOME HOME="$tmp/home" CLAUDE_CONFIG_DIR="$tmp/launchers-home" $shell "$root/get-kira.sh" \
@@ -516,7 +595,7 @@ check 'assistant: signing key saved' profile_has "assistant_signing_key=$tmp/key
 check 'assistant: GitHub login saved' profile_has 'assistant_github=kira-bot'
 check 'assistant: --co-author asks for trailers' profile_has 'co_author_trailer=yes'
 check 'assistant: no co_author key' sh -c '! grep -q "^co_author=" "$1"' _ "$claude/.kirakit-profile"
-check 'assistant: no warning with both keys' sh -c '! grep -q warning "$1"' _ "$tmp/assistant.log"
+check 'assistant: no warning with both keys' sh -c '! grep -q "warning:.* key" "$1"' _ "$tmp/assistant.log"
 check 'assistant: trailer in the rules' contains "$claude/rules/git.md" 'Co-Authored-By: Kira <kira@example.com>'
 check 'assistant: rerun changes nothing' unchanged kira --copy
 

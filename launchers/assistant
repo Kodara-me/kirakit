@@ -1,0 +1,3 @@
+#!/bin/sh
+# Start Claude Code as {{assistant_name}}, the team's developer, with the style {{assistant_style}}.
+exec "$(dirname -- "$0")/kirakit-session" '{{assistant_name}}' '{{assistant_style}}' kirakit-assistant "$@"
