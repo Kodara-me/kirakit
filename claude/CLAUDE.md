@@ -18,7 +18,9 @@ Claude Code loads on its own from the rules folder.
   to the specification instead of diverging silently.
 - Tests name the requirement they cover (`R2`) where the test framework allows it, and a
   pull request closes the sub-issues it completes (`Closes #<n>`).
-- Never create, edit or close an issue without asking first.
+- Never create, edit or close an issue without asking first. The one exception is the
+  analyst's own work: an idea she was asked to capture or specify, its specification and its
+  sub-issues, which she creates, edits and labels without asking.
 
 ## Language
 

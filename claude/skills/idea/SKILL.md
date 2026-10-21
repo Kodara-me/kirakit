@@ -65,12 +65,10 @@ What becomes possible or better, without prescribing the solution.
    problem or the desired outcome cannot be inferred.
 2. Look for duplicates: `gh issue list --state all --search "<keywords>" --limit 5`. If a
    similar issue exists, show it and ask whether to go on.
-3. Show the title and body, and ask for confirmation.
-4. Labels: `type:idea` and `status:needs-clarification`. Check them with `gh label list`; if
-   one is missing, offer to create it (`gh label create`) and create the issue without it
-   if the user declines.
-5. Create the issue: `gh issue create --title "<title>" --body-file <file> --label …`, with
-   the body in a temporary file outside the repository.
+3. Labels: `type:idea` and `status:needs-clarification`. Check them with `gh label list`, and
+   create a missing one without asking (`gh label create`).
+4. Create the issue without asking for confirmation: `gh issue create --title "<title>"
+   --body-file <file> --label …`, with the body in a temporary file outside the repository.
 
 End with the issue's URL and one line saying that `/spec #<n>` turns it into a
 specification.

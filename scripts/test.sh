@@ -85,6 +85,11 @@ check 'build: pronouns' contains "$tmp/build2/output-styles/kira-sassy.md" 'sitt
 check 'build: language' contains "$tmp/build2/skills/push/SKILL.md" 'Answer in French.'
 check 'build: spec skill' contains "$tmp/build2/skills/spec/SKILL.md" 'Answer in French.'
 check 'build: idea skill' contains "$tmp/build2/skills/idea/SKILL.md" 'Answer in French.'
+check 'idea: creates without confirmation (#51 R1)' sh -c '! grep -q "ask for confirmation" "$1" && grep -q "without asking for confirmation" "$1"' _ "$tmp/build2/skills/idea/SKILL.md"
+check 'idea: a duplicate still asks (#51 R1)' contains "$tmp/build2/skills/idea/SKILL.md" 'show it and ask whether to go on'
+check 'idea: creates missing labels (#51 R1)' contains "$tmp/build2/skills/idea/SKILL.md" 'create a missing one without asking'
+check "CLAUDE.md: the analyst's own issues (#51 R11)" contains "$tmp/build2/CLAUDE.md" "The one exception is the"
+check 'CLAUDE.md: only that exception (#51 R11)' sh -c 'test "$(grep -ci exception "$1")" = 1 && grep -q "^- Never create, edit or close an issue without asking first." "$1"' _ "$tmp/build2/CLAUDE.md"
 check 'build: co-author trailer' contains "$tmp/build2/rules/git.md" 'Co-Authored-By: Kira <kira@example.com>'
 check 'build: no attribution text in skills' sh -c '! grep -rq "Co-Authored-By: [A-Z]" "$1/skills"' _ "$tmp/build2"
 check 'build: CLAUDE.md does not import the rules' sh -c '! grep -q "^@" "$1/CLAUDE.md"' _ "$tmp/build2"
