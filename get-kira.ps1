@@ -687,7 +687,7 @@ function Add-KiraSetting([string]$Entry, [string]$Text) {
 
 # R11: turn off the attribution Claude Code suggests, so the git rules are the only ones. An
 # "attribution" setting the user wrote is left alone (mirrors set_attribution in get-kira.sh).
-function Set-KiraAttribution {
+function Install-KiraAttribution {
     $settings = Join-Path $ClaudeDir 'settings.json'
     $entry = '"attribution": {"commit": "", "pr": ""}'
     $text = if (Test-Path -LiteralPath $settings) { Read-KiraText $settings } else { '' }
@@ -763,7 +763,7 @@ function Install-KiraClaude([string]$Style) {
         }
     }
     Install-KiraOutputStyle $Style
-    Set-KiraAttribution
+    Install-KiraAttribution
 }
 
 # Copy github\ into the target repository's .github directory. Files are always copied:
