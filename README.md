@@ -58,8 +58,8 @@ In `$CLAUDE_CONFIG_DIR` (default: `~/.claude`):
 | Path | Component |
 | --- | --- |
 | `output-styles/kira-*.md` | `styles` |
-| `CLAUDE.md`, `skills/*`, `agents/*` | `claude` |
-| `outputStyle` in `settings.json` | `claude` — only this key is changed; the file is edited in place |
+| `CLAUDE.md`, `rules/git.md`, `skills/*`, `agents/*` | `claude` |
+| `outputStyle` and `attribution` in `settings.json` | `claude` — only these keys are changed; the file is edited in place |
 | `.kirakit-profile`, `.kirakit-manifest`, `.kirakit-originals` | Profile and the record used by `--uninstall` |
 | `.kirakit-backups/<timestamp>/` | Files that were replaced or removed |
 
@@ -117,6 +117,73 @@ questions that are not answered yet are asked. Options override the saved values
 defaults: no name, `unspecified`, `auto`, no assistant; the optional assistant values default
 to empty, and trailers to yes when there is an assistant.
 
+### Who commits
+
+The git rules (`rules/git.md`, which Claude Code loads on its own) follow the profile:
+
+- **You commit** with the `commit` skill, under your git identity. With trailers on, the
+  message ends with `Co-Authored-By:` and the assistant's name and email.
+- **The assistant commits** the code it wrote with the `assistant-commit` skill, under its own
+  name and email, signed with its own SSH key, and you are the co-author. Its identity and key
+  are passed on the `git` command line: your git configuration is never changed. Without a
+  signing key in the profile, the assistant never commits as itself.
+- **With a GitHub account** for the assistant (`--assistant-github`), the rules also say how
+  it works on GitHub: everything it writes uses its own token, its pull requests ask for your
+  review, and its questions are asked both in the conversation and in a comment.
+
+The installer also sets `"attribution": {"commit": "", "pr": ""}` in `settings.json`, so
+Claude Code stops suggesting its own trailer and pull request footer. If `attribution` is
+already set to something else, it is left unchanged, with a warning.
+
+### Give the assistant its own identity
+
+The installer never creates or uploads keys: these steps are done once, by hand. The examples
+use `kira` and `kira@example.com`; use the assistant's own name and address.
+
+1. Create a GitHub account for the assistant, with its email address verified (Settings →
+   Emails): GitHub shows a commit as Verified only for a verified address. Make it a
+   collaborator (Write) of the repositories it works on.
+2. Log it in to `gh`, next to your own account: `gh auth login`, then `gh auth switch` back
+   to yours so it stays the active one.
+3. Create a signing key without a passphrase, so the assistant can sign without you. Any
+   program running as your user can then sign as the assistant: keep it for this machine
+   only.
+
+   ```sh
+   ssh-keygen -t ed25519 -N "" -C "kira@example.com (git signing)" -f ~/.ssh/kira_signing_ed25519
+   ```
+
+4. Let the assistant's token register signing keys. `gh auth refresh` acts on the active
+   account, hence the switches; log in as the assistant in the browser:
+
+   ```sh
+   gh auth switch -h github.com -u kira
+   gh auth refresh -h github.com -s admin:ssh_signing_key
+   gh auth switch -h github.com -u <your login>
+   ```
+
+5. Register the key as a signing key of the assistant's account:
+
+   ```sh
+   GH_TOKEN=$(gh auth token --user kira) gh ssh-key add ~/.ssh/kira_signing_ed25519.pub \
+       --type signing --title "kira git signing"
+   ```
+
+6. Optional, to check signatures locally with `git log --show-signature`, add the key to your
+   allowed signers file (`gpg.ssh.allowedSignersFile`):
+
+   ```sh
+   echo "kira@example.com namespaces=\"git\" $(cut -d' ' -f1,2 ~/.ssh/kira_signing_ed25519.pub)" \
+       >>~/.config/git/allowed_signers
+   ```
+
+7. Run the installer with the assistant's identity:
+
+   ```sh
+   ./get-kira.sh --assistant "Kira <kira@example.com>" \
+       --assistant-signing-key ~/.ssh/kira_signing_ed25519.pub --assistant-github kira
+   ```
+
 ### Updates, backups and uninstall
 
 The installer is idempotent: files already up to date are left alone, and any other existing
@@ -125,7 +192,7 @@ From a clone, update with `git pull` then run the installer again.
 
 `--uninstall` removes the links and moves copies to the backups, then restores the files that
 were there before kirakit (for example your own `CLAUDE.md`). It keeps the profile, the
-backups and the `outputStyle` setting.
+backups and the `outputStyle` and `attribution` settings.
 
 Requirements: `git`, and a POSIX shell with standard utilities (`awk`, `sed`, `cmp`, `diff`,
 `mktemp`) or PowerShell 5+.
@@ -156,8 +223,9 @@ requests and documents stay neutral and professional.
 ## Skills
 
 `claude/skills/` holds Claude Code skills, one directory per skill with its `SKILL.md`:
-`commit`, `diffv`, `idea`, `pull`, `push`, `spec` and `test`. They answer in the profile's language,
-and `commit` follows its co-author setting. Other skills already in
+`assistant-commit`, `commit`, `diffv`, `idea`, `pull`, `push`, `spec` and `test`. They answer
+in the profile's language; `commit` and `assistant-commit` follow the git rules in
+`claude/rules/git.md` (see [Who commits](#who-commits)). Other skills already in
 `$CLAUDE_CONFIG_DIR/skills/` are left untouched. Agents in `claude/agents/` are installed the
 same way.
 
