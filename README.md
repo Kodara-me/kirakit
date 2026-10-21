@@ -274,6 +274,10 @@ Pull requests are assigned to `{{assistant_github}}`.
 {{/assistant_github}}
 ```
 
+A file that renders to nothing (for a skill, its `SKILL.md`), such as a template wholly inside
+a block, is not built nor installed: that makes a whole style, agent or skill optional. If an
+earlier install put it there, the installer removes it, as `--uninstall` would.
+
 Build the files into `dist/` by hand with:
 
 ```sh

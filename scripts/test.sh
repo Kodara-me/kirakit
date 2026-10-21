@@ -199,6 +199,61 @@ check 'blocks: rejects an unopened block' sh -c '! $1 "$2/scripts/build.sh" -o "
 printf '{{#nothing}}\n{{/nothing}}\n' >"$blocks/claude/skills/blocks/SKILL.md"
 check 'blocks: rejects an unknown key' sh -c '! $1 "$2/scripts/build.sh" -o "$3"' _ "$shell" "$blocks" "$tmp/x"
 
+# --- optional files (#15 R4, R9) ---------------------------------------------------------
+
+# A copy of the sources with a test agent wholly inside a block, so that it renders to
+# nothing without an assistant GitHub account.
+optional=$tmp/optional-src
+cp -Rp "$root" "$optional"
+rm -rf "$optional/dist"
+cat >"$optional/claude/agents/optional.md" <<'EOF'
+{{#assistant_github}}
+---
+name: optional
+---
+
+For {{assistant_github}}.
+{{/assistant_github}}
+EOF
+
+$shell "$optional/scripts/build.sh" -o "$tmp/optional-build" --assistant 'Kira <kira@example.com>' \
+	--assistant-github kira-bot >/dev/null
+check 'optional: built when its block is kept' contains "$tmp/optional-build/agents/optional.md" 'For kira-bot.'
+$shell "$optional/scripts/build.sh" -o "$tmp/optional-build" >"$tmp/optional-build.log"
+check 'optional: not built when it renders to nothing' test ! -e "$tmp/optional-build/agents/optional.md"
+check 'optional: not listed as built' sh -c '! grep -q optional.md "$1"' _ "$tmp/optional-build.log"
+
+# optional_kira MODE GITHUB: install the copy with this assistant GitHub login; MODE is
+# --copy, or empty for link mode, so it is split on purpose like the shell.
+# shellcheck disable=SC2086
+optional_kira() {
+	CLAUDE_CONFIG_DIR=$claude $shell "$optional/get-kira.sh" $1 --name Alex --gender female \
+		--language auto --assistant 'Kira <kira@example.com>' --assistant-github "$2" </dev/null
+}
+
+for mode in copy link; do
+	claude=$tmp/optional-$mode
+	flag=
+	[ "$mode" = copy ] && flag=--copy
+	optional_kira "$flag" kira-bot >/dev/null
+	check "optional $mode: installed with its block kept" contains "$claude/agents/optional.md" 'For kira-bot.'
+	check "optional $mode: in the manifest" grep -qxF "$claude/agents/optional.md" "$claude/.kirakit-manifest"
+	optional_kira "$flag" '' >/dev/null
+	check "optional $mode: removed when it renders to nothing" sh -c '! test -e "$1" && ! test -L "$1"' _ "$claude/agents/optional.md"
+	check "optional $mode: dropped from the manifest" sh -c '! grep -q optional.md "$1"' _ "$claude/.kirakit-manifest"
+	check "optional $mode: other files kept" test -e "$claude/rules/git.md"
+	check "optional $mode: rerun changes nothing" unchanged optional_kira "$flag" ''
+done
+
+# A file of the user's that was there before is restored when kirakit's is removed.
+claude=$tmp/optional-original
+mkdir -p "$claude/agents"
+printf 'mine\n' >"$claude/agents/optional.md"
+optional_kira --copy kira-bot >/dev/null
+optional_kira --copy '' >/dev/null
+check 'optional: the original is restored' contains "$claude/agents/optional.md" 'mine'
+check 'optional: the original is no longer listed' sh -c '! grep -q optional.md "$1"' _ "$claude/.kirakit-originals"
+
 # --- dry run -------------------------------------------------------------------------------
 
 claude=$tmp/dry

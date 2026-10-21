@@ -121,3 +121,31 @@ jobs:
             done
             diff "$a/.kirakit-profile" "$b/.kirakit-profile" || [ ! -e "$a/.kirakit-profile" ]
           done
+      - name: Optional files
+        # A template wholly inside a block that is dropped is neither built nor installed, and
+        # is removed when an earlier run installed it, by both installers.
+        run: |
+          src=$RUNNER_TEMP/optional-src
+          cp -r . "$src"
+          printf '%s\n' '{{#assistant_github}}' '---' 'name: optional' '---' '' \
+            'For {{assistant_github}}.' '{{/assistant_github}}' >"$src/claude/agents/optional.md"
+          install() {
+            if [ "$1" = sh ]; then
+              CLAUDE_CONFIG_DIR="$2" sh "$src/get-kira.sh" --copy --name Alex --gender male \
+                --language auto --assistant 'Kira <kira@example.com>' --assistant-github "$3" </dev/null
+            else
+              CLAUDE_CONFIG_DIR="$2" pwsh -File "$src/get-kira.ps1" -Copy -Name Alex -Gender male \
+                -Language auto -Assistant 'Kira <kira@example.com>' -AssistantGithub "$3" </dev/null
+            fi
+          }
+          for tool in sh ps; do
+            dir=$RUNNER_TEMP/optional-$tool
+            install "$tool" "$dir" kira-bot >/dev/null
+            grep -qF 'For kira-bot.' "$dir/agents/optional.md"
+            install "$tool" "$dir" '' >/dev/null
+            if [ -e "$dir/agents/optional.md" ]; then echo "::error::$tool kept optional.md"; exit 1; fi
+            if grep -q optional.md "$dir/.kirakit-manifest"; then echo "::error::$tool lists optional.md"; exit 1; fi
+          done
+          for path in output-styles skills rules CLAUDE.md agents; do
+            diff -r "$RUNNER_TEMP/optional-sh/$path" "$RUNNER_TEMP/optional-ps/$path"
+          done

@@ -31,6 +31,7 @@ build_dir=
 reconfigure=0
 installed=
 originals_new=
+removed=
 profile=$CLAUDE_DIR/.kirakit-profile
 manifest=$CLAUDE_DIR/.kirakit-manifest
 originals=$CLAUDE_DIR/.kirakit-originals
@@ -471,6 +472,18 @@ built() {
 	fi
 }
 
+# install_built PATH TARGET: install the built file PATH. A file the build left out (a
+# template that renders to nothing for this profile) is not installed, and is removed if an
+# earlier run installed it.
+install_built() {
+	if [ -e "$build_dir/$1" ]; then
+		install_file "$(built "$1")" "$2"
+	elif listed "$manifest" "$2"; then
+		remove_installed "$2"
+		removed="$removed$2$nl"
+	fi
+}
+
 install_styles() {
 	for file in "$src"/personas/*.md; do
 		persona=$(basename "$file" .md)
@@ -478,7 +491,7 @@ install_styles() {
 		if [ -n "$personas" ]; then
 			case " $personas " in *" $persona "*) ;; *) continue ;; esac
 		fi
-		install_file "$(built "output-styles/$persona.md")" "$CLAUDE_DIR/output-styles/$persona.md"
+		install_built "output-styles/$persona.md" "$CLAUDE_DIR/output-styles/$persona.md"
 	done
 }
 
@@ -571,25 +584,25 @@ set_output_style() {
 }
 
 install_claude() {
-	if [ -f "$build_dir/CLAUDE.md" ]; then
-		install_file "$(built CLAUDE.md)" "$CLAUDE_DIR/CLAUDE.md"
+	if [ -f "$src/claude/CLAUDE.md" ]; then
+		install_built CLAUDE.md "$CLAUDE_DIR/CLAUDE.md"
 	fi
 	for file in "$src"/claude/agents/*.md; do
 		[ -f "$file" ] || continue
 		agent=$(basename "$file")
-		install_file "$(built "agents/$agent")" "$CLAUDE_DIR/agents/$agent"
+		install_built "agents/$agent" "$CLAUDE_DIR/agents/$agent"
 	done
 	# Claude Code loads every file of rules/ on its own.
 	for file in "$src"/claude/rules/*.md; do
 		[ -f "$file" ] || continue
 		rules=$(basename "$file")
-		install_file "$(built "rules/$rules")" "$CLAUDE_DIR/rules/$rules"
+		install_built "rules/$rules" "$CLAUDE_DIR/rules/$rules"
 	done
 	# Skills are directories holding a SKILL.md, installed as a whole.
 	for dir in "$src"/claude/skills/*/; do
 		[ -f "$dir/SKILL.md" ] || continue
 		skill=$(basename "$dir")
-		install_file "$(built "skills/$skill")" "$CLAUDE_DIR/skills/$skill"
+		install_built "skills/$skill" "$CLAUDE_DIR/skills/$skill"
 	done
 	set_output_style
 	set_attribution
@@ -614,9 +627,9 @@ install_github() {
 }
 
 # Merge this run's targets into the manifest read by --uninstall, and the backups of files
-# that were there before kirakit into the list of originals.
+# that were there before kirakit into the list of originals; drop the files this run removed.
 write_manifest() {
-	[ -n "$installed" ] || return 0
+	[ -n "$installed$removed" ] || return 0
 	if [ "$dry_run" -eq 1 ]; then
 		printf '[dry-run] record installed files in %s\n' "$manifest"
 		return
@@ -626,15 +639,44 @@ write_manifest() {
 			cat "$manifest"
 		fi
 		printf '%s' "$installed"
-	} | sort -u >"$manifest.tmp"
+	} | sort -u | without_removed >"$manifest.tmp"
 	mv -f "$manifest.tmp" "$manifest"
 	if [ -n "$originals_new" ]; then
 		printf '%s' "$originals_new" >>"$originals"
 	fi
+	if [ -n "$removed" ] && [ -f "$originals" ]; then
+		without_removed <"$originals" >"$originals.tmp"
+		mv -f "$originals.tmp" "$originals"
+	fi
 }
 
-# Remove what the manifest lists: symlinks are deleted, copies are moved to the backups, and
-# files that were there before kirakit are restored.
+# Filter out the lines whose first field is a path this run removed.
+without_removed() {
+	KIRAKIT_REMOVED=$removed awk -F "$tab" '
+		BEGIN { n = split(ENVIRON["KIRAKIT_REMOVED"], paths, "\n"); for (i = 1; i <= n; i++) gone[paths[i]] = 1 }
+		!($1 in gone)'
+}
+
+# remove_installed PATH: remove a file kirakit installed (a symlink is deleted, a copy is
+# moved to the backups) and restore what was there before kirakit.
+remove_installed() {
+	if [ -L "$1" ]; then
+		log "remove link: $1"
+		run rm -f -- "$1"
+	elif [ -e "$1" ]; then
+		backup "$1"
+	fi
+	original=
+	if [ -f "$originals" ]; then
+		original=$(awk -F "$tab" -v path="$1" '$1 == path { print $2; exit }' "$originals")
+	fi
+	if [ -n "$original" ] && { [ -e "$original" ] || [ -L "$original" ]; }; then
+		log "restore: $original -> $1"
+		run mv -- "$original" "$1"
+	fi
+}
+
+# Remove what the manifest lists.
 uninstall_all() {
 	[ -f "$manifest" ] || die "nothing to uninstall: $manifest not found"
 	while IFS= read -r path; do
@@ -644,20 +686,7 @@ uninstall_all() {
 		"$CLAUDE_DIR"/*) ;;
 		*) log "skip (outside $CLAUDE_DIR): $path" && continue ;;
 		esac
-		if [ -L "$path" ]; then
-			log "remove link: $path"
-			run rm -f -- "$path"
-		elif [ -e "$path" ]; then
-			backup "$path"
-		fi
-		original=
-		if [ -f "$originals" ]; then
-			original=$(awk -F "$tab" -v path="$path" '$1 == path { print $2; exit }' "$originals")
-		fi
-		if [ -n "$original" ] && { [ -e "$original" ] || [ -L "$original" ]; }; then
-			log "restore: $original -> $path"
-			run mv -- "$original" "$path"
-		fi
+		remove_installed "$path"
 	done <"$manifest"
 	log "remove manifest: $manifest"
 	run rm -f -- "$manifest" "$originals"

@@ -111,6 +111,7 @@ $script:BuildDir = $null
 $script:SettingsBackedUp = $false
 $script:Installed = New-Object System.Collections.Generic.List[string]
 $script:OriginalsNew = New-Object System.Collections.Generic.List[string]
+$script:Removed = New-Object System.Collections.Generic.List[string]
 
 function Write-KiraLog([string]$Message) {
     Write-Host "kirakit: $Message"
@@ -549,8 +550,14 @@ function Format-KiraLine([string[]]$Lines, $Values, [string]$Origin) {
     return $out.ToArray()
 }
 
+# A file that renders to nothing, such as a template wholly inside a block that is dropped for
+# this profile, is not written, and an earlier build of it is removed.
 function Write-KiraRendered([string]$Path, [string[]]$Lines, $Values, [string]$Origin) {
     $text = Join-KiraLine @(Format-KiraLine $Lines $Values $Origin)
+    if ($text -notmatch '\S') {
+        if (Test-Path -LiteralPath $Path) { Remove-Item -LiteralPath $Path -Force }
+        return
+    }
     if ($text -match '\{\{[^}]*\}\}') { throw "${Origin}: unknown placeholder $($Matches[0])" }
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Path) | Out-Null
     Write-KiraText $Path $text
@@ -615,6 +622,8 @@ function Build-KiraOutput($UserProfile) {
                 $origin = Join-Path $dir.FullName $file.FullName.Substring($dest.Length + 1)
                 Write-KiraRendered $file.FullName @(Split-KiraLine (Read-KiraText $file.FullName)) $values $origin
             }
+            # A skill whose SKILL.md renders to nothing is not built.
+            if (-not (Test-Path -LiteralPath (Join-Path $dest 'SKILL.md'))) { Remove-Item -LiteralPath $dest -Recurse -Force }
         }
     }
     $agents = Join-Path $claude 'agents'
@@ -644,12 +653,23 @@ function Get-KiraBuiltPath([string]$Relative) {
 
 # --- Install --------------------------------------------------------------------------------
 
+# Install the built file RELATIVE. A file the build left out (a template that renders to
+# nothing for this profile) is not installed, and is removed if an earlier run installed it.
+function Install-KiraBuilt([string]$Relative, [string]$Destination) {
+    if (Test-Path -LiteralPath (Join-Path $script:BuildDir $Relative.Replace('/', $Sep))) {
+        Install-KiraFile (Get-KiraBuiltPath $Relative) $Destination
+    } elseif (Test-KiraListed $ManifestPath $Destination) {
+        Remove-KiraInstalled $Destination
+        $script:Removed.Add($Destination)
+    }
+}
+
 function Install-KiraStyle {
     foreach ($file in Get-ChildItem -LiteralPath (Join-Path $script:Src 'personas') -Filter '*.md' -File | Sort-Object Name) {
         $styleName = $file.BaseName
         if ($styleName.StartsWith('_')) { continue }
         if ($Persona.Count -gt 0 -and $Persona -notcontains $styleName) { continue }
-        Install-KiraFile (Get-KiraBuiltPath "output-styles/$styleName.md") (Join-Path (Join-Path $ClaudeDir 'output-styles') "$styleName.md")
+        Install-KiraBuilt "output-styles/$styleName.md" (Join-Path (Join-Path $ClaudeDir 'output-styles') "$styleName.md")
     }
 }
 
@@ -738,20 +758,20 @@ function Install-KiraOutputStyle([string]$Style) {
 }
 
 function Install-KiraClaude([string]$Style) {
-    if (Test-Path -LiteralPath (Join-Path $script:BuildDir 'CLAUDE.md')) {
-        Install-KiraFile (Get-KiraBuiltPath 'CLAUDE.md') (Join-Path $ClaudeDir 'CLAUDE.md')
+    if (Test-Path -LiteralPath (Join-Path (Join-Path $script:Src 'claude') 'CLAUDE.md')) {
+        Install-KiraBuilt 'CLAUDE.md' (Join-Path $ClaudeDir 'CLAUDE.md')
     }
     $agents = Join-Path (Join-Path $script:Src 'claude') 'agents'
     if (Test-Path -LiteralPath $agents) {
         foreach ($file in Get-ChildItem -LiteralPath $agents -Filter '*.md' -File | Sort-Object Name) {
-            Install-KiraFile (Get-KiraBuiltPath "agents/$($file.Name)") (Join-Path (Join-Path $ClaudeDir 'agents') $file.Name)
+            Install-KiraBuilt "agents/$($file.Name)" (Join-Path (Join-Path $ClaudeDir 'agents') $file.Name)
         }
     }
     # Claude Code loads every file of rules/ on its own.
     $rules = Join-Path (Join-Path $script:Src 'claude') 'rules'
     if (Test-Path -LiteralPath $rules) {
         foreach ($file in Get-ChildItem -LiteralPath $rules -Filter '*.md' -File | Sort-Object Name) {
-            Install-KiraFile (Get-KiraBuiltPath "rules/$($file.Name)") (Join-Path (Join-Path $ClaudeDir 'rules') $file.Name)
+            Install-KiraBuilt "rules/$($file.Name)" (Join-Path (Join-Path $ClaudeDir 'rules') $file.Name)
         }
     }
     # Skills are directories holding a SKILL.md, installed as a whole.
@@ -759,7 +779,7 @@ function Install-KiraClaude([string]$Style) {
     if (Test-Path -LiteralPath $skills) {
         foreach ($dir in Get-ChildItem -LiteralPath $skills -Directory | Sort-Object Name) {
             if (-not (Test-Path -LiteralPath (Join-Path $dir.FullName 'SKILL.md'))) { continue }
-            Install-KiraFile (Get-KiraBuiltPath "skills/$($dir.Name)") (Join-Path (Join-Path $ClaudeDir 'skills') $dir.Name)
+            Install-KiraBuilt "skills/$($dir.Name)" (Join-Path (Join-Path $ClaudeDir 'skills') $dir.Name)
         }
     }
     Install-KiraOutputStyle $Style
@@ -790,48 +810,57 @@ function Install-KiraGithub {
 }
 
 # Merge this run's destinations into the manifest read by -Uninstall, and the backups of files
-# that were there before kirakit into the list of originals.
+# that were there before kirakit into the list of originals; drop the files this run removed.
 function Save-KiraManifest {
-    if ($script:Installed.Count -eq 0) { return }
+    if ($script:Installed.Count -eq 0 -and $script:Removed.Count -eq 0) { return }
     if ($DryRun) { Write-DryRun "record installed files in $ManifestPath"; return }
     $all = New-Object System.Collections.Generic.List[string]
     if (Test-Path -LiteralPath $ManifestPath) { $all.AddRange([IO.File]::ReadAllLines($ManifestPath, $Utf8)) }
     $all.AddRange($script:Installed)
-    $sorted = $all | Where-Object { $_ } | Sort-Object -Unique
+    $sorted = $all | Where-Object { $_ -and $script:Removed -notcontains $_ } | Sort-Object -Unique
     Write-KiraText $ManifestPath (Join-KiraLine @($sorted))
     if ($script:OriginalsNew.Count -gt 0) {
         $previous = if (Test-Path -LiteralPath $OriginalsPath) { Read-KiraText $OriginalsPath } else { '' }
         Write-KiraText $OriginalsPath ($previous + (Join-KiraLine $script:OriginalsNew.ToArray()))
     }
+    if ($script:Removed.Count -gt 0 -and (Test-Path -LiteralPath $OriginalsPath)) {
+        $kept = @([IO.File]::ReadAllLines($OriginalsPath, $Utf8) | Where-Object { $_ -and $script:Removed -notcontains $_.Split("`t")[0] })
+        Write-KiraText $OriginalsPath $(if ($kept.Count -gt 0) { Join-KiraLine $kept } else { '' })
+    }
 }
 
-# Remove what the manifest lists: symbolic links are deleted, copies are moved to the
-# backups, and files that were there before kirakit are restored.
-function Invoke-KiraUninstall {
-    if (-not (Test-Path -LiteralPath $ManifestPath)) { throw "nothing to uninstall: $ManifestPath not found" }
-    $originals = @{}
+# Remove a file kirakit installed (a symbolic link is deleted, a copy is moved to the
+# backups) and restore what was there before kirakit.
+function Remove-KiraInstalled([string]$Path) {
+    if (Get-KiraLinkTarget $Path) {
+        Write-KiraLog "remove link: $Path"
+        if ($DryRun) { Write-DryRun "remove $Path" } else { (Get-Item -LiteralPath $Path -Force).Delete() }
+    } elseif (Test-Path -LiteralPath $Path) {
+        Backup-KiraPath -Path $Path | Out-Null
+    }
+    $original = $null
     if (Test-Path -LiteralPath $OriginalsPath) {
         foreach ($line in [IO.File]::ReadAllLines($OriginalsPath, $Utf8)) {
             $fields = $line.Split("`t")
-            if ($fields.Count -eq 2 -and -not $originals.ContainsKey($fields[0])) { $originals[$fields[0]] = $fields[1] }
+            if ($fields.Count -eq 2 -and $fields[0] -eq $Path) { $original = $fields[1]; break }
         }
     }
+    if ($original -and (Test-KiraPresent $original)) {
+        Write-KiraLog "restore: $original -> $Path"
+        if ($DryRun) { Write-DryRun "move $original to $Path" } else { Move-Item -LiteralPath $original -Destination $Path }
+    }
+}
+
+# Remove what the manifest lists.
+function Invoke-KiraUninstall {
+    if (-not (Test-Path -LiteralPath $ManifestPath)) { throw "nothing to uninstall: $ManifestPath not found" }
     foreach ($path in [IO.File]::ReadAllLines($ManifestPath, $Utf8)) {
         if (-not $path) { continue }
         if ($path -match '(^|[\\/])\.\.([\\/]|$)' -or -not $path.StartsWith($ClaudeDir + $Sep)) {
             Write-KiraLog "skip: $path"
             continue
         }
-        if (Get-KiraLinkTarget $path) {
-            Write-KiraLog "remove link: $path"
-            if ($DryRun) { Write-DryRun "remove $path" } else { (Get-Item -LiteralPath $path -Force).Delete() }
-        } elseif (Test-Path -LiteralPath $path) {
-            Backup-KiraPath -Path $path | Out-Null
-        }
-        if ($originals.ContainsKey($path) -and (Test-KiraPresent $originals[$path])) {
-            Write-KiraLog "restore: $($originals[$path]) -> $path"
-            if ($DryRun) { Write-DryRun "move $($originals[$path]) to $path" } else { Move-Item -LiteralPath $originals[$path] -Destination $path }
-        }
+        Remove-KiraInstalled $path
     }
     Write-KiraLog "remove manifest: $ManifestPath"
     if ($DryRun) {

@@ -22,7 +22,8 @@
 #
 # Lines between {{#KEY}} and {{/KEY}} are kept only when KEY is not empty, and lines between
 # {{^KEY}} and {{/KEY}} only when it is; KEY is any placeholder above. The markers stand on
-# lines of their own, are removed, and blocks can nest.
+# lines of their own, are removed, and blocks can nest. A file (a skill: its SKILL.md) that
+# renders to nothing is not built, so a template wholly inside a block is optional.
 #
 # Usage: build.sh [-o DIR] [--name NAME] [--gender GENDER] [--language LANGUAGE]
 #                 [--co-author "NAME <EMAIL>"] [--assistant "NAME <EMAIL>"]
@@ -209,6 +210,12 @@ check() {
 	[ -z "$unknown" ] || die "$2: unknown placeholder $unknown"
 }
 
+# blank FILE: whether FILE rendered to nothing, such as a template wholly inside a block that
+# is dropped for this profile. Such a file is not built, and an earlier build of it is removed.
+blank() {
+	! grep -q '[^[:space:]]' "$1"
+}
+
 core=$personas_dir/_core.md
 [ -f "$core" ] || die "missing $core"
 grep -qF '{{overlay}}' "$core" || die "$core: missing {{overlay}} marker"
@@ -246,6 +253,10 @@ build_style() {
 		exit 1
 	}
 	rm -f "$body" "$merged"
+	if blank "$dir/.$1.md.tmp"; then
+		rm -f "$dir/.$1.md.tmp" "$dir/$1.md"
+		return
+	fi
 	check "$dir/.$1.md.tmp" "$overlay" || {
 		rm -f "$dir/.$1.md.tmp"
 		exit 1
@@ -261,6 +272,10 @@ build_file() {
 		rm -f "$2.tmp"
 		exit 1
 	}
+	if blank "$2.tmp"; then
+		rm -f "$2.tmp" "$2"
+		return
+	fi
 	check "$2.tmp" "$1" || {
 		rm -f "$2.tmp"
 		exit 1
@@ -286,6 +301,10 @@ build_skill() {
 		exit 1
 	}
 	rm -rf "$dest"
+	if blank "$dest.tmp/SKILL.md"; then
+		rm -rf "$dest.tmp"
+		return
+	fi
 	mv "$dest.tmp" "$dest"
 	printf '%s\n' "$dest"
 }
