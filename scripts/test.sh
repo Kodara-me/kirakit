@@ -20,7 +20,12 @@ claude=
 # never the real ones.
 HOME=$tmp/home
 XDG_DATA_HOME=$tmp/data
-export HOME XDG_DATA_HOME
+XDG_CONFIG_HOME=$tmp/config
+export HOME XDG_DATA_HOME XDG_CONFIG_HOME
+# Nor the real Konsole: no D-Bus session, and the color sequences go to a file.
+unset KONSOLE_DBUS_SESSION KONSOLE_DBUS_SERVICE KONSOLE_DBUS_WINDOW KONSOLE_VERSION
+KIRAKIT_TTY=$tmp/tty
+export KIRAKIT_TTY
 
 # The scripts run from a copy of the working tree, uncommitted changes included, so that
 # link mode builds into the copy's dist/.
@@ -541,6 +546,47 @@ claude=$tmp/members-noid
 kira --copy --name Alex --gender female --language auto --no-co-author --bin-dir "$claude-bin" >/dev/null
 check 'members: the assistant is Kira without a git identity (#36 R10)' \
 	test "$(started "$claude-bin/assistant")" = "$(expected -n Kira --settings '{"outputStyle":"Kira (cozy)"}')"
+
+# --- launchers: Konsole colors (#36 R12) ---------------------------------------------------
+
+# A fake qdbus6 that answers the profile of the session and the window's default profile.
+dbusbin=$tmp/dbusbin
+mkdir -p "$dbusbin"
+printf '%s\n' '#!/bin/sh' 'case $3 in' \
+	'*Session.profile) printf "%s\n" "${FAKE_SESSION_PROFILE-}" ;;' \
+	'*Window.defaultProfile) printf "%s\n" "${FAKE_WINDOW_PROFILE-}" ;;' 'esac' >"$dbusbin/qdbus6"
+chmod +x "$dbusbin/qdbus6"
+mkdir -p "$XDG_DATA_HOME/konsole"
+printf '[Appearance]\nColorScheme=mine\n' >"$XDG_DATA_HOME/konsole/Mine.profile"
+launcher=$tmp/members-noid-bin/assistant
+# colors [VAR=VALUE...]: start the assistant in a fake Konsole, then print the sequences sent.
+colors() {
+	rm -f "$KIRAKIT_TTY"
+	env PATH="$dbusbin:$fakebin:$PATH" FAKE_CLAUDE_ARGS="$args" KONSOLE_DBUS_SERVICE=:1.1 \
+		KONSOLE_DBUS_WINDOW=/Windows/1 "$@" "$launcher" >/dev/null || true
+	cat "$KIRAKIT_TTY" 2>/dev/null
+}
+switched() {
+	printf '\033]50;ColorScheme=%s\a\033]50;ColorScheme=%s\a' kirakit-assistant "$1"
+}
+
+check "colors: the member's scheme, then the session profile's (#36 R12)" \
+	test "$(colors KONSOLE_DBUS_SESSION=/Sessions/1 FAKE_SESSION_PROFILE=Mine)" = "$(switched mine)"
+check "colors: the window's default profile when the session has none (#36 R12)" \
+	test "$(colors KONSOLE_DBUS_SESSION=/Sessions/1 FAKE_WINDOW_PROFILE=Mine)" = "$(switched mine)"
+mkdir -p "$XDG_CONFIG_HOME"
+printf '[Desktop Entry]\nDefaultProfile=Mine.profile\n' >"$XDG_CONFIG_HOME/konsolerc"
+check "colors: Konsole's configured default profile otherwise (#36 R12)" \
+	test "$(colors KONSOLE_DBUS_SESSION=/Sessions/1)" = "$(switched mine)"
+rm -f "$XDG_CONFIG_HOME/konsolerc"
+check "colors: Konsole's default scheme without a profile (#36 R12)" \
+	test "$(colors KONSOLE_DBUS_SESSION=/Sessions/1)" = "$(switched Breeze)"
+check 'colors: restored after a failure of claude (#36 R12)' \
+	test "$(colors KONSOLE_DBUS_SESSION=/Sessions/1 FAKE_SESSION_PROFILE=Mine FAKE_CLAUDE_STATUS=3)" = "$(switched mine)"
+check "colors: the status kept with the colors (#36 R10, R12)" sh -c \
+	'PATH="$1:$2:$PATH" FAKE_CLAUDE_ARGS="$3" FAKE_CLAUDE_STATUS=3 KONSOLE_DBUS_SESSION=/Sessions/1 "$4" >/dev/null; test $? -eq 3' \
+	_ "$dbusbin" "$fakebin" "$args" "$launcher"
+check 'colors: none outside Konsole (#36 R12)' test -z "$(colors)"
 
 # The shell is split on purpose, to allow options.
 # shellcheck disable=SC2086
