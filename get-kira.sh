@@ -312,8 +312,8 @@ valid_github() {
 
 # Expand a leading "~/" so that the saved path does not depend on the shell.
 expand_home() {
-	case $1 in
 	# shellcheck disable=SC2088 # a literal "~/", expanded here
+	case $1 in
 	'~/'*) printf '%s/%s\n' "$HOME" "${1#'~/'}" ;;
 	*) printf '%s\n' "$1" ;;
 	esac
