@@ -482,12 +482,17 @@ function Get-KiraProfile {
         $assistantName = ''; $assistantEmail = ''
     }
 
+    # The launchers are not installed on Windows; their settings, made by get-kira.sh, are kept.
+    $assistantStyle = if ($saved.ContainsKey('assistant_style')) { $saved.assistant_style } else { '' }
+    $binDir = if ($saved.ContainsKey('bin_dir') -and $saved.bin_dir) { $saved.bin_dir } else { "$HOME/.local/bin" }
+
     if (-not $save) { return $result }
-    $text = "name=$($result.name)${Nl}gender=$($result.gender)${Nl}language=$($result.language)${Nl}" +
+    $text ="name=$($result.name)${Nl}gender=$($result.gender)${Nl}language=$($result.language)${Nl}" +
         "assistant_name=$assistantName${Nl}assistant_email=$assistantEmail${Nl}" +
         "assistant_signing_key=$($result.assistant_signing_key)${Nl}assistant_github=$($result.assistant_github)${Nl}" +
         "co_author_trailer=$($result.co_author_trailer)${Nl}analyst=$($result.analyst)${Nl}" +
-        "analyst_github=$($result.analyst_github)${Nl}style=$($result.style)$Nl"
+        "analyst_github=$($result.analyst_github)${Nl}style=$($result.style)${Nl}" +
+        "assistant_style=$assistantStyle${Nl}bin_dir=$binDir$Nl"
     $current = if (Test-Path -LiteralPath $ProfilePath) { Read-KiraText $ProfilePath } else { $null }
     if ($current -ne $text) {
         Write-KiraLog "save profile: $ProfilePath"

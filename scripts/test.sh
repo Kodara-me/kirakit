@@ -499,8 +499,12 @@ kira --copy --assistant-style kira-focus >/dev/null
 check 'members: --assistant-style (#36 R9)' \
 	test "$(started "$bin/assistant")" = "$(expected -n Kira --settings '{"outputStyle":"Kira (focus)"}')"
 check 'members: assistant style saved (#36 R9)' profile_has 'assistant_style=kira-focus'
+# The shell is split on purpose, to allow options.
+# shellcheck disable=SC2086
 check 'members: an unknown persona is refused (#36 R9)' sh -c '! "$@" >/dev/null 2>&1' _ \
 	env CLAUDE_CONFIG_DIR="$claude" HOME="$claude-home" XDG_DATA_HOME="$claude-data" $shell "$root/get-kira.sh" --assistant-style nope
+# The shell is split on purpose, to allow options.
+# shellcheck disable=SC2086
 check 'members: a relative bin directory is refused (#36 R5)' sh -c '! "$@" >/dev/null 2>&1' _ \
 	env CLAUDE_CONFIG_DIR="$claude" HOME="$claude-home" XDG_DATA_HOME="$claude-data" $shell "$root/get-kira.sh" --bin-dir bin
 kira --copy --no-analyst >/dev/null
