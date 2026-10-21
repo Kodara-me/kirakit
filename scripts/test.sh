@@ -79,6 +79,54 @@ $shell "$root/scripts/build.sh" -o "$tmp/build4" --assistant 'Kira <kira@example
 	--assistant-signing-key /keys/kira.pub >/dev/null
 check 'rules: --no-co-author means no trailer at all' contains "$tmp/build4/rules/git.md" 'Commit messages have no `Co-Authored-By` line.'
 check 'rules: no assistant trailer without co-author' sh -c '! grep -q "Commits made by the assistant" "$1/rules/git.md"' _ "$tmp/build4"
+
+# --- assistant-commit ----------------------------------------------------------------------
+
+# R7: without a signing key, the skill only says it cannot commit.
+check 'assistant-commit: stops without a key' contains "$tmp/build2/skills/assistant-commit/SKILL.md" 'never commits as itself. Do not commit'
+check 'assistant-commit: no command without a key' sh -c '! grep -q "git -c user.name" "$1"' _ "$tmp/build2/skills/assistant-commit/SKILL.md"
+check "assistant-commit: asks for the user's trailer" contains "$tmp/build3/skills/assistant-commit/SKILL.md" 'Co-Authored-By: <user name> <<user email>>'
+check 'assistant-commit: no trailer with --no-co-author' contains "$tmp/build4/skills/assistant-commit/SKILL.md" 'No `Co-Authored-By` line.'
+
+# R5: run the commit command written in the skill, with a throwaway key, in a scratch
+# repository isolated from the user's git configuration.
+if command -v ssh-keygen >/dev/null 2>&1; then
+	keys=$tmp/commit-keys
+	mkdir -p "$keys"
+	ssh-keygen -q -t ed25519 -N '' -C test -f "$keys/kira"
+	$shell "$root/scripts/build.sh" -o "$tmp/build-ac" --co-author 'Kira <kira@example.com>' \
+		--assistant 'Kira <kira@example.com>' --assistant-signing-key "$keys/kira.pub" >/dev/null
+	skill=$tmp/build-ac/skills/assistant-commit/SKILL.md
+	command=$(sed -n 's/^ *\(git -c user.name=.*\)$/\1/p' "$skill")
+	nl='
+'
+	repo=$tmp/commit-repo
+	git init -q "$repo"
+	(
+		export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+		cd "$repo"
+		git config user.name Alex
+		git config user.email alex@example.com
+		printf 'a\n' >file
+		git add file
+		# The command ends with a heredoc start; the message and its end follow.
+		eval "$command${nl}feat: add a file${nl}${nl}Co-Authored-By: Alex <alex@example.com>${nl}MESSAGE"
+	) >/dev/null 2>&1 || true
+	printf 'kira@example.com namespaces="git" %s\n' "$(cut -d' ' -f1,2 "$keys/kira.pub")" >"$keys/allowed"
+	check 'assistant-commit: one command in the skill' test "$(printf '%s\n' "$command" | grep -c .)" -eq 1
+	check 'assistant-commit: authored by the assistant' test \
+		"$(GIT_CONFIG_GLOBAL=/dev/null git -C "$repo" log -1 --format='%an <%ae>|%cn <%ce>')" = \
+		'Kira <kira@example.com>|Kira <kira@example.com>'
+	check 'assistant-commit: signed with its key' env GIT_CONFIG_GLOBAL=/dev/null \
+		git -C "$repo" -c gpg.ssh.allowedSignersFile="$keys/allowed" verify-commit HEAD
+	check "assistant-commit: the user's trailer" test \
+		"$(GIT_CONFIG_GLOBAL=/dev/null git -C "$repo" log -1 --format=%B | sed '/^$/d' | tail -n 1)" = \
+		'Co-Authored-By: Alex <alex@example.com>'
+	check "assistant-commit: the user's config untouched" test \
+		"$(GIT_CONFIG_GLOBAL=/dev/null git -C "$repo" config user.name)" = Alex
+else
+	printf 'skip  assistant-commit: ssh-keygen not found\n'
+fi
 check 'build: rejects a bad co-author' sh -c '! $1 "$2/scripts/build.sh" -o "$3" --co-author Kira' _ "$shell" "$root" "$tmp/x"
 
 # Conditional blocks and assistant placeholders, on a copy of the sources with a test skill.

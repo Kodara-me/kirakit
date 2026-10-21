@@ -1,6 +1,6 @@
 ---
 name: commit
-description: Creates a Git commit in Conventional Commits format after checks (tests, build, lint, sensitive files), then asks for confirmation showing the test results and the proposed message. Use when the user asks to commit their changes.
+description: Creates a Git commit under the user's identity, in Conventional Commits format after checks (tests, build, lint, sensitive files), then asks for confirmation showing the test results and the proposed message. Use when the user asks to commit their changes; the assistant-commit skill is for the assistant's own work.
 model: haiku
 ---
 
