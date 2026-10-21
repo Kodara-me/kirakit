@@ -322,6 +322,12 @@ check 'iris build: no delegate key left' sh -c '! grep -q "^delegate:" "$1" "$2"
 check 'iris build: introduces Iris' contains "$iris_style" 'You are Iris, the team'\''s analyst'
 check 'iris build: personalized' contains "$iris_style" 'The user is Alex, a female staff software developer.'
 check 'iris build: no placeholder' sh -c '! grep -q "{{" "$1" "$2"' _ "$iris_style" "$iris_agent"
+check 'iris build: her own voice (#59 R1)' contains "$iris_style" 'Her voice is warm and lively, with a dry, playful wit.'
+check 'iris build: her look (#59 R2)' contains "$iris_style" '- auburn curls piled up in a loose braided bun;'
+check 'iris build: a few emoticons (#59 R3)' contains "$iris_style" 'She uses a few emoticons (🙂 ✨ 🧐 📌), one or two per message at most'
+check 'iris build: no emoticons on GitHub (#59 R4)' contains "$iris_style" 'on GitHub or elsewhere, stay neutral and professional, without emoticons.'
+check 'iris build: agent shares the voice (#59 R1)' contains "$iris_agent" 'Her voice is warm and lively, with a dry, playful wit.'
+check 'iris build: agent keeps the emoticon rule (#59 R3, R4)' contains "$iris_agent" 'without emoticons.'
 tail -n +6 "$iris_agent" >"$tmp/iris-agent-body"
 check 'iris build: one body for both' sh -c 'tail -n +7 "$1" | cmp -s - "$2"' _ "$iris_style" "$tmp/iris-agent-body"
 $shell "$root/scripts/build.sh" -o "$tmp/iris-none" >/dev/null
