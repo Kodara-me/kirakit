@@ -35,7 +35,7 @@ removed=
 profile=$CLAUDE_DIR/.kirakit-profile
 manifest=$CLAUDE_DIR/.kirakit-manifest
 originals=$CLAUDE_DIR/.kirakit-originals
-profile_keys='name gender language assistant assistant_signing_key assistant_github co_author_trailer'
+profile_keys='name gender language assistant assistant_signing_key assistant_github co_author_trailer analyst analyst_github'
 nl='
 '
 tab=$(printf '\t')
@@ -64,6 +64,9 @@ Options:
   --assistant-github LOGIN   The assistant's own GitHub account (empty: none)
   --co-author "NAME <EMAIL>" Same as --assistant, with Co-Authored-By trailers
   --no-co-author             Add no Co-Authored-By trailer to commits
+  --analyst                  Add IRIS, an analyst for ideas and specifications, to the team
+  --no-analyst               No analyst: Kira writes ideas and specifications herself
+  --analyst-github LOGIN     The analyst's own GitHub account (implies --analyst; empty: none)
   --default-style PERSONA    Output style selected in settings.json (default: kira-cozy)
   --reconfigure              Ask all profile questions again
   --persona NAME             Install only this persona (repeatable; default: all)
@@ -284,14 +287,24 @@ ask_signing_key() {
 	ask "Assistant's public SSH signing key (empty: the assistant does not commit as itself)" "$1"
 }
 
+# ask_github WHOSE CURRENT: ask for a GitHub login, such as WHOSE="Assistant's".
 ask_github() {
 	while :; do
-		login=$(ask "Assistant's GitHub login (empty: none)" "$1")
+		login=$(ask "$1 GitHub login (empty: none)" "$2")
 		if valid_github "$login"; then
 			printf '%s\n' "$login"
 			return
 		fi
 		printf 'Expected a GitHub login (letters, digits and hyphens).\n' >/dev/tty
+	done
+}
+
+ask_analyst() {
+	while :; do
+		case $(ask 'Add IRIS, an analyst who clarifies ideas and writes specifications? (y/n)' "$1") in
+		[Yy]*) echo yes && return ;;
+		[Nn]*) echo no && return ;;
+		esac
 	done
 }
 
@@ -333,9 +346,15 @@ load_profile() {
 		assistant_signing_key) saved_assistant_signing_key=$value ;;
 		assistant_github) saved_assistant_github=$value ;;
 		co_author_trailer) saved_co_author_trailer=$value ;;
+		analyst) saved_analyst=$value ;;
+		analyst_github) saved_analyst_github=$value ;;
 		style) saved_style=$value ;;
 		esac
 	done <"$profile"
+	# Profiles before the analyst: the team had none, and the question is not asked again.
+	if [ -z "${saved_analyst+set}" ]; then
+		saved_analyst=no saved_analyst_github=
+	fi
 	if [ -n "${saved_assistant_name+set}" ]; then
 		if [ -n "$saved_assistant_email" ]; then
 			saved_assistant="$saved_assistant_name <$saved_assistant_email>"
@@ -369,6 +388,12 @@ setup_profile() {
 	assistant=${opt_assistant-${saved_assistant-}}
 	assistant_signing_key=${opt_assistant_signing_key-${saved_assistant_signing_key-}}
 	assistant_github=${opt_assistant_github-${saved_assistant_github-}}
+	# An analyst's account means an analyst, unless --no-analyst says otherwise.
+	if [ -n "${opt_analyst_github-}" ] && [ -z "${opt_analyst+set}" ]; then
+		opt_analyst=yes
+	fi
+	analyst=${opt_analyst-${saved_analyst-no}}
+	analyst_github=${opt_analyst_github-${saved_analyst_github-}}
 	if [ -n "$assistant" ]; then default_trailer=yes; else default_trailer=no; fi
 	co_author_trailer=${opt_co_author_trailer-${saved_co_author_trailer-$default_trailer}}
 	default_style=${opt_style-${saved_style:-kira-cozy}}
@@ -380,6 +405,10 @@ setup_profile() {
 			# Meaningless without an assistant identity, unless it is about to be asked.
 			case "$missing " in *' assistant '*) ;; *) [ -n "$assistant" ] || continue ;; esac
 			;;
+		analyst_github)
+			# Meaningless without an analyst, unless one is about to be asked for.
+			case "$missing " in *' analyst '*) ;; *) [ "$analyst" = yes ] || continue ;; esac
+			;;
 		esac
 		if should_ask "$key"; then
 			missing="$missing $key"
@@ -388,7 +417,7 @@ setup_profile() {
 	if [ -n "$missing" ]; then
 		if ! can_prompt; then
 			log "no terminal to ask for:$missing; using defaults (see --help)"
-			# The optional assistant values default to empty; only a missing required value
+			# The optional assistant and analyst values default to empty or no; only a missing required value
 			# keeps the profile unsaved, so that a later run on a terminal asks for it.
 			for key in $missing; do
 				case $key in name | gender | language | assistant) no_save=1 ;; esac
@@ -404,13 +433,17 @@ setup_profile() {
 		assistant) assistant=$(ask_assistant "$assistant") ;;
 		# The other assistant values mean nothing without an assistant identity.
 		assistant_signing_key) [ -z "$assistant" ] || assistant_signing_key=$(ask_signing_key "$assistant_signing_key") ;;
-		assistant_github) [ -z "$assistant" ] || assistant_github=$(ask_github "$assistant_github") ;;
+		assistant_github) [ -z "$assistant" ] || assistant_github=$(ask_github "Assistant's" "$assistant_github") ;;
 		co_author_trailer)
 			if [ -n "$assistant" ]; then default_trailer=yes; else default_trailer=no; fi
 			[ -z "$assistant" ] || co_author_trailer=$(ask_trailer "${saved_co_author_trailer-$default_trailer}")
 			;;
+		analyst) analyst=$(ask_analyst "$analyst") ;;
+		# R8: the analyst never commits, so she has a GitHub account but no signing key.
+		analyst_github) [ "$analyst" != yes ] || analyst_github=$(ask_github "Analyst's" "$analyst_github") ;;
 		esac
 	done
+	[ "$analyst" = yes ] || analyst=no analyst_github=
 	if [ -z "$assistant" ]; then
 		assistant_signing_key='' assistant_github='' co_author_trailer=no
 	fi
@@ -424,7 +457,7 @@ setup_profile() {
 	fi
 
 	[ -z "${no_save-}" ] || return 0
-	profile_text="name=$user_name${nl}gender=$user_gender${nl}language=$user_language${nl}assistant_name=$assistant_name${nl}assistant_email=$assistant_email${nl}assistant_signing_key=$assistant_signing_key${nl}assistant_github=$assistant_github${nl}co_author_trailer=$co_author_trailer${nl}style=$default_style"
+	profile_text="name=$user_name${nl}gender=$user_gender${nl}language=$user_language${nl}assistant_name=$assistant_name${nl}assistant_email=$assistant_email${nl}assistant_signing_key=$assistant_signing_key${nl}assistant_github=$assistant_github${nl}co_author_trailer=$co_author_trailer${nl}analyst=$analyst${nl}analyst_github=$analyst_github${nl}style=$default_style"
 	if [ -f "$profile" ] && [ "$(cat "$profile")" = "$profile_text" ]; then
 		return
 	fi
@@ -457,10 +490,12 @@ build() {
 		build_dir=$work/dist
 	fi
 	if [ "$co_author_trailer" = yes ]; then co_author=$assistant; else co_author=; fi
+	if [ "$analyst" = yes ]; then analyst_flag=--analyst; else analyst_flag=; fi
+	# shellcheck disable=SC2086 # analyst_flag is empty or one word
 	sh "$src/scripts/build.sh" -o "$build_dir" --name "$user_name" --gender "$user_gender" \
 		--language "$user_language" --co-author "$co_author" --assistant "$assistant" \
 		--assistant-signing-key "$assistant_signing_key" --assistant-github "$assistant_github" \
-		>/dev/null || exit 1
+		$analyst_flag --analyst-github "$analyst_github" >/dev/null || exit 1
 }
 
 # built PATH: where an installed file comes from; symlinks always point into the clone.
@@ -697,7 +732,7 @@ while [ $# -gt 0 ]; do
 	case $1 in
 	--dry-run) dry_run=1 ;;
 	--name | --gender | --language | --co-author | --assistant | --assistant-signing-key | \
-		--assistant-github | --default-style | --persona | --only | --target)
+		--assistant-github | --analyst-github | --default-style | --persona | --only | --target)
 		[ $# -ge 2 ] || die "missing value for $1"
 		case $1 in
 		--name) opt_name=$2 ;;
@@ -724,6 +759,10 @@ while [ $# -gt 0 ]; do
 			valid_github "$2" || die "invalid GitHub login: $2"
 			opt_assistant_github=$2
 			;;
+		--analyst-github)
+			valid_github "$2" || die "invalid GitHub login: $2"
+			opt_analyst_github=$2
+			;;
 		--default-style | --persona)
 			case $2 in
 			'' | -* | *[!A-Za-z0-9_-]*) die "invalid persona name: $2" ;;
@@ -745,6 +784,8 @@ while [ $# -gt 0 ]; do
 		shift
 		;;
 	--no-co-author) opt_co_author_trailer=no ;;
+	--analyst) opt_analyst=yes ;;
+	--no-analyst) opt_analyst=no ;;
 	--reconfigure) reconfigure=1 ;;
 	--link) mode='link' ;;
 	--copy) mode=copy ;;
@@ -809,7 +850,7 @@ fi
 log "target: $CLAUDE_DIR"
 setup_profile
 [ -f "$src/personas/$default_style.md" ] || die "unknown default style: $default_style"
-log "profile: ${user_name:-(no name)}, $user_gender, language $user_language, assistant ${assistant:-none}, co-author trailers $co_author_trailer, style $default_style"
+log "profile: ${user_name:-(no name)}, $user_gender, language $user_language, assistant ${assistant:-none}, co-author trailers $co_author_trailer, analyst $analyst${analyst_github:+ ($analyst_github)}, style $default_style"
 check_signing_key
 build
 

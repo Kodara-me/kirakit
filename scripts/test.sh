@@ -61,6 +61,11 @@ unchanged() {
 	! printf '%s\n' "$output" | grep -Eq '^kirakit: (link|copy|backup|set|save)'
 }
 
+# profile_has KEY=VALUE: whether the profile of $claude holds this line.
+profile_has() {
+	grep -qxF -- "$1" "$claude/.kirakit-profile"
+}
+
 no_placeholder() {
 	! grep -rq '{{' "$1"
 }
@@ -254,6 +259,55 @@ optional_kira --copy '' >/dev/null
 check 'optional: the original is restored' contains "$claude/agents/optional.md" 'mine'
 check 'optional: the original is no longer listed' sh -c '! grep -q optional.md "$1"' _ "$claude/.kirakit-originals"
 
+# --- analyst profile (#15 R3, R8, R9) ------------------------------------------------------
+
+printf '%s\n' '{{#analyst}}' 'analyst {{analyst_github}}' '{{/analyst}}' '{{^analyst}}' 'no analyst' \
+	'{{/analyst}}' >"$blocks/claude/skills/blocks/SKILL.md"
+build_blocks "$tmp/blocks-analyst" --analyst --analyst-github iris-bot
+check 'analyst build: placeholders and blocks' same_lines "$tmp/blocks-analyst/skills/blocks/SKILL.md" \
+	'analyst iris-bot'
+build_blocks "$tmp/blocks-analyst-login" --analyst-github iris-bot
+check 'analyst build: a login alone means no analyst' same_lines \
+	"$tmp/blocks-analyst-login/skills/blocks/SKILL.md" 'no analyst'
+check 'analyst build: rejects a bad GitHub login' sh -c '! $1 "$2/scripts/build.sh" -o "$3" --analyst --analyst-github "a b"' _ "$shell" "$root" "$tmp/x"
+
+claude=$tmp/analyst
+kira_profile --copy --analyst-github iris-bot >"$tmp/analyst.log"
+check 'analyst: a login implies an analyst' profile_has 'analyst=yes'
+check 'analyst: login saved' profile_has 'analyst_github=iris-bot'
+check 'analyst: no signing key' sh -c '! grep -q "^analyst_signing" "$1"' _ "$claude/.kirakit-profile"
+check 'analyst: in the summary' grep -q 'analyst yes (iris-bot)' "$tmp/analyst.log"
+check 'analyst: rerun changes nothing' unchanged kira --copy
+kira --copy --no-analyst >/dev/null
+check 'analyst: --no-analyst saved' profile_has 'analyst=no'
+check 'analyst: --no-analyst drops the login' profile_has 'analyst_github='
+kira --copy --analyst >/dev/null
+check 'analyst: --analyst without a login' profile_has 'analyst=yes'
+kira --copy --no-analyst --analyst-github iris-bot >/dev/null
+check 'analyst: --no-analyst wins over a login' profile_has 'analyst=no'
+
+# Without a terminal, a new profile has no analyst, and says the question was not asked.
+claude=$tmp/analyst-new
+kira_profile --copy >"$tmp/analyst-new.log"
+check 'analyst: none by default' profile_has 'analyst=no'
+check 'analyst: listed as not asked' grep -q 'no terminal to ask for:.* analyst' "$tmp/analyst-new.log"
+
+# A profile saved before the analyst reads as no analyst, and the question is not asked.
+claude=$tmp/analyst-earlier
+mkdir -p "$claude"
+printf 'name=Alex\ngender=male\nlanguage=auto\nassistant_name=Kira\nassistant_email=kira@example.com\nassistant_signing_key=\nassistant_github=\nco_author_trailer=yes\nstyle=kira-cozy\n' \
+	>"$claude/.kirakit-profile"
+kira --copy >"$tmp/analyst-earlier.log"
+check 'analyst: earlier profile reads as none' profile_has 'analyst=no'
+check 'analyst: earlier profile not asked' sh -c '! grep -q "no terminal to ask for" "$1"' _ "$tmp/analyst-earlier.log"
+
+# The installer passes the analyst to the build.
+claude=$tmp/analyst-build
+printf '%s\n' '{{#analyst}}' 'For {{analyst_github}}.' '{{/analyst}}' >"$optional/claude/agents/analyst.md"
+CLAUDE_CONFIG_DIR=$claude $shell "$optional/get-kira.sh" --copy --name Alex --gender female --language auto \
+	--no-co-author --analyst-github iris-bot </dev/null >/dev/null
+check 'analyst: passed to the build' contains "$claude/agents/analyst.md" 'For iris-bot.'
+
 # --- dry run -------------------------------------------------------------------------------
 
 claude=$tmp/dry
@@ -293,11 +347,6 @@ check 'uninstall: copies moved to backups' test ! -e "$claude/skills/commit"
 check 'uninstall: backups kept' test -d "$claude/.kirakit-backups"
 
 # --- assistant profile ---------------------------------------------------------------------
-
-# profile_has KEY=VALUE: whether the profile of $claude holds this line.
-profile_has() {
-	grep -qxF -- "$1" "$claude/.kirakit-profile"
-}
 
 claude=$tmp/assistant
 mkdir -p "$tmp/keys"

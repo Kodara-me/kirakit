@@ -42,6 +42,12 @@ The assistant's own GitHub account (empty: none).
 Same as -Assistant, with Co-Authored-By trailers.
 .PARAMETER NoCoAuthor
 Add no Co-Authored-By trailer to commits.
+.PARAMETER Analyst
+Add IRIS, an analyst for ideas and specifications, to the team.
+.PARAMETER NoAnalyst
+No analyst: Kira writes ideas and specifications herself.
+.PARAMETER AnalystGithub
+The analyst's own GitHub account (implies -Analyst; empty: none).
 .PARAMETER DefaultStyle
 Output style selected in settings.json (default: kira-cozy).
 .PARAMETER Reconfigure
@@ -71,6 +77,9 @@ param(
     [string]$AssistantGithub,
     [string]$CoAuthor,
     [switch]$NoCoAuthor,
+    [switch]$Analyst,
+    [switch]$NoAnalyst,
+    [string]$AnalystGithub,
     [string]$DefaultStyle,
     [switch]$Reconfigure,
     [string[]]$Persona = @(),
@@ -101,7 +110,7 @@ $ProfilePath = Join-Path $ClaudeDir '.kirakit-profile'
 $ManifestPath = Join-Path $ClaudeDir '.kirakit-manifest'
 $OriginalsPath = Join-Path $ClaudeDir '.kirakit-originals'
 $PlaceholderKeys = @('user', 'they', 'them', 'their', 'language', 'co_author', 'assistant_name', 'assistant_email',
-    'assistant_signing_key', 'assistant_github')
+    'assistant_signing_key', 'assistant_github', 'analyst', 'analyst_github')
 
 $script:Work = $null
 $script:BackupDir = $null
@@ -332,11 +341,20 @@ function Read-KiraAssistant([string]$Current) {
     }
 }
 
-function Read-KiraGithub([string]$Current) {
+# Ask for a GitHub login, such as WHOSE = "Assistant's".
+function Read-KiraGithub([string]$Whose, [string]$Current) {
     while ($true) {
-        $login = Read-KiraAnswer "Assistant's GitHub login (empty: none)" $Current
+        $login = Read-KiraAnswer "$Whose GitHub login (empty: none)" $Current
         if (Test-KiraGithub $login) { return $login }
         Write-Host 'Expected a GitHub login (letters, digits and hyphens).'
+    }
+}
+
+function Read-KiraAnalyst([string]$Current) {
+    while ($true) {
+        $answer = Read-KiraAnswer 'Add IRIS, an analyst who clarifies ideas and writes specifications? (y/n)' $Current
+        if ($answer -match '^[Yy]') { return 'yes' }
+        if ($answer -match '^[Nn]') { return 'no' }
     }
 }
 
@@ -369,6 +387,11 @@ function Read-KiraProfile {
         $saved.assistant = $saved.co_author
         $saved.co_author_trailer = if ($saved.co_author) { 'yes' } else { 'no' }
     }
+    # Profiles before the analyst: the team had none, and the question is not asked again.
+    if ($saved.Count -gt 0 -and -not $saved.ContainsKey('analyst')) {
+        $saved.analyst = 'no'
+        $saved.analyst_github = ''
+    }
     return $saved
 }
 
@@ -384,6 +407,9 @@ function Get-KiraProfile {
         assistant_github      = $Bound.ContainsKey('AssistantGithub')
         # -CoAuthor predates the assistant identity: it also asks for the trailer.
         co_author_trailer     = $NoCoAuthor -or $Bound.ContainsKey('CoAuthor')
+        # An analyst's account means an analyst, unless -NoAnalyst says otherwise.
+        analyst               = $Analyst -or $NoAnalyst -or [bool]$AnalystGithub
+        analyst_github        = $Bound.ContainsKey('AnalystGithub')
     }
     $result = @{
         name                  = if ($given.name) { $Name } elseif ($saved.ContainsKey('name')) { $saved.name } else { '' }
@@ -392,23 +418,27 @@ function Get-KiraProfile {
         assistant             = if ($Bound.ContainsKey('Assistant')) { $Assistant } elseif ($Bound.ContainsKey('CoAuthor')) { $CoAuthor } elseif ($saved.ContainsKey('assistant')) { $saved.assistant } else { '' }
         assistant_signing_key = if ($given.assistant_signing_key) { $AssistantSigningKey } elseif ($saved.ContainsKey('assistant_signing_key')) { $saved.assistant_signing_key } else { '' }
         assistant_github      = if ($given.assistant_github) { $AssistantGithub } elseif ($saved.ContainsKey('assistant_github')) { $saved.assistant_github } else { '' }
+        analyst               = if ($NoAnalyst) { 'no' } elseif ($Analyst -or $AnalystGithub) { 'yes' } elseif ($saved.ContainsKey('analyst')) { $saved.analyst } else { 'no' }
+        analyst_github        = if ($given.analyst_github) { $AnalystGithub } elseif ($saved.ContainsKey('analyst_github')) { $saved.analyst_github } else { '' }
         style                 = if ($DefaultStyle) { $DefaultStyle } elseif ($saved.ContainsKey('style') -and $saved.style) { $saved.style } else { 'kira-cozy' }
     }
     $defaultTrailer = if ($result.assistant) { 'yes' } else { 'no' }
     $result.co_author_trailer = if ($NoCoAuthor) { 'no' } elseif ($Bound.ContainsKey('CoAuthor')) { 'yes' } elseif ($saved.ContainsKey('co_author_trailer')) { $saved.co_author_trailer } else { $defaultTrailer }
 
     $missing = @()
-    foreach ($key in @('name', 'gender', 'language', 'assistant', 'assistant_signing_key', 'assistant_github', 'co_author_trailer')) {
+    foreach ($key in @('name', 'gender', 'language', 'assistant', 'assistant_signing_key', 'assistant_github', 'co_author_trailer', 'analyst', 'analyst_github')) {
         # Meaningless without an assistant identity, unless it is about to be asked.
         if (($key -ne 'assistant' -and $key.StartsWith('assistant')) -or $key -eq 'co_author_trailer') {
             if ($missing -notcontains 'assistant' -and -not $result.assistant) { continue }
         }
+        # Meaningless without an analyst, unless one is about to be asked for.
+        if ($key -eq 'analyst_github' -and $missing -notcontains 'analyst' -and $result.analyst -ne 'yes') { continue }
         if (-not $given[$key] -and ($Reconfigure -or -not $saved.ContainsKey($key))) { $missing += $key }
     }
     $save = $true
     if ($missing.Count -gt 0 -and -not (Test-KiraCanPrompt)) {
         Write-KiraLog "no terminal to ask for: $($missing -join ' '); using defaults (see Get-Help)"
-        # The optional assistant values default to empty; only a missing required value keeps
+        # The optional assistant and analyst values default to empty or no; only a missing required value keeps
         # the profile unsaved, so that a later run on a terminal asks for it.
         foreach ($key in $missing) {
             if (@('name', 'gender', 'language', 'assistant') -contains $key) { $save = $false }
@@ -424,13 +454,20 @@ function Get-KiraProfile {
             'assistant_signing_key' {
                 if ($result.assistant) { $result.assistant_signing_key = Read-KiraAnswer "Assistant's public SSH signing key (empty: the assistant does not commit as itself)" $result.assistant_signing_key }
             }
-            'assistant_github' { if ($result.assistant) { $result.assistant_github = Read-KiraGithub $result.assistant_github } }
+            'assistant_github' { if ($result.assistant) { $result.assistant_github = Read-KiraGithub "Assistant's" $result.assistant_github } }
             'co_author_trailer' {
                 $defaultTrailer = if ($result.assistant) { 'yes' } else { 'no' }
                 $current = if ($saved.ContainsKey('co_author_trailer')) { $saved.co_author_trailer } else { $defaultTrailer }
                 if ($result.assistant) { $result.co_author_trailer = Read-KiraTrailer $current }
             }
+            'analyst' { $result.analyst = Read-KiraAnalyst $result.analyst }
+            # R8: the analyst never commits, so she has a GitHub account but no signing key.
+            'analyst_github' { if ($result.analyst -eq 'yes') { $result.analyst_github = Read-KiraGithub "Analyst's" $result.analyst_github } }
         }
+    }
+    if ($result.analyst -ne 'yes') {
+        $result.analyst = 'no'
+        $result.analyst_github = ''
     }
     if (-not $result.assistant) {
         $result.assistant_signing_key = ''
@@ -449,7 +486,8 @@ function Get-KiraProfile {
     $text = "name=$($result.name)${Nl}gender=$($result.gender)${Nl}language=$($result.language)${Nl}" +
         "assistant_name=$assistantName${Nl}assistant_email=$assistantEmail${Nl}" +
         "assistant_signing_key=$($result.assistant_signing_key)${Nl}assistant_github=$($result.assistant_github)${Nl}" +
-        "co_author_trailer=$($result.co_author_trailer)${Nl}style=$($result.style)$Nl"
+        "co_author_trailer=$($result.co_author_trailer)${Nl}analyst=$($result.analyst)${Nl}" +
+        "analyst_github=$($result.analyst_github)${Nl}style=$($result.style)$Nl"
     $current = if (Test-Path -LiteralPath $ProfilePath) { Read-KiraText $ProfilePath } else { $null }
     if ($current -ne $text) {
         Write-KiraLog "save profile: $ProfilePath"
@@ -480,6 +518,9 @@ function Get-KiraValue($UserProfile) {
     $assistant = [string]$UserProfile['assistant']
     $signingKey = [string]$UserProfile['assistant_signing_key']
     $github = [string]$UserProfile['assistant_github']
+    # The analyst's account means nothing without an analyst.
+    $analystValue = if ($UserProfile['analyst'] -eq 'yes') { 'yes' } else { '' }
+    $analystGithub = if ($analystValue) { [string]$UserProfile['analyst_github'] } else { '' }
     foreach ($value in @($UserProfile.name, $UserProfile.language, $UserProfile.co_author, $assistant, $signingKey)) {
         if ($value -match "`n|\{\{|\}\}") { throw "invalid value: $value" }
     }
@@ -504,11 +545,14 @@ function Get-KiraValue($UserProfile) {
     } else {
         throw "invalid assistant: $assistant (expected `"NAME <EMAIL>`")"
     }
-    if ($github -cmatch '[^A-Za-z0-9-]') { throw "invalid GitHub login: $github" }
+    foreach ($login in @($github, $analystGithub)) {
+        if ($login -cmatch '[^A-Za-z0-9-]') { throw "invalid GitHub login: $login" }
+    }
     return @{
         user = $user; they = $they; them = $them; their = $their; language = $answerLanguage
         co_author = $coAuthorValue; assistant_name = $assistantName; assistant_email = $assistantEmail
         assistant_signing_key = $signingKey; assistant_github = $github
+        analyst = $analystValue; analyst_github = $analystGithub
     }
 }
 
@@ -884,6 +928,7 @@ try {
     }
     if ($AssistantSigningKey -match "`n") { throw "invalid signing key path: $AssistantSigningKey" }
     if (-not (Test-KiraGithub $AssistantGithub)) { throw "invalid GitHub login: $AssistantGithub" }
+    if (-not (Test-KiraGithub $AnalystGithub)) { throw "invalid GitHub login: $AnalystGithub" }
     foreach ($personaName in @($Persona) + @($DefaultStyle | Where-Object { $_ })) {
         if ($personaName -notmatch '^[A-Za-z0-9_-]+$') { throw "invalid persona name: $personaName" }
     }
@@ -923,7 +968,7 @@ try {
             }
             $shownName = if ($userProfile.name) { $userProfile.name } else { '(no name)' }
             $shownAssistant = if ($userProfile.assistant) { $userProfile.assistant } else { 'none' }
-            Write-KiraLog "profile: $shownName, $($userProfile.gender), language $($userProfile.language), assistant $shownAssistant, co-author trailers $($userProfile.co_author_trailer), style $($userProfile.style)"
+            Write-KiraLog "profile: $shownName, $($userProfile.gender), language $($userProfile.language), assistant $shownAssistant, co-author trailers $($userProfile.co_author_trailer), analyst $($userProfile.analyst)$(if ($userProfile.analyst_github) { " ($($userProfile.analyst_github))" }), style $($userProfile.style)"
             Test-KiraSigningKey $userProfile
             Build-KiraOutput $userProfile
             if (-not $Only -or $Only -eq 'styles') { Install-KiraStyle }

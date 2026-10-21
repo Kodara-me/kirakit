@@ -18,6 +18,8 @@
 #   {{assistant_name}} {{assistant_email}}  the assistant's git identity, or nothing
 #   {{assistant_signing_key}} path to the assistant's public SSH signing key, or nothing
 #   {{assistant_github}}      the assistant's GitHub login, or nothing
+#   {{analyst}}               "yes" when the team has an analyst, or nothing
+#   {{analyst_github}}        the analyst's GitHub login, or nothing
 # A line holding only a placeholder that expands to nothing is removed.
 #
 # Lines between {{#KEY}} and {{/KEY}} are kept only when KEY is not empty, and lines between
@@ -27,7 +29,8 @@
 #
 # Usage: build.sh [-o DIR] [--name NAME] [--gender GENDER] [--language LANGUAGE]
 #                 [--co-author "NAME <EMAIL>"] [--assistant "NAME <EMAIL>"]
-#                 [--assistant-signing-key PATH] [--assistant-github LOGIN] [PERSONA...]
+#                 [--assistant-signing-key PATH] [--assistant-github LOGIN]
+#                 [--analyst] [--analyst-github LOGIN] [PERSONA...]
 set -eu
 
 root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
@@ -42,6 +45,8 @@ co_author=
 assistant=
 assistant_signing_key=
 assistant_github=
+analyst=
+analyst_github=
 nl='
 '
 
@@ -54,7 +59,8 @@ usage() {
 	cat <<EOF
 Usage: build.sh [-o DIR] [--name NAME] [--gender GENDER] [--language LANGUAGE]
                 [--co-author "NAME <EMAIL>"] [--assistant "NAME <EMAIL>"]
-                [--assistant-signing-key PATH] [--assistant-github LOGIN] [PERSONA...]
+                [--assistant-signing-key PATH] [--assistant-github LOGIN]
+                [--analyst] [--analyst-github LOGIN] [PERSONA...]
 
 Build output styles, skills, agents, rules and CLAUDE.md into DIR (default: dist).
 With no PERSONA, build every overlay in personas/. Skills are always all built.
@@ -67,13 +73,15 @@ With no PERSONA, build every overlay in personas/. Skills are always all built.
   --assistant-signing-key PATH
                              The assistant's public SSH signing key (default: none)
   --assistant-github LOGIN   The assistant's GitHub account (default: none)
+  --analyst                  The team has an analyst, IRIS (default: no)
+  --analyst-github LOGIN     The analyst's GitHub account, with --analyst (default: none)
 EOF
 }
 
 while [ $# -gt 0 ]; do
 	case $1 in
 	-o | --out | --name | --gender | --language | --co-author | --assistant | \
-		--assistant-signing-key | --assistant-github)
+		--assistant-signing-key | --assistant-github | --analyst-github)
 		[ $# -ge 2 ] || die "missing value for $1"
 		case $1 in
 		--name) name=$2 ;;
@@ -83,9 +91,14 @@ while [ $# -gt 0 ]; do
 		--assistant) assistant=$2 ;;
 		--assistant-signing-key) assistant_signing_key=$2 ;;
 		--assistant-github) assistant_github=$2 ;;
+		--analyst-github) analyst_github=$2 ;;
 		*) out_dir=$2 ;;
 		esac
 		shift 2
+		;;
+	--analyst)
+		analyst=yes
+		shift
 		;;
 	-h | --help)
 		usage
@@ -138,14 +151,18 @@ case $assistant in
 *) die "invalid assistant: $assistant (expected \"NAME <EMAIL>\")" ;;
 esac
 
-case $assistant_github in
-*[!A-Za-z0-9-]*) die "invalid GitHub login: $assistant_github" ;;
-esac
+for login in "$assistant_github" "$analyst_github"; do
+	case $login in
+	*[!A-Za-z0-9-]*) die "invalid GitHub login: $login" ;;
+	esac
+done
+# The analyst's account means nothing without an analyst.
+[ -n "$analyst" ] || analyst_github=
 
 export KIRA_USER="$user" KIRA_THEY="$they" KIRA_THEM="$them" KIRA_THEIR="$their" \
 	KIRA_LANGUAGE="$language" KIRA_CO_AUTHOR="$co_author" KIRA_ASSISTANT_NAME="$assistant_name" \
 	KIRA_ASSISTANT_EMAIL="$assistant_email" KIRA_ASSISTANT_SIGNING_KEY="$assistant_signing_key" \
-	KIRA_ASSISTANT_GITHUB="$assistant_github"
+	KIRA_ASSISTANT_GITHUB="$assistant_github" KIRA_ANALYST="$analyst" KIRA_ANALYST_GITHUB="$analyst_github"
 
 # render FILE [ORIGIN]: print FILE with its placeholders filled and its blocks resolved;
 # errors name ORIGIN (default: FILE).
@@ -166,7 +183,7 @@ render() {
 			exit 1
 		}
 		BEGIN {
-			n = split("user they them their language co_author assistant_name assistant_email assistant_signing_key assistant_github", keys, " ")
+			n = split("user they them their language co_author assistant_name assistant_email assistant_signing_key assistant_github analyst analyst_github", keys, " ")
 			for (k = 1; k <= n; k++) known[keys[k]] = 1
 			depth = 0
 			hidden = 0

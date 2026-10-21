@@ -96,6 +96,11 @@ jobs:
             --language auto --assistant 'Kira <kira@example.com>' --assistant-github kira-bot --no-co-author
           CLAUDE_CONFIG_DIR="$RUNNER_TEMP/ps-assistant" pwsh -File get-kira.ps1 -Copy -Name Alex -Gender male \
             -Language auto -Assistant 'Kira <kira@example.com>' -AssistantGithub kira-bot -NoCoAuthor
+          CLAUDE_CONFIG_DIR="$RUNNER_TEMP/sh-analyst" sh get-kira.sh --copy --name Alex --gender female \
+            --language auto --assistant 'Kira <kira@example.com>' --analyst-github iris-bot
+          CLAUDE_CONFIG_DIR="$RUNNER_TEMP/ps-analyst" pwsh -File get-kira.ps1 -Copy -Name Alex -Gender female \
+            -Language auto -Assistant 'Kira <kira@example.com>' -AnalystGithub iris-bot
+          grep -qx 'analyst=yes' "$RUNNER_TEMP/ps-analyst/.kirakit-profile"
           CLAUDE_CONFIG_DIR="$RUNNER_TEMP/sh-generic" sh get-kira.sh --copy </dev/null
           CLAUDE_CONFIG_DIR="$RUNNER_TEMP/ps-generic" pwsh -File get-kira.ps1 -Copy </dev/null
       - name: Same release tag picked without a clone
@@ -114,7 +119,7 @@ jobs:
             grep -F '(v0.10.0)'
       - name: Compare
         run: |
-          for pair in sh:ps sh-assistant:ps-assistant sh-generic:ps-generic; do
+          for pair in sh:ps sh-assistant:ps-assistant sh-analyst:ps-analyst sh-generic:ps-generic; do
             a=$RUNNER_TEMP/${pair%%:*} b=$RUNNER_TEMP/${pair##*:}
             for path in output-styles skills rules CLAUDE.md settings.json; do
               diff -r "$a/$path" "$b/$path"
