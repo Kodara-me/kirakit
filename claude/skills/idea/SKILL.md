@@ -10,6 +10,14 @@ allowed-tools: Bash(gh issue list:*), Bash(gh label list:*), Bash(gh repo view:*
 
 Answer in {{language}}. The issue itself is written in neutral English, unless the
 repository already uses another language.
+{{#analyst_github}}
+
+The analyst's work is written on GitHub as the analyst's own account, `{{analyst_github}}`,
+whoever runs this skill: prefix every `gh` command that creates, edits, labels or comments
+with `GH_TOKEN=$(gh auth token --user {{analyst_github}})`, for example
+`GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh issue create …`. Commands that only
+read need no prefix.
+{{/analyst_github}}
 
 An idea records intent only: the problem or opportunity and the outcome wanted. Do not read
 the code, analyze, design or plan tasks: that is the `spec` skill's job, later.

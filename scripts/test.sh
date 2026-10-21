@@ -352,6 +352,19 @@ for mode in copy link; do
 	check "iris $mode: uninstall removes the agent" sh -c '! test -e "$1" && ! test -L "$1"' _ "$claude/agents/iris.md"
 done
 
+# --- the analyst's account in the idea and spec skills (#15 R5, R4) ------------------------
+
+prefix='GH_TOKEN=$(gh auth token --user iris-bot) gh issue create'
+for skill in idea spec; do
+	check "analyst skills: $skill writes as the analyst's account" \
+		contains "$tmp/iris-build/skills/$skill/SKILL.md" "$prefix"
+	check "analyst skills: $skill unchanged without an analyst" \
+		sh -c '! grep -q GH_TOKEN "$1" && grep -q "gh issue create --title" "$1"' _ "$tmp/iris-none/skills/$skill/SKILL.md"
+done
+$shell "$root/scripts/build.sh" -o "$tmp/analyst-no-login" --analyst >/dev/null
+check 'analyst skills: no prefix without an analyst account' \
+	sh -c '! grep -q GH_TOKEN "$1" "$2"' _ "$tmp/analyst-no-login/skills/idea/SKILL.md" "$tmp/analyst-no-login/skills/spec/SKILL.md"
+
 # --- dry run -------------------------------------------------------------------------------
 
 claude=$tmp/dry

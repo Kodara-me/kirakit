@@ -9,6 +9,14 @@ allowed-tools: Bash(gh issue view:*), Bash(gh issue list:*), Bash(gh label list:
 
 Answer in {{language}}. The specification itself is written in neutral English, unless the
 repository already uses another language.
+{{#analyst_github}}
+
+The analyst's work is written on GitHub as the analyst's own account, `{{analyst_github}}`,
+whoever runs this skill: prefix every `gh` command that creates, edits, labels or comments
+with `GH_TOKEN=$(gh auth token --user {{analyst_github}})`, for example
+`GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh issue create …`. Commands that only
+read need no prefix.
+{{/analyst_github}}
 
 ## Format
 
