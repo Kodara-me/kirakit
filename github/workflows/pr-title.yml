@@ -8,4 +8,4 @@ permissions: {}
 
 jobs:
   conventional-commits:
-    uses: jstmichel/kirakit/.github/workflows/conventional-pr-title.yml@v0.2.0
+    uses: Kodara-me/kirakit/.github/workflows/conventional-pr-title.yml@v0.2.0

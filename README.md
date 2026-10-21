@@ -21,7 +21,7 @@ machine with one command.
 Linux and macOS, from a clone (files are symlinked back to the clone):
 
 ```sh
-git clone https://github.com/jstmichel/kirakit.git
+git clone https://github.com/Kodara-me/kirakit.git
 cd kirakit
 ./get-kira.sh --dry-run   # preview
 ./get-kira.sh
@@ -30,7 +30,7 @@ cd kirakit
 Linux and macOS, without a clone (files are copied):
 
 ```sh
-curl -fsSL https://github.com/jstmichel/kirakit/releases/latest/download/get-kira.sh | sh
+curl -fsSL https://github.com/Kodara-me/kirakit/releases/latest/download/get-kira.sh | sh
 ```
 
 Windows, from a clone (files are copied; pass `-Link` for symbolic links, which need
@@ -44,7 +44,7 @@ Developer Mode):
 Windows, without a clone:
 
 ```powershell
-& ([scriptblock]::Create((irm https://github.com/jstmichel/kirakit/releases/latest/download/get-kira.ps1)))
+& ([scriptblock]::Create((irm https://github.com/Kodara-me/kirakit/releases/latest/download/get-kira.ps1)))
 ```
 
 These URLs always serve the installer of the latest release, which installs that release.
@@ -364,7 +364,7 @@ Other repositories can call the workflows in `.github/workflows/`:
 ```yaml
 jobs:
   conventional-commits:
-    uses: jstmichel/kirakit/.github/workflows/conventional-pr-title.yml@v0.2.0
+    uses: Kodara-me/kirakit/.github/workflows/conventional-pr-title.yml@v0.2.0
 ```
 
 `conventional-pr-title.yml` fails when a pull request title does not follow Conventional

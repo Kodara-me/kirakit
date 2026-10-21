@@ -13,7 +13,7 @@
 # Usage: get-kira.sh [options] (see --help)
 set -eu
 
-KIRAKIT_REPO=${KIRAKIT_REPO:-https://github.com/jstmichel/kirakit.git}
+KIRAKIT_REPO=${KIRAKIT_REPO:-https://github.com/Kodara-me/kirakit.git}
 CLAUDE_DIR=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
 # Set to the release tag in the copy attached to each GitHub release, so that it installs
 # its own version.

@@ -1,5 +1,5 @@
 # Attach the installers to each published release, stamped with the release tag so that
-# https://github.com/jstmichel/kirakit/releases/latest/download/get-kira.sh installs the
+# https://github.com/Kodara-me/kirakit/releases/latest/download/get-kira.sh installs the
 # version it comes from.
 name: Release assets
 

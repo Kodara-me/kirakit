@@ -19,7 +19,7 @@ Without -Only, styles and claude are installed. The github component copies issu
 request templates, workflows and Copilot instructions into a repository's .github directory.
 
 Remote use:
-  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jstmichel/kirakit/main/get-kira.ps1))) -DryRun
+  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Kodara-me/kirakit/main/get-kira.ps1))) -DryRun
 
 Environment: CLAUDE_CONFIG_DIR (default: ~\.claude), KIRAKIT_REPO and KIRAKIT_REF (repository
 and branch or tag fetched without a clone; default: the latest release).
@@ -95,7 +95,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 $Bound = $PSBoundParameters
 
-$Repo = if ($env:KIRAKIT_REPO) { $env:KIRAKIT_REPO } else { 'https://github.com/jstmichel/kirakit.git' }
+$Repo = if ($env:KIRAKIT_REPO) { $env:KIRAKIT_REPO } else { 'https://github.com/Kodara-me/kirakit.git' }
 # Set to the release tag in the copy attached to each GitHub release, so that it installs its
 # own version.
 $KiraVersion = ''
