@@ -115,7 +115,7 @@ jobs:
         run: |
           for pair in sh:ps sh-assistant:ps-assistant sh-generic:ps-generic; do
             a=$RUNNER_TEMP/${pair%%:*} b=$RUNNER_TEMP/${pair##*:}
-            for path in output-styles skills CLAUDE.md settings.json; do
+            for path in output-styles skills rules CLAUDE.md settings.json; do
               diff -r "$a/$path" "$b/$path"
             done
             diff "$a/.kirakit-profile" "$b/.kirakit-profile" || [ ! -e "$a/.kirakit-profile" ]

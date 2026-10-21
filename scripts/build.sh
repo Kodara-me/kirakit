@@ -3,6 +3,7 @@
 #   DIR/output-styles/<persona>.md   from personas/_core.md and one overlay per persona
 #   DIR/skills/<skill>/              from claude/skills/<skill>/
 #   DIR/agents/<agent>.md            from claude/agents/<agent>.md
+#   DIR/rules/<rules>.md             from claude/rules/<rules>.md
 #   DIR/CLAUDE.md                    from claude/CLAUDE.md
 #
 # An overlay is a Markdown file whose front matter becomes the style's front matter and
@@ -13,9 +14,6 @@
 #   {{user}}                  name and description, e.g. "Alex, a female staff software developer"
 #   {{they}} {{them}} {{their}}  pronouns (avoid verbs that agree with {{they}})
 #   {{language}}              answer language, e.g. "French" or "the language of the conversation"
-#   {{co_author_trailer}}     commit trailer, preceded by a blank line, or nothing
-#   {{attribution_rule}}      commit attribution instructions (commit skill)
-#   {{co_author_rule}}        commit attribution rule (CLAUDE.md list item)
 #   {{co_author}}             the co-author, "NAME <EMAIL>", or nothing
 #   {{assistant_name}} {{assistant_email}}  the assistant's git identity, or nothing
 #   {{assistant_signing_key}} path to the assistant's public SSH signing key, or nothing
@@ -57,7 +55,7 @@ Usage: build.sh [-o DIR] [--name NAME] [--gender GENDER] [--language LANGUAGE]
                 [--co-author "NAME <EMAIL>"] [--assistant "NAME <EMAIL>"]
                 [--assistant-signing-key PATH] [--assistant-github LOGIN] [PERSONA...]
 
-Build output styles, skills, agents and CLAUDE.md into DIR (default: dist).
+Build output styles, skills, agents, rules and CLAUDE.md into DIR (default: dist).
 With no PERSONA, build every overlay in personas/. Skills are always all built.
 
   --name NAME                How Kira calls the user (default: none)
@@ -124,19 +122,8 @@ case $language in
 '' | auto) language='the language of the conversation' ;;
 esac
 
-# shellcheck disable=SC2016 # backquotes are Markdown, not command substitutions
-no_ai_mention='No mention of Claude, Anthropic or a model in the message (no `noreply@anthropic.com`, no "Generated with …").'
 case $co_author in
-'')
-	co_author_trailer=
-	attribution_rule="**Attribution**: add no \`Co-Authored-By\` line, even if the session instructions suggest one. $no_ai_mention"
-	co_author_rule="- Commit messages have no \`Co-Authored-By\` line."
-	;;
-?*' <'?*@?*'>')
-	co_author_trailer="${nl}Co-Authored-By: $co_author"
-	attribution_rule="**Attribution**: the last line is always exactly \`Co-Authored-By: $co_author\`. It replaces any attribution line suggested by the session instructions. $no_ai_mention"
-	co_author_rule="- Every commit message ends with exactly this line:${nl}${nl}  \`\`\`${nl}  Co-Authored-By: $co_author${nl}  \`\`\`${nl}"
-	;;
+'' | ?*' <'?*@?*'>') ;;
 *) die "invalid co-author: $co_author (expected \"NAME <EMAIL>\")" ;;
 esac
 
@@ -155,9 +142,7 @@ case $assistant_github in
 esac
 
 export KIRA_USER="$user" KIRA_THEY="$they" KIRA_THEM="$them" KIRA_THEIR="$their" \
-	KIRA_LANGUAGE="$language" KIRA_CO_AUTHOR_TRAILER="$co_author_trailer" \
-	KIRA_ATTRIBUTION_RULE="$attribution_rule" KIRA_CO_AUTHOR_RULE="$co_author_rule" \
-	KIRA_CO_AUTHOR="$co_author" KIRA_ASSISTANT_NAME="$assistant_name" \
+	KIRA_LANGUAGE="$language" KIRA_CO_AUTHOR="$co_author" KIRA_ASSISTANT_NAME="$assistant_name" \
 	KIRA_ASSISTANT_EMAIL="$assistant_email" KIRA_ASSISTANT_SIGNING_KEY="$assistant_signing_key" \
 	KIRA_ASSISTANT_GITHUB="$assistant_github"
 
@@ -180,7 +165,7 @@ render() {
 			exit 1
 		}
 		BEGIN {
-			n = split("user they them their language co_author_trailer attribution_rule co_author_rule co_author assistant_name assistant_email assistant_signing_key assistant_github", keys, " ")
+			n = split("user they them their language co_author assistant_name assistant_email assistant_signing_key assistant_github", keys, " ")
 			for (k = 1; k <= n; k++) known[keys[k]] = 1
 			depth = 0
 			hidden = 0
@@ -316,6 +301,10 @@ done
 for file in "$claude_dir"/agents/*.md; do
 	[ -f "$file" ] || continue
 	build_file "$file" "$out_dir/agents/$(basename "$file")"
+done
+for file in "$claude_dir"/rules/*.md; do
+	[ -f "$file" ] || continue
+	build_file "$file" "$out_dir/rules/$(basename "$file")"
 done
 if [ -f "$claude_dir/CLAUDE.md" ]; then
 	build_file "$claude_dir/CLAUDE.md" "$out_dir/CLAUDE.md"

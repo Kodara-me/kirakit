@@ -63,7 +63,22 @@ check 'build: pronouns' contains "$tmp/build2/output-styles/kira-sassy.md" 'sitt
 check 'build: language' contains "$tmp/build2/skills/push/SKILL.md" 'Answer in French.'
 check 'build: spec skill' contains "$tmp/build2/skills/spec/SKILL.md" 'Answer in French.'
 check 'build: idea skill' contains "$tmp/build2/skills/idea/SKILL.md" 'Answer in French.'
-check 'build: co-author trailer' contains "$tmp/build2/skills/commit/SKILL.md" 'Co-Authored-By: Kira <kira@example.com>'
+check 'build: co-author trailer' contains "$tmp/build2/rules/git.md" 'Co-Authored-By: Kira <kira@example.com>'
+check 'build: no attribution text in skills' sh -c '! grep -rq "Co-Authored-By: [A-Z]" "$1/skills"' _ "$tmp/build2"
+check 'build: CLAUDE.md does not import the rules' sh -c '! grep -q "^@" "$1/CLAUDE.md"' _ "$tmp/build2"
+check 'build: no rules for the assistant without a key' contains "$tmp/build2/rules/git.md" 'it never commits as itself'
+check 'build: no GitHub section without a login' sh -c '! grep -q "GitHub account" "$1/rules/git.md"' _ "$tmp/build2"
+$shell "$root/scripts/build.sh" -o "$tmp/build3" --co-author 'Kira <kira@example.com>' \
+	--assistant 'Kira <kira@example.com>' --assistant-signing-key /keys/kira.pub --assistant-github kira-bot >/dev/null
+check 'rules: assistant commit command' contains "$tmp/build3/rules/git.md" '-c user.signingkey=/keys/kira.pub'
+check 'rules: which skill commits' contains "$tmp/build3/rules/git.md" 'use `assistant-commit` for changes'
+check 'rules: user trailer for assistant commits' contains "$tmp/build3/rules/git.md" "the user's \`git config user.name\`"
+check 'rules: GitHub account section' contains "$tmp/build3/rules/git.md" 'GH_TOKEN=$(gh auth token --user kira-bot)'
+check 'rules: questions in comments' contains "$tmp/build3/rules/git.md" 'Can I continue?'
+$shell "$root/scripts/build.sh" -o "$tmp/build4" --assistant 'Kira <kira@example.com>' \
+	--assistant-signing-key /keys/kira.pub >/dev/null
+check 'rules: --no-co-author means no trailer at all' contains "$tmp/build4/rules/git.md" 'Commit messages have no `Co-Authored-By` line.'
+check 'rules: no assistant trailer without co-author' sh -c '! grep -q "Commits made by the assistant" "$1/rules/git.md"' _ "$tmp/build4"
 check 'build: rejects a bad co-author' sh -c '! $1 "$2/scripts/build.sh" -o "$3" --co-author Kira' _ "$shell" "$root" "$tmp/x"
 
 # Conditional blocks and assistant placeholders, on a copy of the sources with a test skill.
@@ -135,12 +150,14 @@ kira_profile >/dev/null
 check 'link: styles are links' test -L "$claude/output-styles/kira-cozy.md"
 check 'link: skills are links' test -L "$claude/skills/commit"
 check 'link: CLAUDE.md is a link' test -L "$claude/CLAUDE.md"
+check 'link: rules are links' test -L "$claude/rules/git.md"
 check 'link: outputStyle set' contains "$claude/settings.json" '"outputStyle": "Kira (cozy)"'
 check 'link: other settings kept' contains "$claude/settings.json" '"keep": true'
 check 'link: profile saved' contains "$claude/.kirakit-profile" 'assistant_email=kira@example.com'
 check 'link: rerun changes nothing' unchanged kira
 kira --uninstall >/dev/null
 check 'uninstall: links removed' test ! -e "$claude/output-styles/kira-cozy.md"
+check 'uninstall: rules removed' test ! -e "$claude/rules/git.md"
 check 'uninstall: original CLAUDE.md restored' contains "$claude/CLAUDE.md" '# mine'
 check 'uninstall: manifest removed' test ! -e "$claude/.kirakit-manifest"
 
@@ -174,7 +191,7 @@ check 'assistant: GitHub login saved' profile_has 'assistant_github=kira-bot'
 check 'assistant: --co-author asks for trailers' profile_has 'co_author_trailer=yes'
 check 'assistant: no co_author key' sh -c '! grep -q "^co_author=" "$1"' _ "$claude/.kirakit-profile"
 check 'assistant: no warning with both keys' sh -c '! grep -q warning "$1"' _ "$tmp/assistant.log"
-check 'assistant: trailer in the commit skill' contains "$claude/skills/commit/SKILL.md" 'Co-Authored-By: Kira <kira@example.com>'
+check 'assistant: trailer in the rules' contains "$claude/rules/git.md" 'Co-Authored-By: Kira <kira@example.com>'
 check 'assistant: rerun changes nothing' unchanged kira --copy
 
 # Without a terminal, the optional assistant values default to empty, and trailers to yes.
@@ -183,14 +200,14 @@ kira --copy --name Alex --gender female --language auto --assistant 'Kira <kira@
 check 'assistant only: profile saved' profile_has 'assistant_name=Kira'
 check 'assistant only: no signing key' profile_has 'assistant_signing_key='
 check 'assistant only: trailers by default' profile_has 'co_author_trailer=yes'
-check 'assistant only: trailer in the commit skill' contains "$claude/skills/commit/SKILL.md" 'Co-Authored-By: Kira <kira@example.com>'
+check 'assistant only: trailer in the rules' contains "$claude/rules/git.md" 'Co-Authored-By: Kira <kira@example.com>'
 check 'assistant only: rerun changes nothing' unchanged kira --copy
 
 claude=$tmp/assistant-no-trailer
 kira_profile --copy --no-co-author >/dev/null
 check 'no trailer: saved' profile_has 'co_author_trailer=no'
 check 'no trailer: assistant kept' profile_has 'assistant_name=Kira'
-check 'no trailer: commit skill has none' contains "$claude/skills/commit/SKILL.md" 'add no `Co-Authored-By` line'
+check 'no trailer: rules have none' contains "$claude/rules/git.md" 'Commit messages have no `Co-Authored-By` line.'
 
 # R8: the installer warns about a missing key and never creates one.
 claude=$tmp/missing-key
@@ -257,7 +274,7 @@ CLAUDE_CONFIG_DIR=$claude KIRAKIT_REPO="file://$tmp/remote" KIRAKIT_REF=main \
 	$shell -s -- --name Alex --gender female --language auto --no-co-author \
 	<"$root/get-kira.sh" >/dev/null
 check 'curl: styles copied' test -f "$claude/output-styles/kira-cozy.md" -a ! -L "$claude/output-styles/kira-cozy.md"
-check 'curl: no co-author' contains "$claude/skills/commit/SKILL.md" 'add no `Co-Authored-By` line'
+check 'curl: no co-author' contains "$claude/rules/git.md" 'Commit messages have no `Co-Authored-By` line.'
 
 # Which branch or tag a run without a clone fetches.
 fetched() {

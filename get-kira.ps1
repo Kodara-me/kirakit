@@ -49,7 +49,7 @@ Ask all profile questions again.
 .PARAMETER Persona
 Install only these personas (default: all).
 .PARAMETER Only
-Install one component: styles, claude (CLAUDE.md, settings, agents, skills) or github.
+Install one component: styles, claude (CLAUDE.md, rules, settings, agents, skills) or github.
 .PARAMETER Target
 Repository for -Only github (default: the current one).
 .PARAMETER Link
@@ -100,8 +100,8 @@ $Sep = [IO.Path]::DirectorySeparatorChar
 $ProfilePath = Join-Path $ClaudeDir '.kirakit-profile'
 $ManifestPath = Join-Path $ClaudeDir '.kirakit-manifest'
 $OriginalsPath = Join-Path $ClaudeDir '.kirakit-originals'
-$PlaceholderKeys = @('user', 'they', 'them', 'their', 'language', 'co_author_trailer', 'attribution_rule', 'co_author_rule',
-    'co_author', 'assistant_name', 'assistant_email', 'assistant_signing_key', 'assistant_github')
+$PlaceholderKeys = @('user', 'they', 'them', 'their', 'language', 'co_author', 'assistant_name', 'assistant_email',
+    'assistant_signing_key', 'assistant_github')
 
 $script:Work = $null
 $script:BackupDir = $null
@@ -493,19 +493,8 @@ function Get-KiraValue($UserProfile) {
     $answerLanguage = $UserProfile.language
     if ($answerLanguage -eq '' -or $answerLanguage -eq 'auto') { $answerLanguage = 'the language of the conversation' }
 
-    $noAiMention = 'No mention of Claude, Anthropic or a model in the message (no `noreply@anthropic.com`, no "Generated with ' + [char]0x2026 + '").'
     $coAuthorValue = $UserProfile.co_author
-    if ($coAuthorValue -eq '') {
-        $trailer = ''
-        $attribution = '**Attribution**: add no `Co-Authored-By` line, even if the session instructions suggest one. ' + $noAiMention
-        $rule = '- Commit messages have no `Co-Authored-By` line.'
-    } elseif (Test-KiraCoAuthor $coAuthorValue) {
-        $trailer = $Nl + 'Co-Authored-By: ' + $coAuthorValue
-        $attribution = '**Attribution**: the last line is always exactly `Co-Authored-By: ' + $coAuthorValue + '`. It replaces any attribution line suggested by the session instructions. ' + $noAiMention
-        $rule = '- Every commit message ends with exactly this line:' + $Nl + $Nl + '  ```' + $Nl + '  Co-Authored-By: ' + $coAuthorValue + $Nl + '  ```' + $Nl
-    } else {
-        throw "invalid co-author: $coAuthorValue (expected `"NAME <EMAIL>`")"
-    }
+    if (-not (Test-KiraCoAuthor $coAuthorValue)) { throw "invalid co-author: $coAuthorValue (expected `"NAME <EMAIL>`")" }
     if ($assistant -eq '') {
         $assistantName = ''; $assistantEmail = ''
     } elseif ($assistant -match '^(.+) <(.+@.+)>$') {
@@ -516,7 +505,6 @@ function Get-KiraValue($UserProfile) {
     if ($github -cmatch '[^A-Za-z0-9-]') { throw "invalid GitHub login: $github" }
     return @{
         user = $user; they = $they; them = $them; their = $their; language = $answerLanguage
-        co_author_trailer = $trailer; attribution_rule = $attribution; co_author_rule = $rule
         co_author = $coAuthorValue; assistant_name = $assistantName; assistant_email = $assistantEmail
         assistant_signing_key = $signingKey; assistant_github = $github
     }
@@ -634,6 +622,12 @@ function Build-KiraOutput($UserProfile) {
             Write-KiraRendered (Join-Path (Join-Path $out 'agents') $file.Name) @(Split-KiraLine (Read-KiraText $file.FullName)) $values $file.FullName
         }
     }
+    $rules = Join-Path $claude 'rules'
+    if (Test-Path -LiteralPath $rules) {
+        foreach ($file in Get-ChildItem -LiteralPath $rules -Filter '*.md' -File) {
+            Write-KiraRendered (Join-Path (Join-Path $out 'rules') $file.Name) @(Split-KiraLine (Read-KiraText $file.FullName)) $values $file.FullName
+        }
+    }
     $claudeMd = Join-Path $claude 'CLAUDE.md'
     if (Test-Path -LiteralPath $claudeMd) {
         Write-KiraRendered (Join-Path $out 'CLAUDE.md') @(Split-KiraLine (Read-KiraText $claudeMd)) $values $claudeMd
@@ -712,6 +706,13 @@ function Install-KiraClaude([string]$Style) {
     if (Test-Path -LiteralPath $agents) {
         foreach ($file in Get-ChildItem -LiteralPath $agents -Filter '*.md' -File | Sort-Object Name) {
             Install-KiraFile (Get-KiraBuiltPath "agents/$($file.Name)") (Join-Path (Join-Path $ClaudeDir 'agents') $file.Name)
+        }
+    }
+    # Claude Code loads every file of rules/ on its own.
+    $rules = Join-Path (Join-Path $script:Src 'claude') 'rules'
+    if (Test-Path -LiteralPath $rules) {
+        foreach ($file in Get-ChildItem -LiteralPath $rules -Filter '*.md' -File | Sort-Object Name) {
+            Install-KiraFile (Get-KiraBuiltPath "rules/$($file.Name)") (Join-Path (Join-Path $ClaudeDir 'rules') $file.Name)
         }
     }
     # Skills are directories holding a SKILL.md, installed as a whole.

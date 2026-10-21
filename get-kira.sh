@@ -66,7 +66,7 @@ Options:
   --default-style PERSONA    Output style selected in settings.json (default: kira-cozy)
   --reconfigure              Ask all profile questions again
   --persona NAME             Install only this persona (repeatable; default: all)
-  --only COMPONENT           styles, claude (CLAUDE.md, settings, agents, skills) or github
+  --only COMPONENT           styles, claude (CLAUDE.md, rules, settings, agents, skills) or github
   --target DIR               Repository for --only github (default: the current one)
   --link                     Symlink files to the local clone (default from a clone)
   --copy                     Copy files (default without a clone)
@@ -535,6 +535,12 @@ install_claude() {
 		[ -f "$file" ] || continue
 		agent=$(basename "$file")
 		install_file "$(built "agents/$agent")" "$CLAUDE_DIR/agents/$agent"
+	done
+	# Claude Code loads every file of rules/ on its own.
+	for file in "$src"/claude/rules/*.md; do
+		[ -f "$file" ] || continue
+		rules=$(basename "$file")
+		install_file "$(built "rules/$rules")" "$CLAUDE_DIR/rules/$rules"
 	done
 	# Skills are directories holding a SKILL.md, installed as a whole.
 	for dir in "$src"/claude/skills/*/; do

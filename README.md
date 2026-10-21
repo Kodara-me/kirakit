@@ -188,8 +188,6 @@ Personal details live only in the profile. Every Markdown file under `personas/`
 | `{{user}}` | Name and description, e.g. "Alex, a female staff software developer" |
 | `{{they}}`, `{{them}}`, `{{their}}` | Pronouns; avoid verbs that agree with `{{they}}` |
 | `{{language}}` | Answer language, e.g. "French" or "the language of the conversation" |
-| `{{co_author_trailer}}`, `{{attribution_rule}}` | Commit attribution in the `commit` skill |
-| `{{co_author_rule}}` | Commit attribution rule in `CLAUDE.md` |
 | `{{co_author}}` | The co-author, "NAME <EMAIL>", or nothing |
 | `{{assistant_name}}`, `{{assistant_email}}` | The assistant's git identity, or nothing |
 | `{{assistant_signing_key}}` | Path to the assistant's public SSH signing key, or nothing |

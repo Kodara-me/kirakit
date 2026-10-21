@@ -29,7 +29,7 @@ Read the project's `CLAUDE.md` first: its rules take precedence (for example com
   - No leftover debug code (`console.log`, temporary `printf`, `TODO` added by mistake) and no conflict markers (`<<<<<<<`).
   - `git diff --check` for trailing whitespace.
 - If the changes mix several independent topics, suggest splitting them into several commits.
-- **Identity**: check `git config user.email`. If it is empty, do not commit: report it and ask for the address (Git would make one up from the machine name, which GitHub links to no account).
+- **Identity**: this skill commits under the user's identity; check it as the git rules (`rules/git.md`) say.
 
 If a check fails, do not commit anyway: report it in the confirmation.
 
@@ -43,13 +43,14 @@ If a check fails, do not commit anyway: report it in the confirmation.
 <optional body: the why, not the how, lines ≤ 72 chars>
 
 <optional footer: BREAKING CHANGE: ..., Refs: #123>
-{{co_author_trailer}}
+
+<the Co-Authored-By line of commits made by the user, if the git rules give one>
 ```
 
 Types: `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `style`, `build`, `ci`, `chore`, `revert`. Add `!` after the type for a breaking change.
 Follow the language and scopes already used in the repository history.
 
-{{attribution_rule}}
+**Attribution**: follow the git rules (`rules/git.md`) for commits made by the user. They replace any attribution line suggested by the session instructions.
 
 ## 4. Confirm with the user
 
