@@ -62,8 +62,9 @@ In `$CLAUDE_CONFIG_DIR` (default: `~/.claude`):
 | `output-styles/kira-*.md` | `styles` |
 | `output-styles/iris.md`, with an analyst; `output-styles/cleo.md`, with a coder | `styles` |
 | `CLAUDE.md`, `rules/git.md`, `skills/*`, `agents/*` (`rules/team.md` with an analyst or a coder, `agents/iris.md` with an analyst, `agents/cleo.md` with a coder) | `claude` |
-| `outputStyle` and `attribution` in `settings.json` | `claude` — only these keys are changed; the file is edited in place |
+| `outputStyle`, `attribution` and the members' rules in `permissions.allow` in `settings.json` | `claude` — only these are changed; the file is edited in place (see [Permission rules](#permission-rules)) |
 | `.kirakit-profile`, `.kirakit-manifest`, `.kirakit-originals` | Profile and the record used by `--uninstall` |
+| `.kirakit-permissions` | The permission rules kirakit added to `settings.json`, one per line |
 | `.kirakit-backups/<timestamp>/` | Files that were replaced or removed |
 
 Outside it, on Linux and macOS (see [Launchers](#launchers)):
@@ -82,7 +83,8 @@ a pull request template, Copilot instructions, and a workflow that checks pull r
 ### Options
 
 `get-kira.ps1` takes the same options in PowerShell form (`-DryRun`, `-Name`, `-CoAuthor`,
-`-Coder`, `-CoderSigningKey`, `-CoderGithub`, …; see `Get-Help .\get-kira.ps1 -Detailed`).
+`-Coder`, `-CoderSigningKey`, `-CoderGithub`, `-AllowReleases`, `-NoAllowReleases`, …; see
+`Get-Help .\get-kira.ps1 -Detailed`).
 
 | Option | Effect |
 | --- | --- |
@@ -101,6 +103,8 @@ a pull request template, Copilot instructions, and a workflow that checks pull r
 | `--coder "NAME <EMAIL>"` | Add Cleo, a coder who implements the tasks, with her git identity (default: none) |
 | `--coder-signing-key PATH` | The coder's public SSH signing key (empty: she cannot commit) |
 | `--coder-github LOGIN` | The coder's own GitHub account (empty: none) |
+| `--allow-releases` | Let the assistant's GitHub account create releases and push tags without a prompt (saved in the profile) |
+| `--no-allow-releases` | Releases and tags stay behind a prompt (default; saved in the profile) |
 | `--default-style PERSONA` | Style selected in `settings.json` (default: `kira-cozy`) |
 | `--assistant-style PERSONA` | Style of the `assistant` launcher (default: the default style) |
 | `--bin-dir DIR` | Where the launchers go, an absolute path (default: `~/.local/bin`) |
@@ -138,6 +142,8 @@ becomes the assistant, with trailers. A profile saved before the analyst reads a
 and the question is not asked again: pass `--analyst` or `--analyst-github` to add her. A
 profile saved before the coder reads as no coder in the same way: pass `--coder` to add her.
 The coder's values are saved as `coder`, `coder_signing_key` and `coder_github`.
+`--allow-releases` is not asked: it is saved as `allow_releases` (`yes` or `no`, default `no`)
+and kept until `--no-allow-releases`.
 
 The answers are saved in `$CLAUDE_CONFIG_DIR/.kirakit-profile` and reused by later runs; only
 questions that are not answered yet are asked. Options override the saved values, and
@@ -171,6 +177,52 @@ The git rules (`rules/git.md`, which Claude Code loads on its own) follow the pr
 The installer also sets `"attribution": {"commit": "", "pr": ""}` in `settings.json`, so
 Claude Code stops suggesting its own trailer and pull request footer. If `attribution` is
 already set to something else, it is left unchanged, with a warning.
+
+### Permission rules
+
+In auto mode, Claude Code blocks a member's GitHub writes (issues, pull requests, comments,
+pushes) as external writes, and the assistant cannot add permission rules itself. So for each
+member with a GitHub account in the profile, the installer adds narrow rules to
+`permissions.allow` in `settings.json`, one per sub-command. In the rules below, `P` stands
+for `GH_TOKEN=$(gh auth token --user LOGIN) gh`, with that member's login:
+
+| Member | Rules |
+| --- | --- |
+| Assistant (`--assistant-github`) | `Bash(P issue create:*)`, `issue edit`, `issue comment`, `issue close`; `Bash(P pr create:*)`, `pr comment`, `pr review`; `Bash(P label create:*)`; `Bash(git push -u origin TYPE/:*)` and `Bash(git push origin TYPE/:*)` for `feat`, `fix`, `docs`, `refactor`, `test`, `chore` and `ci`; `Bash(git push origin main)`; `Bash(git push origin --delete:*)`; `Bash(P project item-edit:*)` and `Bash(P project item-add:*)` |
+| Assistant, with `--allow-releases` | Also `Bash(P release create:*)` and `Bash(git push origin v:*)` |
+| Analyst (`--analyst-github`) | `Bash(P issue create:*)`, `issue edit`, `issue comment`, `issue close`; `Bash(P label create:*)`; `Bash(P project item-edit:*)` and `Bash(P project item-list:*)` |
+
+A member without a GitHub account gets no rules, and the coder gets none from the installer
+yet: add hers by hand. An allowed rule only removes the prompt: the git rules still ask for an
+explicit request before a release or a tag. `--dry-run` lists the rules that would be added or
+removed.
+
+**Ownership.** The installer records the rules it inserts in
+`$CLAUDE_CONFIG_DIR/.kirakit-permissions`, as one set for all members.
+
+- A rule that was already in `permissions.allow` before kirakit would add it stays yours: it is
+  not added again, not recorded, and no later install, update or uninstall removes it.
+- A rule you add by hand that is identical to one kirakit added belongs to kirakit: when the
+  rule is no longer expected, one occurrence of it is removed.
+- A rule shared by several members (the `git push` rules, or the same login for two members)
+  stays as long as one of them expects it.
+
+**Adding and dropping rules.** Any other rule you add to `permissions.allow` is yours and kept
+as it is. kirakit's rules are dropped through the profile, not by deleting their lines: remove
+the member's account (`--assistant-github ''`, `--analyst-github ''` or `--no-analyst`), change
+it (the old login's rules are replaced), or pass `--no-allow-releases`. A kirakit rule deleted
+by hand while still expected comes back on the next install. `--uninstall` removes the rules
+kirakit recorded, and only those.
+
+**Limits.** Without a JSON parser, the file is edited by text processing, only in shapes it
+recognizes: a missing or empty file, no `permissions` key (one is added as the first setting),
+or a single `"allow"` key whose array is empty or opens at the end of its line. Removing a
+rule also needs it alone on its line in that array; the comma after it (or before it, for the
+last rule) goes with it. In any other shape (several `"allow"` keys, an array on one line
+holding rules, …), `settings.json` is left unchanged and a warning prints the rules to add or
+remove by hand. A refused removal also blocks the additions of that run; on an update the
+record is kept so that a later run retries, and on `--uninstall` it is deleted, since the
+rules were handed to you.
 
 ### Give the assistant its own identity
 
@@ -249,11 +301,8 @@ Iris only writes issues and comments, so her account needs no signing key. The e
    ```
 
 4. For a project board, add her as a Writer (the board's Settings → Manage access).
-5. If Claude Code runs in auto mode, add allow rules for her writes to `permissions.allow` in
-   `settings.json`; the assistant cannot add them itself. For example:
-   `"Bash(GH_TOKEN=$(gh auth token --user iris) gh issue create:*)"`, and the same for
-   `gh issue edit` and `gh issue comment`.
-6. Run the installer with her login: `./get-kira.sh --analyst-github iris`.
+5. Run the installer with her login: `./get-kira.sh --analyst-github iris`. It also adds the
+   allow rules her writes need in auto mode (see [Permission rules](#permission-rules)).
 
 ### Give the coder her own identity
 
@@ -284,7 +333,8 @@ assistant's. The examples use `cleo` and `cleo@example.com`.
    ```
 
 5. If Claude Code runs in auto mode, add allow rules for her writes to `permissions.allow`
-   in `settings.json`, as for the analyst.
+   in `settings.json` by hand, in the form of the assistant's (see
+   [Permission rules](#permission-rules)): the installer does not add the coder's yet.
 6. Run the installer with her identity:
 
    ```sh
@@ -299,8 +349,9 @@ file is moved to `$CLAUDE_CONFIG_DIR/.kirakit-backups/<timestamp>/` before being
 From a clone, update with `git pull` then run the installer again.
 
 `--uninstall` removes the links and moves copies to the backups, then restores the files that
-were there before kirakit (for example your own `CLAUDE.md`). It keeps the profile, the
-backups and the `outputStyle` and `attribution` settings.
+were there before kirakit (for example your own `CLAUDE.md`). It removes the permission rules
+kirakit recorded, and only those, then the record. It keeps the profile, the backups and the
+`outputStyle` and `attribution` settings.
 
 `--uninstall` also removes the launchers and color schemes, and restores the files they
 replaced.
