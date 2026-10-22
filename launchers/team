@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# team [DIR]: open a new Konsole window with one pane per team member, side by side, each
+# running its member's launcher in DIR (default: the current directory).
+set -u
+
+members=(assistant)
+{{#analyst}}
+members+=(analyst)
+{{/analyst}}
+
+die() {
+	printf 'team: %s\n' "$1" >&2
+	exit 1
+}
+
+[ $# -le 1 ] || die 'usage: team [DIR]'
+dir=${1:-$PWD}
+[ -d "$dir" ] || die "not a directory: $dir"
+dir=$(cd -- "$dir" && pwd) || die "cannot enter $dir"
+bin=$(cd -- "$(dirname -- "$0")" && pwd) || die 'cannot find the launchers'
+# The panes' shell reads the command; single quotes are the only quoting fish and POSIX
+# shells share, and fish reads a backslash in them differently.
+case $dir$bin in
+*\\* | *$'\n'*) die "cannot use a path with a backslash or a newline: $dir" ;;
+esac
+
+command -v konsole >/dev/null || die 'Konsole is not installed'
+qdbus=$(command -v qdbus6 || command -v qdbus) || die 'qdbus6 or qdbus is not installed'
+
+# quote STRING: STRING in single quotes, for the panes' shell.
+quote() {
+	printf "'%s'" "${1//\'/\'\\\'\'}"
+}
+
+konsole --separate --workdir "$dir" >/dev/null 2>&1 &
+service=org.kde.konsole-$!
+
+# wait_for OBJECT: wait up to 5 s for an object of the new window on D-Bus.
+wait_for() {
+	local i
+	for ((i = 0; i < 50; i++)); do
+		"$qdbus" "$service" "$1" >/dev/null 2>&1 && return 0
+		sleep 0.1
+	done
+	return 1
+}
+
+wait_for /Sessions/1 || die 'Konsole did not answer on D-Bus'
+for ((i = 2; i <= ${#members[@]}; i++)); do
+	"$qdbus" "$service" /Windows/1 org.kde.konsole.Window.createSplit 0 true >/dev/null
+	wait_for "/Sessions/$i" || die 'Konsole did not split the window'
+done
+for ((i = 1; i <= ${#members[@]}; i++)); do
+	"$qdbus" "$service" "/Sessions/$i" org.kde.konsole.Session.runCommand \
+		"cd $(quote "$dir") && $(quote "$bin/${members[i - 1]}")" >/dev/null ||
+		die 'Konsole did not run the command'
+done
