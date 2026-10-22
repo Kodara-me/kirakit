@@ -75,6 +75,11 @@ project's `CLAUDE.md` cannot override the attribution rules.
   request is added to its tasks' boards in In review (`board-status` with
   `--add-to-boards-of`), and follows the same moves as its task. Done is left to the
   board's workflows and to merging.
+- Comments on GitHub (on issues and pull requests, review comments and replies included) are
+  written in the member's own voice, as in the conversation, and in the repository's
+  language. The voice never replaces what a comment requires: the mentions, the links, each
+  question with its options and recommendation, and the closing short question. Issue
+  bodies, pull request descriptions and commit messages stay neutral.
 {{#assistant_github}}
 
 ## The assistant's GitHub account

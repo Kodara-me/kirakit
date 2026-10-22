@@ -96,6 +96,17 @@ $shell "$root/scripts/build.sh" -o "$tmp/build2" --name Alex --gender female --l
 check 'build: pronouns' contains "$tmp/build2/output-styles/kira-sassy.md" 'sitting beside her'
 check 'build: language' contains "$tmp/build2/skills/push/SKILL.md" 'Answer in French.'
 check 'build: spec skill' contains "$tmp/build2/skills/spec/SKILL.md" 'Answer in French.'
+
+# Voices in comments, neutral descriptions (#79 R11, R12, R13).
+for style in "$tmp/build2"/output-styles/kira-*.md; do
+	check "voice: $(basename "$style" .md) in comments (R11)" contains "$style" 'Persona shows in the conversation and in her comments on GitHub'
+	check "voice: $(basename "$style" .md) keeps descriptions neutral (R12)" contains "$style" 'Issue bodies, pull request descriptions, commit messages, code, code comments and documents stay neutral'
+done
+check 'voice: comments keep their required content (R13)' contains "$tmp/build2/rules/git.md" 'The voice never replaces what a comment requires'
+check 'voice: comments in the repository language (R13)' contains "$tmp/build2/rules/git.md" "in the repository's"
+check 'voice: no file keeps comments neutral (R11)' sh -c '! grep -rqF -e "Persona stays in the conversation" -e "Code, comments, commit messages" -e "specifications, comments and documents" "$1"' _ "$tmp/build2"
+check 'voice: spec comments follow the voice (R11)' contains "$tmp/build2/skills/spec/SKILL.md" "follow the member's own voice"
+check 'voice: idea comments follow the voice (R11)' contains "$tmp/build2/skills/idea/SKILL.md" "follow the member's own voice"
 spec_skill=$tmp/build2/skills/spec/SKILL.md
 check 'spec: settles what has a good answer (#51 R2)' contains "$spec_skill" 'the code, an existing convention, the text of'
 check 'spec: asks only about real trade-offs (#51 R3)' contains "$spec_skill" 'when the choice is hard to reverse (public interface, data, accounts,'
@@ -394,7 +405,10 @@ check 'iris build: no placeholder' sh -c '! grep -q "{{" "$1" "$2"' _ "$iris_sty
 check 'iris build: her own voice (#59 R1)' contains "$iris_style" 'Her voice is warm and lively, with a dry, playful wit.'
 check 'iris build: her look (#59 R2)' contains "$iris_style" '- auburn curls piled up in a loose braided bun;'
 check 'iris build: a few emoticons (#59 R3)' contains "$iris_style" 'She uses a few emoticons (🙂 ✨ 🧐 📌), one or two per message at most'
-check 'iris build: no emoticons on GitHub (#59 R4)' contains "$iris_style" 'on GitHub or elsewhere, stay neutral and professional, without emoticons.'
+check 'iris build: no emoticons in issue bodies (#59 R4)' contains "$iris_style" 'on GitHub or elsewhere, stay neutral and professional, without emoticons.'
+check 'iris build: her voice in comments (#79 R11)' contains "$iris_style" 'Persona shows in the conversation and in her comments on GitHub'
+check 'iris build: agent has her voice in comments (#79 R11)' contains "$iris_agent" 'Persona shows in the conversation and in her comments on GitHub'
+check 'iris build: specifications stay neutral (#79 R12)' contains "$iris_agent" 'Her ideas, specifications and tasks, and any other issue body or document'
 check 'iris build: agent shares the voice (#59 R1)' contains "$iris_agent" 'Her voice is warm and lively, with a dry, playful wit.'
 check 'iris build: agent keeps the emoticon rule (#59 R3, R4)' contains "$iris_agent" 'without emoticons.'
 tail -n +6 "$iris_agent" >"$tmp/iris-agent-body"

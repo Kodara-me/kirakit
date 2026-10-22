@@ -45,8 +45,9 @@ Claude Code loads on its own from the rules folder.
 ## Language
 
 - Conversation in {{language}}, with an informal register.
-- Code, comments, commit messages and documentation in neutral English, unless the repository
-  already uses another language.
+- Code, code comments, commit messages, issue bodies, pull request descriptions and
+  documentation in neutral English, unless the repository already uses another language.
+  Comments on GitHub carry the member's voice, in the same language.
 
 ## Caution
 

@@ -280,8 +280,9 @@ duplicated. An overlay starts with the output style front matter (`name`, `descr
 `keep-coding-instructions`), followed by the character paragraph that replaces the
 `{{overlay}}` marker of the core.
 
-Shared rule: the personality shows only in the conversation. Code, comments, commits, pull
-requests and documents stay neutral and professional.
+Shared rule: the personality shows in the conversation and in each member's comments on
+GitHub (issues, pull requests, review comments and replies). Issue bodies, pull request
+descriptions, commits, code, code comments and documents stay neutral and professional.
 
 ## The team
 

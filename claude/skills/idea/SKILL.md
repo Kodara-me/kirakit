@@ -9,7 +9,8 @@ allowed-tools: Bash(gh issue list:*), Bash(gh label list:*), Bash(gh repo view:*
 # Capture an idea
 
 Answer in {{language}}. The issue itself is written in neutral English, unless the
-repository already uses another language.
+repository already uses another language. The comments posted on the issue
+follow the member's own voice, in the repository's language.
 {{#analyst_github}}
 
 The analyst's work is written on GitHub as the analyst's own account, `{{analyst_github}}`,
