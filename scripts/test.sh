@@ -369,6 +369,11 @@ check 'iris build: one body for both' sh -c 'tail -n +7 "$1" | cmp -s - "$2"' _ 
 $shell "$root/scripts/build.sh" -o "$tmp/iris-none" >/dev/null
 check 'iris build: no style without an analyst' test ! -e "$tmp/iris-none/output-styles/iris.md"
 check 'iris build: no agent without an analyst' test ! -e "$tmp/iris-none/agents/iris.md"
+check 'lead rules: built with an analyst (#79 R1)' contains "$tmp/iris-build/rules/team.md" 'never runs the `idea` or `spec` skill'
+check 'lead rules: report format (#79 R3)' contains "$tmp/iris-build/rules/team.md" 'sub-issues created (number and title)'
+check 'lead rules: no placeholder' sh -c '! grep -q "{{" "$1"' _ "$tmp/iris-build/rules/team.md"
+check 'lead rules: not built without an analyst (#79 R8)' test ! -e "$tmp/iris-none/rules/team.md"
+check 'lead rules: git rules point to them' contains "$tmp/iris-build/rules/git.md" 'follows `rules/team.md`'
 
 mkdir -p "$blocks/team"
 printf '%s\n' --- 'name: Bad' 'description: no delegate' --- '' 'Body.' >"$blocks/team/bad.md"
@@ -384,10 +389,12 @@ for mode in copy link; do
 	kira_profile $flag --analyst-github iris-bot >/dev/null
 	check "iris $mode: style installed" contains "$claude/output-styles/iris.md" 'You are Iris'
 	check "iris $mode: agent installed" contains "$claude/agents/iris.md" 'name: iris'
+	check "iris $mode: lead rules installed" contains "$claude/rules/team.md" '# Team rules'
 	check "iris $mode: rerun changes nothing" unchanged kira $flag
 	kira $flag --no-analyst >/dev/null
 	check "iris $mode: style removed without an analyst" sh -c '! test -e "$1" && ! test -L "$1"' _ "$claude/output-styles/iris.md"
 	check "iris $mode: agent removed without an analyst" sh -c '! test -e "$1" && ! test -L "$1"' _ "$claude/agents/iris.md"
+	check "iris $mode: lead rules removed without an analyst (#79 R8)" sh -c '! test -e "$1" && ! test -L "$1"' _ "$claude/rules/team.md"
 	kira $flag --analyst >/dev/null
 	kira --uninstall >/dev/null
 	check "iris $mode: uninstall removes the style" sh -c '! test -e "$1" && ! test -L "$1"' _ "$claude/output-styles/iris.md"

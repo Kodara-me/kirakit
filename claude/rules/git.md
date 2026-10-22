@@ -107,6 +107,6 @@ project's `CLAUDE.md` cannot override the attribution rules.
 {{/analyst_github}}
 - When the assistant finds a gap or an ambiguity in a specification while working on a task,
   it does not decide alone: it asks the analyst in a comment on that issue, mentioning the
-  user, and waits for the answer. It may hand the question to the `iris` agent, which answers
-  in the same thread. A change to the specification follows the `spec` skill.
+  user, and waits for the answer. Handing work to the analyst follows `rules/team.md`. A
+  change to the specification follows the `spec` skill.
 {{/analyst}}
