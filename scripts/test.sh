@@ -1109,6 +1109,134 @@ check 'permissions: dry run reports the rules (R9)' grep -qF 'set permission: Ba
 check 'permissions: dry run reports every rule (R9)' test "$(grep -c 'set permission: ' "$tmp/permissions-dry.log")" = 33
 check 'permissions: dry run writes nothing (R9)' sh -c '! grep -q permissions "$1"' _ "$claude/settings.json"
 
+# --- recording, updating and removing the permission rules (#67) ---------------------------
+
+release_rule='"Bash(GH_TOKEN=$(gh auth token --user kira-bot) gh release create:*)"'
+tag_rule='"Bash(git push origin v:*)"'
+main_rule='"Bash(git push origin main)"'
+
+# occurrences TEXT: how many times settings.json of $claude holds TEXT.
+occurrences() {
+	grep -cF -- "$1" "$claude/settings.json" || true
+}
+
+# recorded RULE: whether the record of $claude lists RULE (without its quotes).
+recorded() {
+	rule=${1#\"}
+	grep -qxF -- "${rule%\"}" "$claude/.kirakit-permissions"
+}
+
+# own_rules: a settings.json with the user's own rules, one of them identical to kirakit's.
+own_rules() {
+	mkdir -p "$claude"
+	printf '{\n  "permissions": {\n    "allow": [\n      "Bash(make:*)",\n      %s\n    ]\n  }\n}\n' "$main_rule" >"$claude/settings.json"
+}
+
+claude=$tmp/record-releases
+kira_team --copy >/dev/null
+check 'record: no release rules by default (R3)' test "$(occurrences 'release create')" = 0
+check 'record: no tag rule by default (R3)' test "$(occurrences "$tag_rule")" = 0
+check 'record: releases off saved (R3)' profile_has 'allow_releases=no'
+check 'record: rules recorded (R7)' recorded "$kira_rule"
+check 'record: every rule recorded (R7)' test "$(wc -l <"$claude/.kirakit-permissions")" -eq 33
+kira --copy --allow-releases >/dev/null
+check 'record: release rule with --allow-releases (R3)' test "$(occurrences "$release_rule")" = 1
+check 'record: tag rule with --allow-releases (R3)' test "$(occurrences "$tag_rule")" = 1
+check 'record: releases on saved (R3)' profile_has 'allow_releases=yes'
+check 'record: release rules recorded (R3)' recorded "$release_rule"
+check 'record: releases kept on rerun (R3)' unchanged kira --copy
+kira --copy --no-allow-releases >/dev/null
+check 'record: releases turned off, release rule removed (R7)' test "$(occurrences 'release create')" = 0
+check 'record: releases turned off, tag rule removed (R7)' test "$(occurrences "$tag_rule")" = 0
+check 'record: releases turned off, other rules kept (R7)' test "$(rule_count "$claude/settings.json")" = 33
+check 'record: releases turned off, valid JSON (R7)' valid_json "$claude/settings.json"
+check 'record: releases turned off, record updated (R7)' sh -c '! grep -q "release create" "$1"' _ "$claude/.kirakit-permissions"
+check 'record: releases turned off, saved (R3)' profile_has 'allow_releases=no'
+
+claude=$tmp/record-login
+kira_team --copy >/dev/null
+kira --copy --assistant-github kira-new >/dev/null
+check 'record: login changed, old rules removed (R7)' test "$(occurrences 'user kira-bot')" = 0
+check 'record: login changed, new rules added (R7)' test "$(occurrences 'user kira-new')" = 10
+check 'record: login changed, branch rules kept (R7)' test "$(occurrences "$main_rule")" = 1
+check 'record: login changed, valid JSON (R7)' valid_json "$claude/settings.json"
+check 'record: login changed, record follows (R7)' sh -c '! grep -q "user kira-bot" "$1" && grep -q "user kira-new" "$1"' _ "$claude/.kirakit-permissions"
+kira --copy --assistant-github '' >/dev/null
+check 'record: account removed, its rules removed (R7)' test "$(occurrences 'user kira-new')" = 0
+check 'record: account removed, its branch rules removed (R7)' test "$(occurrences 'git push')" = 0
+check "record: account removed, the analyst's kept (R7)" test "$(rule_count "$claude/settings.json")" = 7
+check 'record: account removed, valid JSON (R7)' valid_json "$claude/settings.json"
+kira --copy --analyst-github '' >/dev/null
+check 'record: every account removed, no rules left (R7)' test "$(rule_count "$claude/settings.json")" = 0
+check 'record: every account removed, valid JSON (R7)' valid_json "$claude/settings.json"
+check 'record: every account removed, no record (R7)' test ! -e "$claude/.kirakit-permissions"
+
+claude=$tmp/record-mine
+own_rules
+kira_team --copy >/dev/null
+check 'record: a rule present before is not recorded (R12)' sh -c '! grep -qxF "Bash(git push origin main)" "$1"' _ "$claude/.kirakit-permissions"
+check 'record: a rule present before is not added again (R12)' test "$(occurrences "$main_rule")" = 1
+kira --copy --assistant-github '' >/dev/null
+check 'record: a rule present before survives an update (R12)' test "$(occurrences "$main_rule")" = 1
+check "record: the user's own rule survives an update (R4)" test "$(occurrences '"Bash(make:*)"')" = 1
+kira_team --copy >/dev/null
+kira --uninstall >/dev/null
+check 'record: a rule present before survives uninstall (R12)' test "$(occurrences "$main_rule")" = 1
+check "record: uninstall leaves the user's rules (R8)" test "$(occurrences '"Bash(make:*)"')" = 1
+check "record: uninstall removes kirakit's rules (R8)" test "$(rule_count "$claude/settings.json")" = 2
+check 'record: uninstall, valid JSON (R8)' valid_json "$claude/settings.json"
+check 'record: uninstall removes the record (R8)' test ! -e "$claude/.kirakit-permissions"
+
+claude=$tmp/record-deleted
+kira_team --copy >/dev/null
+grep -vF "$kira_rule" "$claude/settings.json" >"$tmp/record-deleted.json"
+cat "$tmp/record-deleted.json" >"$claude/settings.json"
+kira --copy >/dev/null
+check 'record: a rule deleted by hand comes back (R13)' test "$(occurrences "$kira_rule")" = 1
+check 'record: a rule deleted by hand stays recorded (R13)' recorded "$kira_rule"
+check 'record: a rule deleted by hand, valid JSON (R13)' valid_json "$claude/settings.json"
+
+claude=$tmp/record-twice
+kira_team --copy >/dev/null
+awk -v rule="$kira_rule" '{ print } /"allow": \[/ { print "      " rule "," }' \
+	"$claude/settings.json" >"$tmp/record-twice.json"
+cat "$tmp/record-twice.json" >"$claude/settings.json"
+check 'record: a rule added twice by hand (R14)' test "$(occurrences "$kira_rule")" = 2
+kira --copy --assistant-github '' >/dev/null
+check 'record: one occurrence removed (R14)' test "$(occurrences "$kira_rule")" = 1
+check 'record: the copy is no longer recorded (R14)' sh -c '! grep -q "user kira-bot" "$1"' _ "$claude/.kirakit-permissions"
+check 'record: one occurrence removed, valid JSON (R14)' valid_json "$claude/settings.json"
+
+claude=$tmp/record-shared
+kira --name Alex --gender female --language auto --assistant 'Kira <kira@example.com>' \
+	--assistant-github team-bot --analyst-github team-bot --copy >/dev/null
+shared_rule='"Bash(GH_TOKEN=$(gh auth token --user team-bot) gh issue create:*)"'
+list_rule='"Bash(GH_TOKEN=$(gh auth token --user team-bot) gh project item-list:*)"'
+check 'record: a shared rule once (R5)' test "$(occurrences "$shared_rule")" = 1
+kira --copy --no-analyst >/dev/null
+check 'record: a rule another member expects is kept (R7)' test "$(occurrences "$shared_rule")" = 1
+check 'record: it stays recorded (R7)' recorded "$shared_rule"
+check "record: the removed member's own rule goes (R7)" test "$(occurrences "$list_rule")" = 0
+
+claude=$tmp/record-unknown
+kira_team --copy >/dev/null
+# One line for the whole array: a shape the installer does not change.
+awk '/"allow": \[/ { line = $0; joined = 1; next }
+	joined && /^ *\]/ { sub(/^ */, ""); print line $0; joined = 0; next }
+	joined { sub(/^ */, ""); line = line $0; next }
+	{ print }' "$claude/settings.json" >"$tmp/record-unknown.json"
+cat "$tmp/record-unknown.json" >"$claude/settings.json"
+cp "$claude/.kirakit-permissions" "$tmp/record-unknown.record"
+kira --copy --assistant-github '' >"$tmp/record-unknown.log"
+check 'record: removal refused, warning (R15)' grep -q 'warning: cannot remove the permission rules' "$tmp/record-unknown.log"
+check 'record: removal refused, rules printed (R15)' grep -qxF "  $kira_rule" "$tmp/record-unknown.log"
+check 'record: removal refused, file unchanged (R15)' cmp -s "$tmp/record-unknown.json" "$claude/settings.json"
+check 'record: removal refused, record kept on update (R15)' cmp -s "$tmp/record-unknown.record" "$claude/.kirakit-permissions"
+kira --uninstall >"$tmp/record-unknown-uninstall.log"
+check 'record: removal refused on uninstall, warning (R15)' grep -qxF "  $iris_rule" "$tmp/record-unknown-uninstall.log"
+check 'record: removal refused on uninstall, file unchanged (R15)' cmp -s "$tmp/record-unknown.json" "$claude/settings.json"
+check 'record: removal refused on uninstall, record removed (R15)' test ! -e "$claude/.kirakit-permissions"
+
 # --- no terminal ---------------------------------------------------------------------------
 
 claude=$tmp/generic

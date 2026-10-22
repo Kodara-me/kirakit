@@ -35,6 +35,7 @@ removed=
 profile=$CLAUDE_DIR/.kirakit-profile
 manifest=$CLAUDE_DIR/.kirakit-manifest
 originals=$CLAUDE_DIR/.kirakit-originals
+permissions_record=$CLAUDE_DIR/.kirakit-permissions
 konsole_dir=${XDG_DATA_HOME:-$HOME/.local/share}/konsole
 profile_keys='name gender language assistant assistant_signing_key assistant_github co_author_trailer analyst analyst_github coder coder_signing_key coder_github'
 nl='
@@ -71,6 +72,8 @@ Options:
   --coder "NAME <EMAIL>"     The coder's git identity, for Cleo (default: none)
   --coder-signing-key PATH   The coder's public SSH signing key (empty: none)
   --coder-github LOGIN       The coder's own GitHub account (empty: none)
+  --allow-releases           Let the assistant create releases and push tags without a prompt
+  --no-allow-releases        Releases and tags stay behind a prompt (default)
   --default-style PERSONA    Output style selected in settings.json (default: kira-cozy)
   --assistant-style PERSONA  Style of the assistant launcher (default: the default style)
   --bin-dir DIR              Where the launchers go (default: ~/.local/bin)
@@ -368,6 +371,7 @@ load_profile() {
 		coder) saved_coder=$value ;;
 		coder_signing_key) saved_coder_signing_key=$value ;;
 		coder_github) saved_coder_github=$value ;;
+		allow_releases) saved_allow_releases=$value ;;
 		style) saved_style=$value ;;
 		assistant_style) saved_assistant_style=$value ;;
 		bin_dir) saved_bin_dir=$value ;;
@@ -423,6 +427,9 @@ setup_profile() {
 	coder=${opt_coder-${saved_coder-}}
 	coder_signing_key=${opt_coder_signing_key-${saved_coder_signing_key-}}
 	coder_github=${opt_coder_github-${saved_coder_github-}}
+	# R3: releases stay behind a prompt unless asked; not a question, an option.
+	allow_releases=${opt_allow_releases-${saved_allow_releases:-no}}
+	[ "$allow_releases" = yes ] || allow_releases=no
 	if [ -n "$assistant" ]; then default_trailer=yes; else default_trailer=no; fi
 	co_author_trailer=${opt_co_author_trailer-${saved_co_author_trailer-$default_trailer}}
 	default_style=${opt_style-${saved_style:-kira-cozy}}
@@ -503,7 +510,7 @@ setup_profile() {
 	fi
 
 	[ -z "${no_save-}" ] || return 0
-	profile_text="name=$user_name${nl}gender=$user_gender${nl}language=$user_language${nl}assistant_name=$assistant_name${nl}assistant_email=$assistant_email${nl}assistant_signing_key=$assistant_signing_key${nl}assistant_github=$assistant_github${nl}co_author_trailer=$co_author_trailer${nl}analyst=$analyst${nl}analyst_github=$analyst_github${nl}coder=$coder${nl}coder_signing_key=$coder_signing_key${nl}coder_github=$coder_github${nl}style=$default_style${nl}assistant_style=$assistant_style${nl}bin_dir=$bin_dir"
+	profile_text="name=$user_name${nl}gender=$user_gender${nl}language=$user_language${nl}assistant_name=$assistant_name${nl}assistant_email=$assistant_email${nl}assistant_signing_key=$assistant_signing_key${nl}assistant_github=$assistant_github${nl}co_author_trailer=$co_author_trailer${nl}analyst=$analyst${nl}analyst_github=$analyst_github${nl}coder=$coder${nl}coder_signing_key=$coder_signing_key${nl}coder_github=$coder_github${nl}allow_releases=$allow_releases${nl}style=$default_style${nl}assistant_style=$assistant_style${nl}bin_dir=$bin_dir"
 	if [ -f "$profile" ] && [ "$(cat "$profile")" = "$profile_text" ]; then
 		return
 	fi
@@ -709,7 +716,7 @@ set_output_style() {
 }
 
 # permission_rules: print the permission rules the members' GitHub accounts need, one per
-# line, without duplicates (#67 R1, R2).
+# line, without duplicates (#67 R1, R2, R3).
 permission_rules() {
 	{
 		if [ -n "$assistant_github" ]; then
@@ -725,6 +732,10 @@ permission_rules() {
 			printf '%s\n' 'Bash(git push origin main)' 'Bash(git push origin --delete:*)'
 			printf 'Bash(%s project item-edit:*)\n' "$gh"
 			printf 'Bash(%s project item-add:*)\n' "$gh"
+			if [ "$allow_releases" = yes ]; then
+				printf 'Bash(%s release create:*)\n' "$gh"
+				printf '%s\n' 'Bash(git push origin v:*)'
+			fi
 		fi
 		if [ -n "$analyst_github" ]; then
 			gh="GH_TOKEN=\$(gh auth token --user $analyst_github) gh"
@@ -736,24 +747,23 @@ permission_rules() {
 	} | awk '!seen[$0]++'
 }
 
-# add_permission_rules RULES NEW: write to NEW the settings with RULES (a file, one rule per
-# line) added to "permissions.allow". Fail, writing nothing useful, when the shape of the
-# file is not one that text processing can change safely (#67 R4, R6).
+# add_permission_rules RULES SOURCE NEW: write to NEW the settings SOURCE with RULES (a file,
+# one rule per line) added to "permissions.allow". Fail when the shape of SOURCE is not one
+# that text processing can change safely (#67 R4, R6).
 add_permission_rules() {
-	if [ ! -s "$settings" ] || [ "$(tr -d ' \t\r\n' <"$settings")" = '{}' ]; then
+	if [ ! -s "$2" ] || [ "$(tr -d ' \t\r\n' <"$2")" = '{}' ]; then
 		awk 'BEGIN { print "{"; print "  \"permissions\": {"; print "    \"allow\": [" }
 			{ rules[++n] = $0 }
 			END {
 				for (k = 1; k <= n; k++) printf "      \"%s\"%s\n", rules[k], (k < n ? "," : "")
 				print "    ]"; print "  }"; print "}"
-			}' "$1" >"$2"
+			}' "$1" >"$3"
 		return
 	fi
-	permissions=$(grep -o '"permissions"' "$settings" | wc -l)
-	allow=$(grep -o '"allow"' "$settings" | wc -l)
+	permissions=$(grep -o '"permissions"' "$2" | wc -l)
 	if [ "$permissions" -eq 0 ]; then
 		# No permissions key: a new one, as the first setting.
-		grep -q '{' "$settings" || return 1
+		grep -q '{' "$2" || return 1
 		awk 'FNR == NR { rules[++n] = $0; next }
 			!done && (i = index($0, "{")) {
 				print substr($0, 1, i)
@@ -767,13 +777,11 @@ add_permission_rules() {
 				done = 1
 				next
 			}
-			{ print }' "$1" "$settings" >"$2"
+			{ print }' "$1" "$2" >"$3"
 		return
 	fi
-	# A single "allow" key, whose array opens at the end of its line or is empty.
-	[ "$permissions" -eq 1 ] && [ "$allow" -eq 1 ] || return 1
-	grep -Eq '"allow"[[:space:]]*:[[:space:]]*\[[[:space:]]*(\].*)?$' "$settings" || return 1
-	case $(tr -d ' \t\r\n' <"$settings") in
+	allow_shape "$2" || return 1
+	case $(tr -d ' \t\r\n' <"$2") in
 	*'"allow":[]'*) empty=1 ;;
 	*) empty=0 ;;
 	esac
@@ -791,43 +799,150 @@ add_permission_rules() {
 			done = 1
 			next
 		}
-		{ print }' "$1" "$settings" >"$2"
+		{ print }' "$1" "$2" >"$3"
 }
 
-# Add the members' permission rules to "permissions.allow" in settings.json, leaving every
-# other setting and rule as it is (#67 R1, R2, R4, R5, R6, R9).
-set_permissions() {
+# allow_shape FILE: whether FILE has a single "permissions" key and a single "allow" key,
+# whose array opens at the end of its line or is empty.
+allow_shape() {
+	[ "$(grep -o '"permissions"' "$1" | wc -l)" -eq 1 ] &&
+		[ "$(grep -o '"allow"' "$1" | wc -l)" -eq 1 ] &&
+		grep -Eq '"allow"[[:space:]]*:[[:space:]]*\[[[:space:]]*(\].*)?$' "$1"
+}
+
+# remove_permission_rules RULES SOURCE NEW: write to NEW the settings SOURCE without one
+# occurrence of each of RULES in "permissions.allow", and the comma that follows it, or
+# precedes it for the last rule. Fail when the shape of SOURCE is not recognized, or a rule
+# is not alone on its line in the array (#67 R7, R8, R14, R15).
+remove_permission_rules() {
+	allow_shape "$2" || return 1
+	awk 'FNR == NR { wanted["\"" $0 "\""] = 1; left++; next }
+		function flush() { if (held) print prev; held = 0 }
+		inside && /^[ \t]*\]/ { inside = 0 }
+		inside {
+			key = $0
+			sub(/^[ \t]+/, "", key)
+			sub(/[ \t]+$/, "", key)
+			comma = sub(/,$/, "", key)
+			if ((key in wanted) && wanted[key]) {
+				wanted[key] = 0
+				left--
+				# The last rule: the comma before it goes too.
+				if (!comma && held) sub(/,[ \t]*$/, "", prev)
+				next
+			}
+		}
+		match($0, /"allow"[ \t]*:[ \t]*\[[ \t]*$/) { inside = 1 }
+		{ flush(); prev = $0; held = 1 }
+		END { flush(); exit (left > 0) }' "$1" "$2" >"$3"
+}
+
+# print_rules FILE: print the rules of FILE as JSON strings, for the user to copy.
+print_rules() {
+	while IFS= read -r rule; do
+		printf '  "%s"\n' "$rule"
+	done <"$1"
+}
+
+# sync_permissions [uninstall]: bring "permissions.allow" in settings.json in line with the
+# rules the profile expects, and record in $permissions_record the rules kirakit inserted.
+# A rule already present that kirakit did not insert is the user's: neither recorded nor
+# removed. With "uninstall", every recorded rule is removed (#67 R1 to R9, R12 to R15).
+sync_permissions() {
 	settings=$CLAUDE_DIR/settings.json
 	work_dir
-	rules=$work/permissions
-	permission_rules | while IFS= read -r rule; do
-		# R5: a rule already present is not added again.
+	expected=$work/permissions-expected
+	recorded=$work/permissions-recorded
+	add=$work/permissions-add
+	remove=$work/permissions-remove
+	if [ "${1-}" = uninstall ]; then : >"$expected"; else permission_rules >"$expected"; fi
+	if [ -f "$permissions_record" ]; then cp "$permissions_record" "$recorded"; else : >"$recorded"; fi
+	: >"$add"
+	: >"$remove"
+	# R5, R13: an expected rule missing from the file is added, recorded or not.
+	while IFS= read -r rule; do
 		if [ ! -f "$settings" ] || ! grep -qF "\"$rule\"" "$settings"; then
+			printf '%s\n' "$rule" >>"$add"
+		fi
+	done <"$expected"
+	# R7, R8: a recorded rule no longer expected is removed, when it is still there.
+	while IFS= read -r rule; do
+		[ -n "$rule" ] || continue
+		if ! grep -qxF -- "$rule" "$expected" && [ -f "$settings" ] && grep -qF "\"$rule\"" "$settings"; then
+			printf '%s\n' "$rule" >>"$remove"
+		fi
+	done <"$recorded"
+
+	changed=0
+	if [ ! -s "$add" ] && [ ! -s "$remove" ]; then
+		[ ! -s "$expected" ] || log "up to date: $settings (permissions)"
+	else
+		new=$work/settings.json
+		if [ -f "$settings" ]; then cp "$settings" "$new.0"; else : >"$new.0"; fi
+		if [ -s "$remove" ]; then
+			if remove_permission_rules "$remove" "$new.0" "$new.1"; then
+				mv "$new.1" "$new.0"
+			else
+				log "warning: cannot remove the permission rules from $settings safely; left unchanged. Remove them by hand from \"permissions\": {\"allow\": [...]}:"
+				print_rules "$remove"
+				if [ -s "$add" ]; then
+					log "warning: nor add the permission rules; add them by hand to \"permissions\": {\"allow\": [...]}:"
+					print_rules "$add"
+				fi
+				# R15: the record is kept, so that a later run retries; uninstall drops it.
+				[ "${1-}" != uninstall ] || remove_permissions_record
+				return 0
+			fi
+		fi
+		if [ -s "$add" ]; then
+			if add_permission_rules "$add" "$new.0" "$new.1"; then
+				mv "$new.1" "$new.0"
+			else
+				log "warning: cannot add the permission rules to $settings safely; left unchanged. Add them by hand to \"permissions\": {\"allow\": [...]}:"
+				print_rules "$add"
+				return 0
+			fi
+		fi
+		backup_settings
+		while IFS= read -r rule; do
+			log "remove permission: $rule from $settings"
+		done <"$remove"
+		while IFS= read -r rule; do
+			log "set permission: $rule in $settings"
+		done <"$add"
+		if [ "$dry_run" -eq 0 ]; then
+			mkdir -p "$CLAUDE_DIR"
+			# Write in place to keep the file's permissions and any symlink.
+			cat "$new.0" >"$settings"
+		fi
+		changed=1
+	fi
+
+	if [ "${1-}" = uninstall ]; then
+		remove_permissions_record
+		return 0
+	fi
+	# The record: the expected rules kirakit inserted, now or earlier (R12).
+	while IFS= read -r rule; do
+		if grep -qxF -- "$rule" "$recorded" || { [ "$changed" -eq 1 ] && grep -qxF -- "$rule" "$add"; }; then
 			printf '%s\n' "$rule"
 		fi
-	done >"$rules"
-	if [ ! -s "$rules" ]; then
-		permission_rules | grep -q . && log "up to date: $settings (permissions)"
-		return 0
+	done <"$expected" >"$work/permissions-record"
+	if [ ! -s "$work/permissions-record" ]; then
+		remove_permissions_record
+	elif [ ! -f "$permissions_record" ] || ! cmp -s "$work/permissions-record" "$permissions_record"; then
+		log "save permission record: $permissions_record"
+		if [ "$dry_run" -eq 0 ]; then
+			mkdir -p "$CLAUDE_DIR"
+			cat "$work/permissions-record" >"$permissions_record"
+		fi
 	fi
+}
 
-	new=$work/settings.json
-	if ! add_permission_rules "$rules" "$new"; then
-		log "warning: cannot add the permission rules to $settings safely; left unchanged. Add them by hand to \"permissions\": {\"allow\": [...]}:"
-		while IFS= read -r rule; do
-			printf '  "%s"\n' "$rule"
-		done <"$rules"
-		return 0
-	fi
-
-	backup_settings
-	while IFS= read -r rule; do
-		log "set permission: $rule in $settings"
-	done <"$rules"
-	if [ "$dry_run" -eq 0 ]; then
-		mkdir -p "$CLAUDE_DIR"
-		# Write in place to keep the file's permissions and any symlink.
-		cat "$new" >"$settings"
+remove_permissions_record() {
+	if [ -f "$permissions_record" ]; then
+		log "remove permission record: $permissions_record"
+		run rm -f -- "$permissions_record"
 	fi
 }
 
@@ -859,7 +974,7 @@ install_claude() {
 	done
 	set_output_style
 	set_attribution
-	set_permissions
+	sync_permissions
 }
 
 # Copy github/ into the target repository's .github directory. Files are always copied:
@@ -949,6 +1064,8 @@ uninstall_all() {
 	done <"$manifest"
 	log "remove manifest: $manifest"
 	run rm -f -- "$manifest" "$originals"
+	# R8: only the rules kirakit added, as recorded.
+	sync_permissions uninstall
 	log "kept: $profile, $CLAUDE_DIR/.kirakit-backups and the outputStyle and attribution settings"
 }
 
@@ -1027,6 +1144,8 @@ while [ $# -gt 0 ]; do
 		shift
 		;;
 	--no-co-author) opt_co_author_trailer=no ;;
+	--allow-releases) opt_allow_releases=yes ;;
+	--no-allow-releases) opt_allow_releases=no ;;
 	--analyst) opt_analyst=yes ;;
 	--no-analyst) opt_analyst=no ;;
 	--reconfigure) reconfigure=1 ;;
