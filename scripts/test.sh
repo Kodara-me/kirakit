@@ -1237,6 +1237,44 @@ check 'record: removal refused on uninstall, warning (R15)' grep -qxF "  $iris_r
 check 'record: removal refused on uninstall, file unchanged (R15)' cmp -s "$tmp/record-unknown.json" "$claude/settings.json"
 check 'record: removal refused on uninstall, record removed (R15)' test ! -e "$claude/.kirakit-permissions"
 
+# --- the coder's permission rules (#79) ----------------------------------------------------
+
+cleo_rule='"Bash(GH_TOKEN=$(gh auth token --user cleo-bot) gh pr edit:*)"'
+lead_edit_rule='"Bash(GH_TOKEN=$(gh auth token --user kira-bot) gh pr edit:*)"'
+
+claude=$tmp/coder-rules-alone
+# An assistant without a GitHub account: the profile is complete, and only the coder has rules.
+kira --name Alex --gender female --language auto --assistant 'Kira <kira@example.com>' \
+	--coder 'Cleo <cleo@example.com>' --coder-github cleo-bot --copy >/dev/null
+check 'coder rules: her pull requests (R25)' contains "$claude/settings.json" "$cleo_rule"
+check 'coder rules: her issues (R25)' contains "$claude/settings.json" '"Bash(GH_TOKEN=$(gh auth token --user cleo-bot) gh issue comment:*)"'
+check 'coder rules: her board moves (R25)' contains "$claude/settings.json" '"Bash(GH_TOKEN=$(gh auth token --user cleo-bot) gh project item-edit:*)"'
+check 'coder rules: her work branches (R25)' sh -c 'grep -qF "\"Bash(git push -u origin feat/:*)\"" "$1" && grep -qF "\"Bash(git push origin --delete:*)\"" "$1"' _ "$claude/settings.json"
+check 'coder rules: she cannot push main (R25, D25)' test "$(occurrences 'origin main')" = 0
+check 'coder rules: no release or tag (R25)' sh -c '! grep -q -e "release create" -e "origin v:" "$1"' _ "$claude/settings.json"
+check 'coder rules: 24 rules (R25)' test "$(rule_count "$claude/settings.json")" = 24
+check 'coder rules: recorded (R25)' recorded "$cleo_rule"
+check 'coder rules: rerun changes nothing (R25)' unchanged kira --copy
+
+claude=$tmp/coder-rules-team
+kira_team --coder 'Cleo <cleo@example.com>' --coder-github cleo-bot --copy >/dev/null
+check "coder rules: the lead's pr edit with a coder (R27)" contains "$claude/settings.json" "$lead_edit_rule"
+check 'coder rules: the shared push rules once (R25)' test "$(occurrences '"Bash(git push origin feat/:*)"')" = 1
+check 'coder rules: the lead still pushes main (R25)' test "$(occurrences "$main_rule")" = 1
+check 'coder rules: team, valid JSON (R25)' valid_json "$claude/settings.json"
+kira --copy --coder-github '' >/dev/null
+check 'coder rules: removed without her account (R25)' test "$(occurrences 'user cleo-bot')" = 0
+check "coder rules: the lead's pr edit removed with her (R27)" test "$(occurrences "$lead_edit_rule")" = 0
+check 'coder rules: the shared push rules stay for the lead (R25)' test "$(occurrences '"Bash(git push origin feat/:*)"')" = 1
+check 'coder rules: back to the team without a coder (R25)' test "$(rule_count "$claude/settings.json")" = 33
+check 'coder rules: removal, valid JSON (R25)' valid_json "$claude/settings.json"
+check 'coder rules: removal, record updated (R25)' sh -c '! grep -q -e "user cleo-bot" -e "pr edit" "$1"' _ "$claude/.kirakit-permissions"
+
+claude=$tmp/coder-rules-none
+kira_team --coder 'Cleo <cleo@example.com>' --copy >/dev/null
+check "coder rules: no account, no rule (R25)" sh -c '! grep -q "pr edit" "$1"' _ "$claude/settings.json"
+check "coder rules: no lead's pr edit without a coder account (R27)" test "$(rule_count "$claude/settings.json")" = 33
+
 # --- no terminal ---------------------------------------------------------------------------
 
 claude=$tmp/generic

@@ -171,6 +171,8 @@ jobs:
           # The members' permission rules are in the settings compared above (#67 R10).
           grep -qF '"Bash(GH_TOKEN=$(gh auth token --user kira-bot) gh issue create:*)",' "$RUNNER_TEMP/ps-assistant/settings.json"
           grep -qF '"Bash(GH_TOKEN=$(gh auth token --user iris-bot) gh project item-list:*)"' "$RUNNER_TEMP/ps-analyst/settings.json"
+          grep -qF '"Bash(GH_TOKEN=$(gh auth token --user cleo-bot) gh pr edit:*)"' "$RUNNER_TEMP/ps-coder/settings.json"
+          if grep -qF 'git push origin main' "$RUNNER_TEMP/ps-coder/settings.json"; then exit 1; fi
       - name: Permission rules in an existing settings.json
         # Both installers merge the rules into the same shapes, and leave the others unchanged.
         run: |
@@ -230,6 +232,8 @@ jobs:
               --assistant) set -- "$@" -Assistant "$2"; shift ;;
               --assistant-github) set -- "$@" -AssistantGithub "$2"; shift ;;
               --analyst-github) set -- "$@" -AnalystGithub "$2"; shift ;;
+              --coder) set -- "$@" -Coder "$2"; shift ;;
+              --coder-github) set -- "$@" -CoderGithub "$2"; shift ;;
               *) echo "::error::no PowerShell form for $1"; exit 1 ;;
               esac
               shift
@@ -288,6 +292,12 @@ jobs:
           step 'shared rule' --copy --only claude --analyst-github kira-new
           step 'analyst removed' --copy --only claude --no-analyst
           grep -qF 'user kira-new) gh issue create' "$RUNNER_TEMP/rec-ps/settings.json"
+          # #79 R25, R27: the coder's rules, and the lead's pr edit, come and go with her account.
+          step 'coder added' --copy --only claude --coder 'Cleo <cleo@example.com>' --coder-github cleo-bot
+          grep -qF 'user kira-new) gh pr edit' "$RUNNER_TEMP/rec-ps/settings.json"
+          grep -qF 'user cleo-bot) gh pr edit' "$RUNNER_TEMP/rec-ps/settings.json"
+          step 'coder account removed' --copy --only claude --coder-github ''
+          if grep -qF -e 'user cleo-bot' -e 'gh pr edit' "$RUNNER_TEMP/rec-ps/settings.json"; then exit 1; fi
           # R15: an array on one line; removal is refused, the record kept.
           edit awk '/"allow": \[/ { line = $0; joined = 1; next }
             joined && /^ *\]/ { sub(/^ */, ""); print line $0; joined = 0; next }

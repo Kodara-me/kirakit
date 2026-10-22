@@ -190,10 +190,13 @@ for `GH_TOKEN=$(gh auth token --user LOGIN) gh`, with that member's login:
 | --- | --- |
 | Assistant (`--assistant-github`) | `Bash(P issue create:*)`, `issue edit`, `issue comment`, `issue close`; `Bash(P pr create:*)`, `pr comment`, `pr review`; `Bash(P label create:*)`; `Bash(git push -u origin TYPE/:*)` and `Bash(git push origin TYPE/:*)` for `feat`, `fix`, `docs`, `refactor`, `test`, `chore` and `ci`; `Bash(git push origin main)`; `Bash(git push origin --delete:*)`; `Bash(P project item-edit:*)` and `Bash(P project item-add:*)` |
 | Assistant, with `--allow-releases` | Also `Bash(P release create:*)` and `Bash(git push origin v:*)` |
+| Assistant, with a coder's account | Also `Bash(P pr edit:*)`, to request your review on the coder's approved pull requests |
 | Analyst (`--analyst-github`) | `Bash(P issue create:*)`, `issue edit`, `issue comment`, `issue close`; `Bash(P label create:*)`; `Bash(P project item-edit:*)` and `Bash(P project item-list:*)` |
+| Coder (`--coder-github`) | `Bash(P issue create:*)`, `issue edit`, `issue comment`; `Bash(P pr create:*)`, `pr comment`, `pr review`, `pr edit`; the assistant's work branch pushes and `Bash(git push origin --delete:*)`; `Bash(P project item-edit:*)` and `Bash(P project item-add:*)`. Not `git push origin main`: the assistant merges |
 
-A member without a GitHub account gets no rules, and the coder gets none from the installer
-yet: add hers by hand. An allowed rule only removes the prompt: the git rules still ask for an
+A member without a GitHub account gets no rules. The `git push` rules are not tied to an
+account: with a coder, `git push origin main` is still there when the assistant has an account,
+since the assistant merges. An allowed rule only removes the prompt: the git rules still ask for an
 explicit request before a release or a tag. `--dry-run` lists the rules that would be added or
 removed.
 
@@ -332,10 +335,8 @@ assistant's. The examples use `cleo` and `cleo@example.com`.
    ssh-keygen -t ed25519 -N "" -C "cleo@example.com (git signing)" -f ~/.ssh/cleo_signing_ed25519
    ```
 
-5. If Claude Code runs in auto mode, add allow rules for her writes to `permissions.allow`
-   in `settings.json` by hand, in the form of the assistant's (see
-   [Permission rules](#permission-rules)): the installer does not add the coder's yet.
-6. Run the installer with her identity:
+5. Run the installer with her identity. With her GitHub account, it also adds the allow rules
+   her writes need in auto mode (see [Permission rules](#permission-rules)):
 
    ```sh
    ./get-kira.sh --coder "Cleo <cleo@example.com>" \

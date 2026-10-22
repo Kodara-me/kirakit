@@ -924,18 +924,22 @@ function Install-KiraOutputStyle([string]$Style) {
     }
 }
 
-# The permission rules the members' GitHub accounts need, without duplicates (#67 R1, R2, R3;
-# mirrors permission_rules in get-kira.sh).
+# The permission rules the members' GitHub accounts need, without duplicates: a rule several
+# members need is listed once (#67 R1, R2, R3; #79 R25, R27; mirrors permission_rules in
+# get-kira.sh).
 function Get-KiraPermissionRule($UserProfile) {
     $rules = New-Object System.Collections.Generic.List[string]
     $assistantLogin = [string]$UserProfile.assistant_github
     $analystLogin = [string]$UserProfile.analyst_github
+    $coderLogin = [string]$UserProfile.coder_github
     if ($assistantLogin) {
         $gh = 'GH_TOKEN=$(gh auth token --user ' + $assistantLogin + ') gh'
         foreach ($command in @('issue create', 'issue edit', 'issue comment', 'issue close',
                 'pr create', 'pr comment', 'pr review', 'label create')) {
             $rules.Add("Bash($gh ${command}:*)")
         }
+        # With a coder, the lead requests the user's review on her pull requests (#79 R27).
+        if ($coderLogin) { $rules.Add("Bash($gh pr edit:*)") }
         foreach ($type in @('feat', 'fix', 'docs', 'refactor', 'test', 'chore', 'ci')) {
             $rules.Add("Bash(git push -u origin $type/:*)")
             $rules.Add("Bash(git push origin $type/:*)")
@@ -955,6 +959,22 @@ function Get-KiraPermissionRule($UserProfile) {
                 'label create', 'project item-edit', 'project item-list')) {
             $rules.Add("Bash($gh ${command}:*)")
         }
+    }
+    # The coder: her issues, pull requests, work branches and board moves, but not main, which
+    # the lead pushes when she merges (#79 R25, D25).
+    if ($coderLogin) {
+        $gh = 'GH_TOKEN=$(gh auth token --user ' + $coderLogin + ') gh'
+        foreach ($command in @('issue create', 'issue edit', 'issue comment',
+                'pr create', 'pr comment', 'pr review', 'pr edit')) {
+            $rules.Add("Bash($gh ${command}:*)")
+        }
+        foreach ($type in @('feat', 'fix', 'docs', 'refactor', 'test', 'chore', 'ci')) {
+            $rules.Add("Bash(git push -u origin $type/:*)")
+            $rules.Add("Bash(git push origin $type/:*)")
+        }
+        $rules.Add('Bash(git push origin --delete:*)')
+        $rules.Add("Bash($gh project item-edit:*)")
+        $rules.Add("Bash($gh project item-add:*)")
     }
     $unique = New-Object System.Collections.Generic.List[string]
     foreach ($rule in $rules) {

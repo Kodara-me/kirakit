@@ -716,7 +716,8 @@ set_output_style() {
 }
 
 # permission_rules: print the permission rules the members' GitHub accounts need, one per
-# line, without duplicates (#67 R1, R2, R3).
+# line, without duplicates: a rule several members need is listed once (#67 R1, R2, R3;
+# #79 R25, R27).
 permission_rules() {
 	{
 		if [ -n "$assistant_github" ]; then
@@ -725,6 +726,8 @@ permission_rules() {
 				'pr create' 'pr comment' 'pr review' 'label create'; do
 				printf 'Bash(%s %s:*)\n' "$gh" "$command"
 			done
+			# With a coder, the lead requests the user's review on her pull requests (#79 R27).
+			[ -z "$coder_github" ] || printf 'Bash(%s pr edit:*)\n' "$gh"
 			for type in feat fix docs refactor test chore ci; do
 				printf 'Bash(git push -u origin %s/:*)\n' "$type"
 				printf 'Bash(git push origin %s/:*)\n' "$type"
@@ -743,6 +746,22 @@ permission_rules() {
 				'label create' 'project item-edit' 'project item-list'; do
 				printf 'Bash(%s %s:*)\n' "$gh" "$command"
 			done
+		fi
+		# The coder: her issues, pull requests, work branches and board moves, but not main,
+		# which the lead pushes when she merges (#79 R25, D25).
+		if [ -n "$coder_github" ]; then
+			gh="GH_TOKEN=\$(gh auth token --user $coder_github) gh"
+			for command in 'issue create' 'issue edit' 'issue comment' \
+				'pr create' 'pr comment' 'pr review' 'pr edit'; do
+				printf 'Bash(%s %s:*)\n' "$gh" "$command"
+			done
+			for type in feat fix docs refactor test chore ci; do
+				printf 'Bash(git push -u origin %s/:*)\n' "$type"
+				printf 'Bash(git push origin %s/:*)\n' "$type"
+			done
+			printf '%s\n' 'Bash(git push origin --delete:*)'
+			printf 'Bash(%s project item-edit:*)\n' "$gh"
+			printf 'Bash(%s project item-add:*)\n' "$gh"
 		fi
 	} | awk '!seen[$0]++'
 }
