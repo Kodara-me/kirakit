@@ -8,7 +8,7 @@ machine with one command.
 | Path | Purpose |
 | --- | --- |
 | `personas/` | Claude Code output styles: `_core.md` holds the traits shared by every persona, each other file is an overlay (`kira-cozy.md`, …) |
-| `team/` | Team members beside Kira, one file each (`iris.md`), built into an output style and an agent |
+| `team/` | Team members beside Kira, one file each (`iris.md`, `cleo.md`), built into an output style and an agent |
 | `claude/` | Content for `~/.claude/`: `CLAUDE.md`, `rules/`, `skills/`, `agents/` |
 | `launchers/` | Commands that start a team member or the whole team (`assistant`, `analyst`, `team`), and their Konsole color schemes |
 | `github/` | Issue and pull request templates, a workflow and Copilot instructions to copy into a repository's `.github/` |
@@ -60,8 +60,8 @@ In `$CLAUDE_CONFIG_DIR` (default: `~/.claude`):
 | Path | Component |
 | --- | --- |
 | `output-styles/kira-*.md` | `styles` |
-| `output-styles/iris.md`, with an analyst | `styles` |
-| `CLAUDE.md`, `rules/git.md`, `skills/*`, `agents/*` (`rules/team.md` and `agents/iris.md` with an analyst) | `claude` |
+| `output-styles/iris.md`, with an analyst; `output-styles/cleo.md`, with a coder | `styles` |
+| `CLAUDE.md`, `rules/git.md`, `skills/*`, `agents/*` (`rules/team.md` with an analyst or a coder, `agents/iris.md` with an analyst, `agents/cleo.md` with a coder) | `claude` |
 | `outputStyle` and `attribution` in `settings.json` | `claude` — only these keys are changed; the file is edited in place |
 | `.kirakit-profile`, `.kirakit-manifest`, `.kirakit-originals` | Profile and the record used by `--uninstall` |
 | `.kirakit-backups/<timestamp>/` | Files that were replaced or removed |
@@ -81,8 +81,8 @@ a pull request template, Copilot instructions, and a workflow that checks pull r
 
 ### Options
 
-`get-kira.ps1` takes the same options in PowerShell form (`-DryRun`, `-Name`, `-CoAuthor`, …;
-see `Get-Help .\get-kira.ps1 -Detailed`).
+`get-kira.ps1` takes the same options in PowerShell form (`-DryRun`, `-Name`, `-CoAuthor`,
+`-Coder`, `-CoderSigningKey`, `-CoderGithub`, …; see `Get-Help .\get-kira.ps1 -Detailed`).
 
 | Option | Effect |
 | --- | --- |
@@ -98,6 +98,9 @@ see `Get-Help .\get-kira.ps1 -Detailed`).
 | `--analyst` | Add Iris, an analyst for ideas and specifications, to the team |
 | `--no-analyst` | No analyst: Kira writes ideas and specifications herself |
 | `--analyst-github LOGIN` | The analyst's own GitHub account (implies `--analyst`; empty: none) |
+| `--coder "NAME <EMAIL>"` | Add Cleo, a coder who implements the tasks, with her git identity (default: none) |
+| `--coder-signing-key PATH` | The coder's public SSH signing key (empty: she cannot commit) |
+| `--coder-github LOGIN` | The coder's own GitHub account (empty: none) |
 | `--default-style PERSONA` | Style selected in `settings.json` (default: `kira-cozy`) |
 | `--assistant-style PERSONA` | Style of the `assistant` launcher (default: the default style) |
 | `--bin-dir DIR` | Where the launchers go, an absolute path (default: `~/.local/bin`) |
@@ -126,16 +129,20 @@ on the terminal even when piped from curl:
 - the assistant: its name and email, the path to its public SSH signing key and its GitHub
   login (both optional), and whether commits get `Co-Authored-By` trailers;
 - whether the team has an analyst, Iris, and her GitHub login (optional). She never commits,
-  so there is no signing key to give for her.
+  so there is no signing key to give for her;
+- the coder, Cleo: her name and email (an empty email means no coder), then the path to her
+  public SSH signing key and her GitHub login (both optional).
 
 A profile saved by an earlier version, with a `co_author` value, is migrated: the co-author
 becomes the assistant, with trailers. A profile saved before the analyst reads as no analyst,
-and the question is not asked again: pass `--analyst` or `--analyst-github` to add her.
+and the question is not asked again: pass `--analyst` or `--analyst-github` to add her. A
+profile saved before the coder reads as no coder in the same way: pass `--coder` to add her.
+The coder's values are saved as `coder`, `coder_signing_key` and `coder_github`.
 
 The answers are saved in `$CLAUDE_CONFIG_DIR/.kirakit-profile` and reused by later runs; only
 questions that are not answered yet are asked. Options override the saved values, and
 `--reconfigure` asks everything again. Without a terminal, unanswered values fall back to
-defaults: no name, `unspecified`, `auto`, no assistant, no analyst; the optional assistant
+defaults: no name, `unspecified`, `auto`, no assistant, no analyst, no coder; the optional assistant
 values default to empty, and trailers to yes when there is an assistant.
 
 ### Who commits
@@ -156,6 +163,10 @@ The git rules (`rules/git.md`, which Claude Code loads on its own) follow the pr
   With her own GitHub account (`--analyst-github`), her work (ideas, specifications,
   sub-issues, labels and clarification comments) is written as that account, whoever does
   it; the `idea` and `spec` skills use it too. Any login works, your own included.
+- **With a coder,** Cleo writes the code, commits it with `assistant-commit` under her own
+  identity and key, and opens the pull requests; the assistant leads and never commits. With
+  her own GitHub account (`--coder-github`), her pull requests, comments, replies and board
+  moves are written as that account, and her pull requests ask for the assistant's review.
 
 The installer also sets `"attribution": {"commit": "", "pr": ""}` in `settings.json`, so
 Claude Code stops suggesting its own trailer and pull request footer. If `attribution` is
@@ -244,6 +255,43 @@ Iris only writes issues and comments, so her account needs no signing key. The e
    `gh issue edit` and `gh issue comment`.
 6. Run the installer with her login: `./get-kira.sh --analyst-github iris`.
 
+### Give the coder her own identity
+
+Cleo commits, so she needs both a GitHub account and a signing key, set up like the
+assistant's. The examples use `cleo` and `cleo@example.com`.
+
+1. Create a GitHub account for her, with its email address verified, and upload her avatar
+   (Settings → Public profile).
+2. Log it in to `gh`, with the `project` scope for the board, then switch back to your
+   account so it stays the active one:
+
+   ```sh
+   gh auth login -h github.com --skip-ssh-key -s project
+   gh auth switch -h github.com -u <your login>
+   ```
+
+3. Give her Write access to the repositories she works on: in an organization, add her to a
+   team that has it (such as `developers`); otherwise, make her a collaborator (`push`) and
+   accept the invitations as her, as for the analyst. For a project board, add her as a
+   Writer if the team does not give her access.
+4. Create a signing key without a passphrase, and register it on her account as a signing
+   key only (Settings → SSH and GPG keys → New SSH key → Key type: Signing Key), not as an
+   authentication key: pushes go through your own access, and a key without a passphrase
+   should not open her account.
+
+   ```sh
+   ssh-keygen -t ed25519 -N "" -C "cleo@example.com (git signing)" -f ~/.ssh/cleo_signing_ed25519
+   ```
+
+5. If Claude Code runs in auto mode, add allow rules for her writes to `permissions.allow`
+   in `settings.json`, as for the analyst.
+6. Run the installer with her identity:
+
+   ```sh
+   ./get-kira.sh --coder "Cleo <cleo@example.com>" \
+       --coder-signing-key ~/.ssh/cleo_signing_ed25519.pub --coder-github cleo
+   ```
+
 ### Updates, backups and uninstall
 
 The installer is idempotent: files already up to date are left alone, and any other existing
@@ -286,21 +334,32 @@ descriptions, commits, code, code comments and documents stay neutral and profes
 
 ## The team
 
-Beside Kira, the developer, the team can have an analyst: **Iris**, installed with
-`--analyst`. She clarifies ideas, writes specifications and splits them into tasks; Kira
-implements them. Having someone else write the specification gives it a real second look:
-a gap Kira finds while coding goes back to Iris as a comment instead of being settled
-silently. The team stays small on purpose.
+Beside Kira, the team can have an analyst: **Iris**, installed with `--analyst`. She
+clarifies ideas, writes specifications and splits them into tasks; Kira implements them.
+Having someone else write the specification gives it a real second look: a gap found while
+coding goes back to Iris as a comment instead of being settled silently.
+
+The team can also have a coder: **Cleo**, installed with `--coder`. She implements the tasks
+and opens the pull requests, and Kira becomes the lead: she hands Cleo the work, reviews her
+pull requests before you do, and merges once you approve. The team stays small on purpose.
 
 Iris is calm, precise and curious. She asks "why" before "how", restates what she
 understood, points out gaps and contradictions, settles the questions that have a good
 answer and records them, and asks only about real trade-offs.
 
+Cleo is modest and practical, and speaks like a clean terminal log: what she changed, what
+she ran, what passed. She marks her status lines with a `>` instead of emoticons, and when
+she is blocked she asks one precise question.
+
+Each member's voice shows in the conversation and in her comments on GitHub (issues, pull
+requests, review comments and replies). Issue bodies, pull request descriptions, commits,
+code and documentation stay neutral, whoever writes them.
+
 ### Working through the lead
 
-With an analyst, Kira leads the team: you talk to the team through one conversation, Kira's,
-and she keeps its context for you. The rules are in `rules/team.md`, installed only with an
-analyst.
+With an analyst or a coder, Kira leads the team: you talk to the team through one
+conversation, Kira's, and she keeps its context for you. The rules are in `rules/team.md`,
+installed only with an analyst or a coder.
 
 - **Ideas and specifications go to Iris in the background.** When you ask Kira to capture
   an idea, specify one, change a specification or answer a question about one, she hands it
@@ -322,8 +381,21 @@ analyst.
 - On GitHub, Iris's work is still written as her account (see
   [Give the analyst a GitHub account](#give-the-analyst-a-github-account)).
 
-A second stage, a coder with her own GitHub account and signing key whose pull requests Kira
-reviews before you, is planned in [#79](https://github.com/Kodara-me/kirakit/issues/79).
+With a coder, code goes through Cleo the same way:
+
+- **Kira hands her the work.** The task `next-task` gives, and any change to code you ask
+  for, goes to the `cleo` agent in the background, one task at a time. Kira never writes
+  code or commits herself, and a new request about Cleo's running task goes to that task.
+- **Cleo opens the pull request, Kira reviews it first.** Kira reviews it on GitHub as her own
+  account. Once she approves, she requests your review; changes requested, by her or by you,
+  go back to Cleo, who makes them, replies to the comments and asks Kira again.
+- **Kira reports in a few lines:** the pull request's URL, the tasks it closes, her review
+  result and any question for you. Cleo's intermediate work stays out of the conversation.
+- **Kira merges after your own approval.** Her approval also counts in GitHub's
+  `reviewDecision`, so she merges only when your latest review approves the last commit,
+  then picks the next task.
+- A gap Cleo finds in a specification goes to Iris (to you, without an analyst) in a comment
+  on the issue, and that task waits for the answer.
 
 ### Talking to Iris directly
 
@@ -340,8 +412,9 @@ The lead setup changes nothing for a direct conversation with Iris:
 A member is written once, in `team/<name>.md`, and built into both `output-styles/<name>.md`
 and `agents/<name>.md`, with the same body. Its front matter holds `name` and `description`
 for the output style, and `delegate`, the agent's description: when to hand work to this
-member. Iris's file sits in a `{{#analyst}}` block, so without an analyst nothing is built or
-installed.
+member, and an optional `model` for the agent alone. Iris's file sits in a `{{#analyst}}`
+block and Cleo's in a `{{#coder}}` block, so without them nothing is built or installed.
+Cleo's agent runs on Opus; her output style keeps the session's model.
 
 ## Launchers
 
@@ -468,6 +541,10 @@ identity):
 | `{{assistant_name}}`, `{{assistant_email}}` | The assistant's git identity, or nothing |
 | `{{assistant_signing_key}}` | Path to the assistant's public SSH signing key, or nothing |
 | `{{assistant_github}}` | The assistant's GitHub login, or nothing |
+| `{{analyst}}`, `{{analyst_github}}` | "yes" when the team has an analyst, and her GitHub login, or nothing |
+| `{{coder}}` | The coder's git identity, "NAME <EMAIL>", or nothing |
+| `{{coder_name}}`, `{{coder_email}}` | The coder's name and email, or nothing |
+| `{{coder_signing_key}}`, `{{coder_github}}` | The coder's public SSH signing key and GitHub login, or nothing |
 | `{{assistant_style}}`, `{{analyst_style}}` | The name of the assistant's and the analyst's output style, e.g. "Kira (cozy)" and "Iris" |
 
 A line holding only a placeholder that expands to nothing is removed.
