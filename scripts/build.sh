@@ -365,7 +365,8 @@ front_matter() {
 
 # build_member FILE: render a team member's persona (team/NAME.md), written once, into both an
 # output style and an agent with the same body. Its front matter holds the style's name and
-# description, and "delegate", the agent's description: when to hand work to this member.
+# description, "delegate", the agent's description: when to hand work to this member, and an
+# optional "model", the agent's model.
 build_member() {
 	member=$(basename "$1" .md)
 	rendered=$out_dir/.$member.member.tmp
@@ -387,6 +388,7 @@ build_member() {
 	title=$(front_matter "$rendered" name)
 	description=$(front_matter "$rendered" description)
 	delegate=$(front_matter "$rendered" delegate)
+	model=$(front_matter "$rendered" model)
 	if [ "$(head -n 1 "$rendered")" != --- ] || [ -z "$title" ] || [ -z "$description" ] || [ -z "$delegate" ]; then
 		rm -f "$rendered"
 		die "$1: missing front matter with name, description and delegate"
@@ -401,7 +403,11 @@ build_member() {
 	} >"$style.tmp"
 	{
 		printf '%s
-' --- "name: $member" "description: $delegate" --- ''
+' --- "name: $member" "description: $delegate"
+		[ -z "$model" ] || printf 'model: %s
+' "$model"
+		printf '%s
+' --- ''
 		cat "$body"
 	} >"$agent.tmp"
 	rm -f "$rendered" "$body"

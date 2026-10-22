@@ -727,7 +727,9 @@ function Build-KiraMember([string]$Out, [string]$Path, $Values) {
     }
     foreach ($file in @($style, $agent)) { New-Item -ItemType Directory -Force -Path (Split-Path -Parent $file) | Out-Null }
     Write-KiraText $style (Join-KiraLine (@('---', "name: $($fields.name)", "description: $($fields.description)", 'keep-coding-instructions: true', '---', '') + $body.ToArray()))
-    Write-KiraText $agent (Join-KiraLine (@('---', "name: $member", "description: $($fields.delegate)", '---', '') + $body.ToArray()))
+    $agentHead = @('---', "name: $member", "description: $($fields.delegate)")
+    if ($fields['model']) { $agentHead += "model: $($fields.model)" }
+    Write-KiraText $agent (Join-KiraLine ($agentHead + @('---', '') + $body.ToArray()))
 }
 
 function Build-KiraOutput($UserProfile) {

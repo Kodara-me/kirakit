@@ -160,6 +160,10 @@ jobs:
           done
           test -f "$RUNNER_TEMP/ps-analyst/agents/iris.md"
           test -f "$RUNNER_TEMP/ps-analyst/output-styles/iris.md"
+          test -f "$RUNNER_TEMP/ps-coder/agents/cleo.md"
+          grep -qx 'model: opus' "$RUNNER_TEMP/ps-coder/agents/cleo.md"
+          test -f "$RUNNER_TEMP/ps-coder/output-styles/cleo.md"
+          test ! -e "$RUNNER_TEMP/ps-analyst/agents/cleo.md"
       - name: Optional files
         # A template wholly inside a block that is dropped is neither built nor installed, and
         # is removed when an earlier run installed it, by both installers.

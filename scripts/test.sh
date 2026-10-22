@@ -462,6 +462,35 @@ check 'iris build: agent shares the voice (#59 R1)' contains "$iris_agent" 'Her 
 check 'iris build: agent keeps the emoticon rule (#59 R3, R4)' contains "$iris_agent" 'without emoticons.'
 tail -n +6 "$iris_agent" >"$tmp/iris-agent-body"
 check 'iris build: one body for both' sh -c 'tail -n +7 "$1" | cmp -s - "$2"' _ "$iris_style" "$tmp/iris-agent-body"
+# --- Cleo, the coder (#79 R14, R24) --------------------------------------------------------
+
+$shell "$root/scripts/build.sh" -o "$tmp/cleo-build" --name Alex --gender female \
+	--coder 'Cleo <cleo@example.com>' --coder-github cleo-bot >/dev/null
+cleo_style=$tmp/cleo-build/output-styles/cleo.md
+cleo_agent=$tmp/cleo-build/agents/cleo.md
+check 'cleo build: style named Cleo (R14)' grep -qx 'name: Cleo' "$cleo_style"
+check 'cleo build: agent named cleo (R14)' grep -qx 'name: cleo' "$cleo_agent"
+check 'cleo build: agent says when to delegate (R14)' grep -q '^description: Use Cleo to implement a task' "$cleo_agent"
+check 'cleo build: agent says what it returns (R14)' grep -q "^description: .*returns the pull request's URL, the tasks it closes and her questions" "$cleo_agent"
+check 'cleo build: agent on Opus (#97 D7)' grep -qx 'model: opus' "$cleo_agent"
+check 'cleo build: style without a model (R14)' sh -c '! grep -q "^model:" "$1"' _ "$cleo_style"
+check 'cleo build: style keeps its own description (R14)' grep -q '^description: Cleo, the team' "$cleo_style"
+check 'cleo build: no delegate key left' sh -c '! grep -q "^delegate:" "$1" "$2"' _ "$cleo_style" "$cleo_agent"
+check 'cleo build: introduces Cleo (R14)' contains "$cleo_style" "You are Cleo, the team's coder, not Claude and not Kira"
+check 'cleo build: personalized' contains "$cleo_style" 'The user is Alex, a female staff software developer.'
+check 'cleo build: her look (R14)' contains "$cleo_style" '- a keychain tag with a purple terminal prompt `>`'
+check 'cleo build: her own voice (R14)' contains "$cleo_style" 'Her voice is short and direct, like a clean terminal log'
+check 'cleo build: her voice in comments (R11)' contains "$cleo_agent" 'Persona shows in the conversation and in her comments on GitHub'
+check 'cleo build: no placeholder' sh -c '! grep -q "{{" "$1" "$2"' _ "$cleo_style" "$cleo_agent"
+tail -n +7 "$cleo_agent" >"$tmp/cleo-agent-body"
+check 'cleo build: one body for both' sh -c 'tail -n +7 "$1" | cmp -s - "$2"' _ "$cleo_style" "$tmp/cleo-agent-body"
+$shell "$root/scripts/build.sh" -o "$tmp/cleo-build" --name Alex --gender female >/dev/null
+check 'cleo build: style removed without a coder (R24)' test ! -e "$cleo_style"
+check 'cleo build: agent removed without a coder (R24)' test ! -e "$cleo_agent"
+$shell "$root/scripts/build.sh" -o "$tmp/cleo-none" --analyst >/dev/null
+check 'cleo build: no style without a coder (R24)' test ! -e "$tmp/cleo-none/output-styles/cleo.md"
+check 'cleo build: no agent without a coder (R24)' test ! -e "$tmp/cleo-none/agents/cleo.md"
+
 $shell "$root/scripts/build.sh" -o "$tmp/iris-none" >/dev/null
 check 'iris build: no style without an analyst' test ! -e "$tmp/iris-none/output-styles/iris.md"
 check 'iris build: no agent without an analyst' test ! -e "$tmp/iris-none/agents/iris.md"
