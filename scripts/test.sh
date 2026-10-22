@@ -142,6 +142,14 @@ for build in build2 build3; do
 	check "rules: board moves, $build (#64 R1, R2, R3)" contains "$tmp/$build/rules/git.md" 'a task goes to In progress when you start it, before creating its'
 	check "rules: specification and pull request moves, $build (#64 R7, R9, R10)" contains "$tmp/$build/rules/git.md" 'request is added to its tasks'"'"' boards in In review'
 done
+next=$tmp/build3/skills/next-task/SKILL.md
+check 'next-task: built (#89 R12)' test -f "$next"
+check 'next-task: Ready and In progress specifications (#89 R11)' contains "$next" 'whose `status` is Ready or In progress'
+check 'next-task: no board, status:ready on the specification (#89 R11)' contains "$next" '--label type:feature --label status:ready'
+check 'next-task: skips taken, blocked, waiting and overlapping tasks (#89 R12)' sh -c 'grep -q "it is taken" "$1" && grep -q "blockedBy" "$1" && grep -q "with no answer after it" "$1" && grep -q "open pull request in review" "$1"' _ "$next"
+check "next-task: the developer's account (#89 R12)" contains "$next" '`kira-bot`'
+check 'next-task: issues with no specification (#89 R11)' contains "$next" 'issues with no parent'
+check 'next-task: nothing workable (#89 R13)' contains "$next" 'Nothing workable.'
 board=$tmp/build3/skills/board-status/SKILL.md
 check 'board-status: built (#64)' test -f "$board"
 check 'board-status: writes as the developer (#64 R6)' contains "$board" 'GH_TOKEN=$(gh auth token --user kira-bot)'
@@ -720,6 +728,7 @@ kira_profile >/dev/null
 check 'link: styles are links' test -L "$claude/output-styles/kira-cozy.md"
 check 'link: skills are links' test -L "$claude/skills/commit"
 check 'link: board-status installed (#64)' test -L "$claude/skills/board-status"
+check 'link: next-task installed (#89)' test -L "$claude/skills/next-task"
 check 'link: CLAUDE.md is a link' test -L "$claude/CLAUDE.md"
 check 'link: rules are links' test -L "$claude/rules/git.md"
 check 'link: outputStyle set' contains "$claude/settings.json" '"outputStyle": "Kira (cozy)"'
