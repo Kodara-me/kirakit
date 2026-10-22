@@ -106,11 +106,16 @@ check 'spec: written in one pass (#51 R6)' sh -c 'grep -q "in one pass, without 
 check 'spec: phase by phase on request (#51 R6)' contains "$spec_skill" 'When the user asks to work phase by phase'
 check 'spec: a Decisions section (#51 R7)' sh -c 'grep -qx "### Decisions" "$1" && grep -qF -- "- **D1** — <question>: <choice>. <reason>" "$1"' _ "$spec_skill"
 check 'spec: publishes without confirmation (#51 R8)' sh -c 'grep -q "Publish without asking for" "$1" && ! grep -q "ask for confirmation" "$1" && ! grep -q "the same confirmation" "$1"' _ "$spec_skill"
-check 'spec: tasks marked Ready (#51 R8)' contains "$spec_skill" '--label type:task --label status:ready'
+check 'spec: tasks not marked Ready (#89 R10)' sh -c 'grep -q -- "--label type:task\`" "$1" && ! grep -q -- "--label status:ready" "$1"' _ "$spec_skill"
+check 'spec: parent moved to Specified (#89 R10)' contains "$spec_skill" '`board-status <parent> Specified`'
+check 'spec: no Specified option reported (#89 R15)' contains "$spec_skill" 'When the board has no Specified option, say so'
+check 'spec: no question without questions (#89 R10)' contains "$spec_skill" 'Ready for you: move it to Ready when you want'
+check 'spec: questions still end with a question (#89 R2)' contains "$spec_skill" 'end with a short question, as in step 2'
+check 'spec: closing lines on questions (#89 R3)' contains "$spec_skill" 'Questions for'
 check 'spec: no assignee without an assistant account (#51 R8)' sh -c '! grep -q -- "--assignee" "$1"' _ "$spec_skill"
 check 'spec: summary comment (#51 R9)' contains "$spec_skill" 'post a summary comment on the parent that mentions the user'
 check 'spec: a reversal applied (#51 R10)' contains "$spec_skill" 'or reverses a decision on the'
-check 'spec: affected tasks lose Ready (#51 R10)' contains "$spec_skill" 'loses `status:ready`'
+check 'spec: affected tasks keep their labels (#89)' sh -c '! grep -q "loses \`status:ready\`" "$1"' _ "$spec_skill"
 check 'spec: no new issue without an analyst account (#51 R13)' sh -c '! grep -q "Specified in #" "$1"' _ "$spec_skill"
 check 'CLAUDE.md: specification in a new issue (#51 R13)' contains "$tmp/build2/CLAUDE.md" 'the specification is a new issue that links to the idea'
 form=$root/github/ISSUE_TEMPLATE/feature_request.yml
@@ -428,6 +433,7 @@ done
 check 'spec: tasks assigned to the developer (#51 R8)' contains "$tmp/build3/skills/spec/SKILL.md" '`--assignee kira-bot`'
 check 'spec: relayed answers recorded as the user'"'"'s (#79 R4)' contains "$tmp/iris-build/skills/spec/SKILL.md" 'noted "answered in the conversation"'
 check 'spec: questions returned to the lead without an issue (#79 R3)' contains "$tmp/iris-build/skills/spec/SKILL.md" 'When running in the background for the lead, without an issue yet'
+check 'spec: Specified as the analyst (#89 R10)' contains "$tmp/iris-build/skills/spec/SKILL.md" 'made as `iris-bot`'
 check 'spec: no lead without an analyst (#79 R8)' sh -c '! grep -q "the lead" "$1"' _ "$spec_skill"
 check "spec: new issue for an idea not by the analyst (#51 R13)" sh -c 'grep -q "not written by \`iris-bot\`" "$1" && grep -q "Specified in #<new>." "$1"' _ "$tmp/iris-build/skills/spec/SKILL.md"
 $shell "$root/scripts/build.sh" -o "$tmp/analyst-no-login" --analyst >/dev/null

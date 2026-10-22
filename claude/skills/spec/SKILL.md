@@ -173,22 +173,38 @@ confirmation:
   - once the tasks are published, add `status:specified` and remove
     `status:needs-clarification`.
 - Sub-issues, in the order they should be done: `gh issue create --parent <parent> --title
-  "<title>" --body-file <file> --label type:task --label status:ready`. An existing issue
-  becomes a sub-issue with `gh issue edit <parent> --add-sub-issue <n>`, and gets the same
-  labels.
+  "<title>" --body-file <file> --label type:task`. An existing issue becomes a sub-issue
+  with `gh issue edit <parent> --add-sub-issue <n>`, and gets the same label. Tasks stay in
+  Backlog, without `status:ready`: the user starts a specification by moving it to Ready,
+  and then all its tasks can be worked on.
 {{#assistant_github}}
 - Assign every sub-issue to the developer's account: `--assignee {{assistant_github}}`.
 {{/assistant_github}}
 - Before adding a label, check it with `gh label list`, and create a missing one without
   asking (`gh label create`).
 - Write bodies to temporary files outside the repository, never into the working tree.
+- Once the tasks are published, move the parent to Specified with the `board-status` skill
+  (`board-status <parent> Specified`). A parent on no board is left as it is: its
+  `status:specified` label marks it. When the board has no Specified option, say so in one
+  line in the summary comment and in the closing lines.
+{{#analyst_github}}
+- The board's writes in that skill are made as `{{analyst_github}}`, with
+  `GH_TOKEN=$(gh auth token --user {{analyst_github}})`, and with the user's account when
+  `{{analyst_github}}` cannot write to the board.
+{{/analyst_github}}
 
 Once the tasks are published, post a summary comment on the parent that mentions the user
-(`@<login>`): the tasks (number, title, requirements covered) and the decisions made alone
-(number and one line each).
+(`@<login>`): the tasks (number, title, requirements covered), the decisions made alone
+(number and one line each) and the development order. Then:
 
-End with the parent's URL, the list of sub-issues (number and title) if any, and the next
-phase to write if the specification is not complete.
+- With no questions for the user, end with "Ready for you: move it to Ready when you want
+  the team to start.", and ask nothing.
+- With questions for the user, list them with their options and your recommendation, and
+  end with a short question, as in step 2.
+
+End with the parent's URL, the list of sub-issues (number and title) if any, "Questions for
+the user: none." or the list of questions, and the next phase to write if the specification
+is not complete.
 
 ## Changing a specification
 
@@ -199,6 +215,3 @@ confirmation:
 - A reversed decision stays, struck through (`~~**D2** — …~~`), and a new one records the
   user's choice.
 - A change to the requirements updates the "Covers" line of every task concerned.
-- An affected task with no open pull request (`gh pr list --state open --search "<n>"`)
-  loses `status:ready` (`gh issue edit <n> --remove-label status:ready`) until its body is
-  updated, and gets it back once it is.

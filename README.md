@@ -392,11 +392,13 @@ A feature goes through one GitHub issue, from idea to specification:
    phase stays available on request, and it resumes later from the answers on the issue.
    An idea the analyst's account cannot edit gets its specification in a new issue, and is
    closed with a link to it.
-3. **Tasks** (`type:task`, `status:ready`): each task is a sub-issue of the specification,
-   created with `gh` (a version whose `gh issue create` has `--parent`), assigned to the
-   assistant's account when there is one. The specification is published without
-   confirmation, with a summary comment listing the tasks and the decisions made alone; the
-   user reverses a decision by replying on the issue.
+3. **Tasks** (`type:task`): each task is a sub-issue of the specification, created with
+   `gh` (a version whose `gh issue create` has `--parent`), assigned to the assistant's
+   account when there is one, and left in Backlog. The specification is published without
+   confirmation and moved to Specified on its board, with a summary comment listing the
+   tasks, the decisions made alone and the development order; with no questions for the
+   user, it asks nothing. The user reverses a decision by replying on the issue, and starts
+   the work by moving the specification to Ready.
 
 The formats are defined in `claude/skills/idea/SKILL.md` and `claude/skills/spec/SKILL.md`;
 `claude/CLAUDE.md` holds the rules for working from a specification.
