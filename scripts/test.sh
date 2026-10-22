@@ -133,6 +133,14 @@ check 'rules: which skill commits' contains "$tmp/build3/rules/git.md" 'use `ass
 check 'rules: user trailer for assistant commits' contains "$tmp/build3/rules/git.md" "the user's \`git config user.name\`"
 check 'rules: GitHub account section' contains "$tmp/build3/rules/git.md" 'GH_TOKEN=$(gh auth token --user kira-bot)'
 check 'rules: questions in comments' contains "$tmp/build3/rules/git.md" 'Can I continue?'
+board=$tmp/build3/skills/board-status/SKILL.md
+check 'board-status: built (#64)' test -f "$board"
+check 'board-status: writes as the developer (#64 R6)' contains "$board" 'GH_TOKEN=$(gh auth token --user kira-bot)'
+check "board-status: falls back to the user's account (#64 R6)" contains "$board" 'make the same write again'
+check 'board-status: user account without a login (#64 R6)' sh -c '! grep -q GH_TOKEN "$1"' _ "$tmp/build2/skills/board-status/SKILL.md"
+check 'board-status: missing option reported (#64 R4)' contains "$board" 'No *STATUS* column on the TITLE board'
+check 'board-status: no board, no word (#64 R5)' contains "$board" 'stop without a word'
+check 'board-status: pull request added to the boards (#64 R9)' contains "$board" 'gh project item-add BOARD'
 $shell "$root/scripts/build.sh" -o "$tmp/build4" --assistant 'Kira <kira@example.com>' \
 	--assistant-signing-key /keys/kira.pub >/dev/null
 check 'rules: --no-co-author means no trailer at all' contains "$tmp/build4/rules/git.md" 'Commit messages have no `Co-Authored-By` line.'
@@ -701,6 +709,7 @@ printf '{\n  "outputStyle": "Other",\n  "keep": true\n}\n' >"$claude/settings.js
 kira_profile >/dev/null
 check 'link: styles are links' test -L "$claude/output-styles/kira-cozy.md"
 check 'link: skills are links' test -L "$claude/skills/commit"
+check 'link: board-status installed (#64)' test -L "$claude/skills/board-status"
 check 'link: CLAUDE.md is a link' test -L "$claude/CLAUDE.md"
 check 'link: rules are links' test -L "$claude/rules/git.md"
 check 'link: outputStyle set' contains "$claude/settings.json" '"outputStyle": "Kira (cozy)"'

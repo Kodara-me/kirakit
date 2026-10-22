@@ -371,7 +371,8 @@ The launchers are not supported on Windows: `get-kira.ps1` prints a notice and i
 ## Skills
 
 `claude/skills/` holds Claude Code skills, one directory per skill with its `SKILL.md`:
-`assistant-commit`, `commit`, `diffv`, `idea`, `pull`, `push`, `spec` and `test`. They answer
+`assistant-commit`, `board-status`, `commit`, `diffv`, `idea`, `pull`, `push`, `spec` and
+`test`. They answer
 in the profile's language; `commit` and `assistant-commit` follow the git rules in
 `claude/rules/git.md` (see [Who commits](#who-commits)). Other skills already in
 `$CLAUDE_CONFIG_DIR/skills/` are left untouched. Agents in `claude/agents/` are installed the
