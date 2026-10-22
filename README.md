@@ -464,9 +464,10 @@ The lead setup changes nothing for a direct conversation with Iris:
 A member is written once, in `team/<name>.md`, and built into both `output-styles/<name>.md`
 and `agents/<name>.md`, with the same body. Its front matter holds `name` and `description`
 for the output style, and `delegate`, the agent's description: when to hand work to this
-member, and an optional `model` for the agent alone. Iris's file sits in a `{{#analyst}}`
-block and Cleo's in a `{{#coder}}` block, so without them nothing is built or installed.
-Cleo's agent runs on Opus; her output style keeps the session's model.
+member, and `model`, the agent's model, which every member declares: the build fails without
+it. Iris's file sits in a `{{#analyst}}` block and Cleo's in a `{{#coder}}` block, so without
+them nothing is built or installed. Both agents run on Opus; their output styles keep the
+session's model.
 
 ## Launchers
 
@@ -507,6 +508,37 @@ in the profile's language; `commit` and `assistant-commit` follow the git rules 
 `claude/rules/git.md` (see [Who commits](#who-commits)). Other skills already in
 `$CLAUDE_CONFIG_DIR/skills/` are left untouched. Agents in `claude/agents/` are installed the
 same way.
+
+### Models
+
+Each agent and skill declares the model it runs on, so that routine work costs less while
+specifications and development keep the strongest model. A forked skill (`context: fork`)
+runs in a sub-agent on its own model, sees only its arguments and the repository, and hands
+its result back to the caller, who resumes on its own model. An inline skill runs in the
+caller's conversation: its model applies when you type it as a slash command (`/commit`);
+when a member invokes it herself, it runs on her model.
+
+| Agent or skill | What it is for | Model | Runs |
+| --- | --- | --- | --- |
+| `iris` (agent) | Clarifies ideas, writes specifications and their tasks | opus | agent |
+| `cleo` (agent) | Implements tasks and opens pull requests | opus | agent |
+| `next-task` | Finds the next workable task on the board | sonnet | forked |
+| `board-status` | Moves a task, a specification or a pull request on its boards | haiku | forked |
+| `test` | Runs the unit tests and shows a results table | haiku | forked |
+| `pull` | Pulls the current branch | haiku | forked |
+| `push` | Pushes the current branch | haiku | forked |
+| `diffv` | Analyzes the changes against a branch | sonnet | forked |
+| `commit` | Commits the user's changes | haiku | inline |
+| `assistant-commit` | Commits the coder's or the assistant's own work | haiku | inline |
+| `idea` | Captures an idea as an issue | opus | inline |
+| `spec` | Turns an idea into a specification and its tasks | opus | inline |
+
+The lead's and the analyst's own sessions (`assistant`, `analyst`) run on your model, from
+your Claude Code settings: kirakit does not pin it. `board-status` takes the account that
+writes as an argument (`--as LOGIN`), since a forked skill cannot tell who called it. The lead
+gives its background agents a model suited to the step (`haiku` to read CI logs or run the
+tests, `sonnet` to search across many files), and none when it starts `iris` or `cleo`, so
+that their own model applies.
 
 ## Specifications
 
