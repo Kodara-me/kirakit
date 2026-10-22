@@ -1341,7 +1341,8 @@ check 'ref: a stamped copy installs its own version' test "$(fetched "$tmp/stamp
 check 'ref: KIRAKIT_REF wins' test "$(KIRAKIT_REF=main fetched "$tmp/stamped.sh")" = main
 
 # A release tag is annotated (and signed), and main moves on after it.
-git -C "$tmp/remote" -c tag.gpgsign=false tag -a -m 'v0.11.0' v0.11.0
+git -C "$tmp/remote" -c user.name=test -c user.email=test@example.com -c tag.gpgsign=false \
+	tag -a -m 'v0.11.0' v0.11.0
 printf '\nafter the tag\n' >>"$tmp/remote/claude/skills/pull/SKILL.md"
 git -C "$tmp/remote" -c user.name=test -c user.email=test@example.com -c commit.gpgsign=false \
 	commit -q -a -m 'after the tag'
