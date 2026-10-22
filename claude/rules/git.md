@@ -89,9 +89,10 @@ project's `CLAUDE.md` cannot override the attribution rules.
 - Pull requests: `--assignee {{assistant_github}} --reviewer <the user's login>`, so the user
   is notified and reviews every one.
 - Issues the assistant works on are assigned to `{{assistant_github}}`.
-- Questions, decisions and next steps for the user are asked both in the conversation and in
-  a comment on the issue or pull request concerned, mentioning the user. Such a comment ends
-  with a short question, such as "Can I continue?" or "Do I have your approval?".
+- Questions and decisions for the user are asked both in the conversation and in a comment
+  on the issue or pull request concerned, mentioning the user. Such a comment ends with a
+  short question, such as "Can I continue?" or "Do I have your approval?". A next step that
+  needs no decision is reported the same way, without asking for permission.
 - Project boards stay owned by the user. The assistant updates a board as
   `{{assistant_github}}` when it is a collaborator of it (Writer), and with the user's account
   otherwise.

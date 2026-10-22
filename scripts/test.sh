@@ -142,6 +142,11 @@ for build in build2 build3; do
 	check "rules: board moves, $build (#64 R1, R2, R3)" contains "$tmp/$build/rules/git.md" 'a task goes to In progress when you start it, before creating its'
 	check "rules: specification and pull request moves, $build (#64 R7, R9, R10)" contains "$tmp/$build/rules/git.md" 'request is added to its tasks'"'"' boards in In review'
 done
+check 'CLAUDE.md: workable while the specification is Ready (#89 R11)' contains "$tmp/build2/CLAUDE.md" 'A task is workable'
+check 'CLAUDE.md: next-task without asking (#89 R12, R13)' contains "$tmp/build2/CLAUDE.md" 'run the `next-task` skill'
+check 'CLAUDE.md: the stops for the user (#89 R5, R6)' sh -c 'grep -q "Stop and wait for the user only when" "$1" && grep -q "merge only after approval" "$1"' _ "$tmp/build2/CLAUDE.md"
+check 'CLAUDE.md: out of Ready, no new task (#89 R14)' contains "$tmp/build2/CLAUDE.md" 'start no further task'
+check 'rules: next steps reported without asking (#89 R8)' contains "$tmp/build3/rules/git.md" 'without asking for permission'
 next=$tmp/build3/skills/next-task/SKILL.md
 check 'next-task: built (#89 R12)' test -f "$next"
 check 'next-task: Ready and In progress specifications (#89 R11)' contains "$next" 'whose `status` is Ready or In progress'
@@ -398,6 +403,8 @@ $shell "$root/scripts/build.sh" -o "$tmp/iris-none" >/dev/null
 check 'iris build: no style without an analyst' test ! -e "$tmp/iris-none/output-styles/iris.md"
 check 'iris build: no agent without an analyst' test ! -e "$tmp/iris-none/agents/iris.md"
 check 'lead rules: built with an analyst (#79 R1)' contains "$tmp/iris-build/rules/team.md" 'never runs the `idea` or `spec` skill'
+check 'lead rules: Specified reported without asking (#89 R10)' contains "$tmp/iris-build/rules/team.md" 'ready for the user to start. Nothing is asked.'
+check "lead rules: start on the user's word (#89)" contains "$tmp/iris-build/rules/team.md" 'moves it to Ready with the `board-status` skill and runs `next-task`'
 check 'lead rules: report format (#79 R3)' contains "$tmp/iris-build/rules/team.md" 'sub-issues created (number and title)'
 check 'lead rules: no placeholder' sh -c '! grep -q "{{" "$1"' _ "$tmp/iris-build/rules/team.md"
 check 'lead rules: not built without an analyst (#79 R8)' test ! -e "$tmp/iris-none/rules/team.md"
