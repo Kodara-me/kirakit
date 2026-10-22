@@ -1068,11 +1068,11 @@ check 'permissions: no permissions key, added (R1)' contains "$claude/settings.j
 check 'permissions: no permissions key, others kept (R4)' sh -c 'grep -qF "\"keep\": true," "$1" && grep -qF "\"env\": {\"A\": \"1\"}" "$1"' _ "$claude/settings.json"
 check 'permissions: no permissions key, valid JSON (R4)' valid_json "$claude/settings.json"
 
-for empty in '"allow": []' '"allow": [\n    ]'; do
+for empty in '[]' '[\n    ]'; do
 	claude=$tmp/permissions-empty
 	rm -rf "$claude"
 	mkdir -p "$claude"
-	printf "{\n  \"permissions\": {\n    $empty,\n    \"deny\": [\"Bash(rm:*)\"]\n  }\n}\n" >"$claude/settings.json"
+	printf '{\n  "permissions": {\n    "allow": %b,\n    "deny": ["Bash(rm:*)"]\n  }\n}\n' "$empty" >"$claude/settings.json"
 	kira_team --copy >/dev/null
 	check "permissions: empty allow ($empty), added (R1)" test "$(rule_count "$claude/settings.json")" = 33
 	check "permissions: empty allow ($empty), valid JSON (R4)" valid_json "$claude/settings.json"
