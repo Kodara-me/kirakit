@@ -385,6 +385,57 @@ CLAUDE_CONFIG_DIR=$claude $shell "$optional/get-kira.sh" --copy --name Alex --ge
 	--no-co-author --analyst-github iris-bot </dev/null >/dev/null
 check 'analyst: passed to the build' contains "$claude/agents/analyst.md" 'For iris-bot.'
 
+# --- the coder's identity (#79 R23, R24) ---------------------------------------------------
+
+printf '%s\n' '{{#coder}}' 'coder {{coder_name}} <{{coder_email}}> {{coder_github}} {{coder_signing_key}}' \
+	'{{/coder}}' '{{^coder}}' 'no coder' '{{/coder}}' >"$blocks/claude/skills/blocks/SKILL.md"
+build_blocks "$tmp/blocks-coder" --coder 'Cleo <cleo@example.com>' --coder-github cleo-bot \
+	--coder-signing-key /keys/cleo.pub
+check 'coder build: placeholders and blocks (R24)' same_lines "$tmp/blocks-coder/skills/blocks/SKILL.md" \
+	'coder Cleo <cleo@example.com> cleo-bot /keys/cleo.pub'
+build_blocks "$tmp/blocks-no-coder" --coder-github cleo-bot
+check 'coder build: no block without a coder (R24)' same_lines "$tmp/blocks-no-coder/skills/blocks/SKILL.md" \
+	'no coder'
+check 'coder build: rejects an identity without an email (R23)' sh -c '! $1 "$2/scripts/build.sh" -o "$3" --coder Cleo' _ "$shell" "$root" "$tmp/x"
+check 'coder build: rejects a bad GitHub login (R23)' sh -c '! $1 "$2/scripts/build.sh" -o "$3" --coder "Cleo <cleo@example.com>" --coder-github "a b"' _ "$shell" "$root" "$tmp/x"
+check 'coder: installer rejects an identity without an email (R23)' sh -c '! "$@"' _ \
+	env CLAUDE_CONFIG_DIR="$tmp/coder-bad" $shell "$root/get-kira.sh" --copy --dry-run --coder Cleo
+check 'coder: installer rejects a bad GitHub login (R23)' sh -c '! "$@"' _ \
+	env CLAUDE_CONFIG_DIR="$tmp/coder-bad" $shell "$root/get-kira.sh" --copy --dry-run --coder-github 'a/b'
+
+claude=$tmp/coder
+mkdir -p "$tmp/coder-keys"
+: >"$tmp/coder-keys/cleo" && : >"$tmp/coder-keys/cleo.pub"
+printf '%s\n' '{{#coder}}' 'For {{coder}}, {{coder_github}}.' '{{/coder}}' >"$optional/claude/agents/analyst.md"
+CLAUDE_CONFIG_DIR=$claude $shell "$optional/get-kira.sh" --copy --name Alex --gender female --language auto \
+	--assistant 'Kira <kira@example.com>' --coder 'Cleo <cleo@example.com>' --coder-github cleo-bot \
+	--coder-signing-key "$tmp/coder-keys/cleo.pub" </dev/null >"$tmp/coder.log"
+check 'coder: identity saved (R23)' profile_has 'coder=Cleo <cleo@example.com>'
+check 'coder: signing key saved (R23)' profile_has "coder_signing_key=$tmp/coder-keys/cleo.pub"
+check 'coder: GitHub login saved (R23)' profile_has 'coder_github=cleo-bot'
+check 'coder: passed to the build (R23)' contains "$claude/agents/analyst.md" 'For Cleo <cleo@example.com>, cleo-bot.'
+check 'coder: in the summary' grep -q 'coder Cleo <cleo@example.com>' "$tmp/coder.log"
+CLAUDE_CONFIG_DIR=$claude $shell "$optional/get-kira.sh" --copy </dev/null >"$tmp/coder-rerun.log"
+check 'coder: reloaded on the next run (R23)' contains "$claude/agents/analyst.md" 'For Cleo <cleo@example.com>, cleo-bot.'
+check 'coder: rerun asks nothing (R23)' sh -c '! grep -q "no terminal to ask for" "$1"' _ "$tmp/coder-rerun.log"
+check 'coder: rerun keeps the profile (R23)' profile_has 'coder_github=cleo-bot'
+
+# A profile saved before the coder reads as no coder, and the question is not asked.
+claude=$tmp/coder-earlier
+mkdir -p "$claude"
+printf 'name=Alex\ngender=male\nlanguage=auto\nassistant_name=Kira\nassistant_email=kira@example.com\nassistant_signing_key=\nassistant_github=\nco_author_trailer=yes\nanalyst=no\nanalyst_github=\nstyle=kira-cozy\n' \
+	>"$claude/.kirakit-profile"
+kira --copy >"$tmp/coder-earlier.log"
+check 'coder: earlier profile reads as none (R23)' profile_has 'coder='
+check 'coder: earlier profile not asked (R23)' sh -c '! grep -q "no terminal to ask for" "$1"' _ "$tmp/coder-earlier.log"
+check 'coder: earlier profile installs (R23)' contains "$claude/rules/git.md" 'Co-Authored-By: Kira <kira@example.com>'
+
+# Without a terminal, a new profile has no coder, and says the question was not asked.
+claude=$tmp/coder-new
+kira_profile --copy >"$tmp/coder-new.log"
+check 'coder: none by default (R23)' profile_has 'coder='
+check 'coder: listed as not asked (R23)' grep -q 'no terminal to ask for:.* coder' "$tmp/coder-new.log"
+
 # --- Iris, a team member (#15 R1, R2, R11, R4, R9) -----------------------------------------
 
 $shell "$root/scripts/build.sh" -o "$tmp/iris-build" --name Alex --gender female --analyst \

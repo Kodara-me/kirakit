@@ -36,7 +36,7 @@ profile=$CLAUDE_DIR/.kirakit-profile
 manifest=$CLAUDE_DIR/.kirakit-manifest
 originals=$CLAUDE_DIR/.kirakit-originals
 konsole_dir=${XDG_DATA_HOME:-$HOME/.local/share}/konsole
-profile_keys='name gender language assistant assistant_signing_key assistant_github co_author_trailer analyst analyst_github'
+profile_keys='name gender language assistant assistant_signing_key assistant_github co_author_trailer analyst analyst_github coder coder_signing_key coder_github'
 nl='
 '
 tab=$(printf '\t')
@@ -68,6 +68,9 @@ Options:
   --analyst                  Add Iris, an analyst for ideas and specifications, to the team
   --no-analyst               No analyst: Kira writes ideas and specifications herself
   --analyst-github LOGIN     The analyst's own GitHub account (implies --analyst; empty: none)
+  --coder "NAME <EMAIL>"     The coder's git identity, for Cleo (default: none)
+  --coder-signing-key PATH   The coder's public SSH signing key (empty: none)
+  --coder-github LOGIN       The coder's own GitHub account (empty: none)
   --default-style PERSONA    Output style selected in settings.json (default: kira-cozy)
   --assistant-style PERSONA  Style of the assistant launcher (default: the default style)
   --bin-dir DIR              Where the launchers go (default: ~/.local/bin)
@@ -269,32 +272,36 @@ EOF
 	done
 }
 
-ask_assistant() {
-	if [ -n "$1" ]; then
-		current_name=${1% <*}
-		current_email=${1##*<}
+# ask_identity WHOSE DEFAULT_NAME CURRENT: ask for a git identity, such as WHOSE="Assistant's";
+# print "NAME <EMAIL>", or nothing when no email is given.
+ask_identity() {
+	if [ -n "$3" ]; then
+		current_name=${3% <*}
+		current_email=${3##*<}
 		current_email=${current_email%>}
 	else
-		current_name=Kira
+		current_name=$2
 		current_email=
 	fi
-	assistant_name_answer=$(ask "Assistant's name" "$current_name")
+	name_answer=$(ask "$1 name" "$current_name")
 	while :; do
-		assistant_email_answer=$(ask "Assistant's email (empty: none)" "$current_email")
-		if [ -z "$assistant_email_answer" ]; then
+		email_answer=$(ask "$1 email (empty: none)" "$current_email")
+		if [ -z "$email_answer" ]; then
 			echo
 			return
 		fi
-		if valid_co_author "$assistant_name_answer <$assistant_email_answer>"; then
-			printf '%s <%s>\n' "$assistant_name_answer" "$assistant_email_answer"
+		if valid_co_author "$name_answer <$email_answer>"; then
+			printf '%s <%s>\n' "$name_answer" "$email_answer"
 			return
 		fi
 		printf 'Expected an email address such as kira@example.com.\n' >/dev/tty
 	done
 }
 
+# ask_signing_key WHOSE WHO CURRENT: ask for a public SSH signing key, such as WHOSE="Assistant's"
+# and WHO="the assistant".
 ask_signing_key() {
-	ask "Assistant's public SSH signing key (empty: the assistant does not commit as itself)" "$1"
+	ask "$1 public SSH signing key (empty: $2 does not commit as itself)" "$3"
 }
 
 # ask_github WHOSE CURRENT: ask for a GitHub login, such as WHOSE="Assistant's".
@@ -358,6 +365,9 @@ load_profile() {
 		co_author_trailer) saved_co_author_trailer=$value ;;
 		analyst) saved_analyst=$value ;;
 		analyst_github) saved_analyst_github=$value ;;
+		coder) saved_coder=$value ;;
+		coder_signing_key) saved_coder_signing_key=$value ;;
+		coder_github) saved_coder_github=$value ;;
 		style) saved_style=$value ;;
 		assistant_style) saved_assistant_style=$value ;;
 		bin_dir) saved_bin_dir=$value ;;
@@ -366,6 +376,10 @@ load_profile() {
 	# Profiles before the analyst: the team had none, and the question is not asked again.
 	if [ -z "${saved_analyst+set}" ]; then
 		saved_analyst=no saved_analyst_github=
+	fi
+	# Profiles before the coder: the team had none, and the question is not asked again.
+	if [ -z "${saved_coder+set}" ]; then
+		saved_coder= saved_coder_signing_key= saved_coder_github=
 	fi
 	if [ -n "${saved_assistant_name+set}" ]; then
 		if [ -n "$saved_assistant_email" ]; then
@@ -406,6 +420,9 @@ setup_profile() {
 	fi
 	analyst=${opt_analyst-${saved_analyst-no}}
 	analyst_github=${opt_analyst_github-${saved_analyst_github-}}
+	coder=${opt_coder-${saved_coder-}}
+	coder_signing_key=${opt_coder_signing_key-${saved_coder_signing_key-}}
+	coder_github=${opt_coder_github-${saved_coder_github-}}
 	if [ -n "$assistant" ]; then default_trailer=yes; else default_trailer=no; fi
 	co_author_trailer=${opt_co_author_trailer-${saved_co_author_trailer-$default_trailer}}
 	default_style=${opt_style-${saved_style:-kira-cozy}}
@@ -428,6 +445,10 @@ setup_profile() {
 			# Meaningless without an analyst, unless one is about to be asked for.
 			case "$missing " in *' analyst '*) ;; *) [ "$analyst" = yes ] || continue ;; esac
 			;;
+		coder_*)
+			# Meaningless without a coder identity, unless it is about to be asked.
+			case "$missing " in *' coder '*) ;; *) [ -n "$coder" ] || continue ;; esac
+			;;
 		esac
 		if should_ask "$key"; then
 			missing="$missing $key"
@@ -449,9 +470,9 @@ setup_profile() {
 		name) user_name=$(ask 'How should Kira call you?' "$user_name") ;;
 		gender) user_gender=$(ask_gender "$user_gender") ;;
 		language) user_language=$(ask 'Which language should Kira answer in? (auto follows the conversation)' "$user_language") ;;
-		assistant) assistant=$(ask_assistant "$assistant") ;;
+		assistant) assistant=$(ask_identity "Assistant's" Kira "$assistant") ;;
 		# The other assistant values mean nothing without an assistant identity.
-		assistant_signing_key) [ -z "$assistant" ] || assistant_signing_key=$(ask_signing_key "$assistant_signing_key") ;;
+		assistant_signing_key) [ -z "$assistant" ] || assistant_signing_key=$(ask_signing_key "Assistant's" 'the assistant' "$assistant_signing_key") ;;
 		assistant_github) [ -z "$assistant" ] || assistant_github=$(ask_github "Assistant's" "$assistant_github") ;;
 		co_author_trailer)
 			if [ -n "$assistant" ]; then default_trailer=yes; else default_trailer=no; fi
@@ -460,6 +481,10 @@ setup_profile() {
 		analyst) analyst=$(ask_analyst "$analyst") ;;
 		# R8: the analyst never commits, so she has a GitHub account but no signing key.
 		analyst_github) [ "$analyst" != yes ] || analyst_github=$(ask_github "Analyst's" "$analyst_github") ;;
+		coder) coder=$(ask_identity "Coder's" Cleo "$coder") ;;
+		# The other coder values mean nothing without a coder identity.
+		coder_signing_key) [ -z "$coder" ] || coder_signing_key=$(ask_signing_key "Coder's" 'the coder' "$coder_signing_key") ;;
+		coder_github) [ -z "$coder" ] || coder_github=$(ask_github "Coder's" "$coder_github") ;;
 		esac
 	done
 	[ "$analyst" = yes ] || analyst=no analyst_github=
@@ -467,6 +492,8 @@ setup_profile() {
 		assistant_signing_key='' assistant_github='' co_author_trailer=no
 	fi
 	assistant_signing_key=$(expand_home "$assistant_signing_key")
+	[ -n "$coder" ] || coder_signing_key='' coder_github=''
+	coder_signing_key=$(expand_home "$coder_signing_key")
 	if [ -n "$assistant" ]; then
 		assistant_name=${assistant% <*}
 		assistant_email=${assistant##*<}
@@ -476,7 +503,7 @@ setup_profile() {
 	fi
 
 	[ -z "${no_save-}" ] || return 0
-	profile_text="name=$user_name${nl}gender=$user_gender${nl}language=$user_language${nl}assistant_name=$assistant_name${nl}assistant_email=$assistant_email${nl}assistant_signing_key=$assistant_signing_key${nl}assistant_github=$assistant_github${nl}co_author_trailer=$co_author_trailer${nl}analyst=$analyst${nl}analyst_github=$analyst_github${nl}style=$default_style${nl}assistant_style=$assistant_style${nl}bin_dir=$bin_dir"
+	profile_text="name=$user_name${nl}gender=$user_gender${nl}language=$user_language${nl}assistant_name=$assistant_name${nl}assistant_email=$assistant_email${nl}assistant_signing_key=$assistant_signing_key${nl}assistant_github=$assistant_github${nl}co_author_trailer=$co_author_trailer${nl}analyst=$analyst${nl}analyst_github=$analyst_github${nl}coder=$coder${nl}coder_signing_key=$coder_signing_key${nl}coder_github=$coder_github${nl}style=$default_style${nl}assistant_style=$assistant_style${nl}bin_dir=$bin_dir"
 	if [ -f "$profile" ] && [ "$(cat "$profile")" = "$profile_text" ]; then
 		return
 	fi
@@ -490,12 +517,13 @@ setup_profile() {
 }
 
 # R8: warn about a signing key that is not there; the installer never creates one.
+# check_signing_key WHO KEY, such as WHO="the assistant".
 check_signing_key() {
-	[ -n "$assistant_signing_key" ] || return 0
-	if [ ! -f "$assistant_signing_key" ]; then
-		log "warning: the assistant's signing key $assistant_signing_key does not exist; it cannot commit as itself until it does"
-	elif [ ! -f "${assistant_signing_key%.pub}" ]; then
-		log "warning: no private key next to $assistant_signing_key; the assistant cannot sign with it"
+	[ -n "$2" ] || return 0
+	if [ ! -f "$2" ]; then
+		log "warning: $1's signing key $2 does not exist; $1 cannot commit as itself until it does"
+	elif [ ! -f "${2%.pub}" ]; then
+		log "warning: no private key next to $2; $1 cannot sign with it"
 	fi
 }
 
@@ -515,6 +543,7 @@ build() {
 		--language "$user_language" --co-author "$co_author" --assistant "$assistant" \
 		--assistant-signing-key "$assistant_signing_key" --assistant-github "$assistant_github" \
 		$analyst_flag --analyst-github "$analyst_github" --assistant-style "${assistant_style:-$default_style}" \
+		--coder "$coder" --coder-signing-key "$coder_signing_key" --coder-github "$coder_github" \
 		>/dev/null || exit 1
 }
 
@@ -804,7 +833,7 @@ while [ $# -gt 0 ]; do
 	--dry-run) dry_run=1 ;;
 	--name | --gender | --language | --co-author | --assistant | --assistant-signing-key | \
 		--assistant-github | --analyst-github | --default-style | --persona | --only | --target | \
-		--assistant-style | --bin-dir)
+		--assistant-style | --bin-dir | --coder | --coder-signing-key | --coder-github)
 		[ $# -ge 2 ] || die "missing value for $1"
 		case $1 in
 		--name) opt_name=$2 ;;
@@ -834,6 +863,20 @@ while [ $# -gt 0 ]; do
 		--analyst-github)
 			valid_github "$2" || die "invalid GitHub login: $2"
 			opt_analyst_github=$2
+			;;
+		--coder)
+			if [ -z "$2" ] || ! valid_co_author "$2"; then
+				die "invalid coder: $2 (expected \"NAME <EMAIL>\")"
+			fi
+			opt_coder=$2
+			;;
+		--coder-signing-key)
+			case $2 in *"$nl"*) die "invalid signing key path: $2" ;; esac
+			opt_coder_signing_key=$2
+			;;
+		--coder-github)
+			valid_github "$2" || die "invalid GitHub login: $2"
+			opt_coder_github=$2
 			;;
 		--default-style | --persona | --assistant-style)
 			case $2 in
@@ -926,8 +969,9 @@ fi
 log "target: $CLAUDE_DIR"
 setup_profile
 [ -f "$src/personas/$default_style.md" ] || die "unknown default style: $default_style"
-log "profile: ${user_name:-(no name)}, $user_gender, language $user_language, assistant ${assistant:-none}, co-author trailers $co_author_trailer, analyst $analyst${analyst_github:+ ($analyst_github)}, style $default_style"
-check_signing_key
+log "profile: ${user_name:-(no name)}, $user_gender, language $user_language, assistant ${assistant:-none}, co-author trailers $co_author_trailer, analyst $analyst${analyst_github:+ ($analyst_github)}, coder ${coder:-none}, style $default_style"
+check_signing_key 'the assistant' "$assistant_signing_key"
+check_signing_key 'the coder' "$coder_signing_key"
 build
 
 if [ -z "$only" ] || [ "$only" = styles ]; then

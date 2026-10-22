@@ -23,6 +23,10 @@
 #   {{assistant_github}}      the assistant's GitHub login, or nothing
 #   {{analyst}}               "yes" when the team has an analyst, or nothing
 #   {{analyst_github}}        the analyst's GitHub login, or nothing
+#   {{coder}}                 the coder's git identity, "NAME <EMAIL>", or nothing
+#   {{coder_name}} {{coder_email}}  the coder's name and email, or nothing
+#   {{coder_signing_key}}     path to the coder's public SSH signing key, or nothing
+#   {{coder_github}}          the coder's GitHub login, or nothing
 #   {{assistant_style}}       the name of the assistant's output style, e.g. "Kira (cozy)"
 #   {{analyst_style}}         the name of the analyst's output style, "Iris"
 # In the launchers, {{assistant_name}} is "Kira" when the assistant has no git identity.
@@ -37,6 +41,7 @@
 #                 [--co-author "NAME <EMAIL>"] [--assistant "NAME <EMAIL>"]
 #                 [--assistant-signing-key PATH] [--assistant-github LOGIN]
 #                 [--analyst] [--analyst-github LOGIN] [--assistant-style PERSONA]
+#                 [--coder "NAME <EMAIL>"] [--coder-signing-key PATH] [--coder-github LOGIN]
 #                 [PERSONA...]
 set -eu
 
@@ -54,6 +59,9 @@ assistant_signing_key=
 assistant_github=
 analyst=
 analyst_github=
+coder=
+coder_signing_key=
+coder_github=
 assistant_style=kira-cozy
 nl='
 '
@@ -69,6 +77,7 @@ Usage: build.sh [-o DIR] [--name NAME] [--gender GENDER] [--language LANGUAGE]
                 [--co-author "NAME <EMAIL>"] [--assistant "NAME <EMAIL>"]
                 [--assistant-signing-key PATH] [--assistant-github LOGIN]
                 [--analyst] [--analyst-github LOGIN] [--assistant-style PERSONA]
+                [--coder "NAME <EMAIL>"] [--coder-signing-key PATH] [--coder-github LOGIN]
                 [PERSONA...]
 
 Build output styles, skills, agents, rules, CLAUDE.md and the launchers into DIR
@@ -86,13 +95,17 @@ With no PERSONA, build every overlay in personas/. Skills are always all built.
   --analyst                  The team has an analyst, Iris (default: no)
   --analyst-github LOGIN     The analyst's GitHub account, with --analyst (default: none)
   --assistant-style PERSONA  The assistant launcher's output style (default: kira-cozy)
+  --coder "NAME <EMAIL>"     The coder's git identity (default: none)
+  --coder-signing-key PATH   The coder's public SSH signing key, with --coder (default: none)
+  --coder-github LOGIN       The coder's GitHub account, with --coder (default: none)
 EOF
 }
 
 while [ $# -gt 0 ]; do
 	case $1 in
 	-o | --out | --name | --gender | --language | --co-author | --assistant | \
-		--assistant-signing-key | --assistant-github | --analyst-github | --assistant-style)
+		--assistant-signing-key | --assistant-github | --analyst-github | --assistant-style | \
+		--coder | --coder-signing-key | --coder-github)
 		[ $# -ge 2 ] || die "missing value for $1"
 		case $1 in
 		--name) name=$2 ;;
@@ -104,6 +117,9 @@ while [ $# -gt 0 ]; do
 		--assistant-github) assistant_github=$2 ;;
 		--analyst-github) analyst_github=$2 ;;
 		--assistant-style) assistant_style=$2 ;;
+		--coder) coder=$2 ;;
+		--coder-signing-key) coder_signing_key=$2 ;;
+		--coder-github) coder_github=$2 ;;
 		*) out_dir=$2 ;;
 		esac
 		shift 2
@@ -125,7 +141,8 @@ while [ $# -gt 0 ]; do
 	esac
 done
 
-for value in "$name" "$language" "$co_author" "$assistant" "$assistant_signing_key"; do
+for value in "$name" "$language" "$co_author" "$assistant" "$assistant_signing_key" "$coder" \
+	"$coder_signing_key"; do
 	case $value in
 	*"$nl"* | *'{{'* | *'}}'*) die "invalid value: $value" ;;
 	esac
@@ -163,13 +180,25 @@ case $assistant in
 *) die "invalid assistant: $assistant (expected \"NAME <EMAIL>\")" ;;
 esac
 
-for login in "$assistant_github" "$analyst_github"; do
+case $coder in
+'') coder_name='' coder_email='' ;;
+?*' <'?*@?*'>')
+	coder_name=${coder% <*}
+	coder_email=${coder##*<}
+	coder_email=${coder_email%>}
+	;;
+*) die "invalid coder: $coder (expected \"NAME <EMAIL>\")" ;;
+esac
+
+for login in "$assistant_github" "$analyst_github" "$coder_github"; do
 	case $login in
 	*[!A-Za-z0-9-]*) die "invalid GitHub login: $login" ;;
 	esac
 done
 # The analyst's account means nothing without an analyst.
 [ -n "$analyst" ] || analyst_github=
+# Nor do the coder's key and account without a coder.
+[ -n "$coder" ] || coder_signing_key= coder_github=
 
 # The launchers start a member with the name of their output style.
 case $assistant_style in
@@ -188,7 +217,9 @@ export KIRA_USER="$user" KIRA_THEY="$they" KIRA_THEM="$them" KIRA_THEIR="$their"
 	KIRA_LANGUAGE="$language" KIRA_CO_AUTHOR="$co_author" KIRA_ASSISTANT_NAME="$assistant_name" \
 	KIRA_ASSISTANT_EMAIL="$assistant_email" KIRA_ASSISTANT_SIGNING_KEY="$assistant_signing_key" \
 	KIRA_ASSISTANT_GITHUB="$assistant_github" KIRA_ANALYST="$analyst" KIRA_ANALYST_GITHUB="$analyst_github" \
-	KIRA_ASSISTANT_STYLE="$assistant_style_name" KIRA_ANALYST_STYLE="$analyst_style_name"
+	KIRA_ASSISTANT_STYLE="$assistant_style_name" KIRA_ANALYST_STYLE="$analyst_style_name" \
+	KIRA_CODER="$coder" KIRA_CODER_NAME="$coder_name" KIRA_CODER_EMAIL="$coder_email" \
+	KIRA_CODER_SIGNING_KEY="$coder_signing_key" KIRA_CODER_GITHUB="$coder_github"
 
 # render FILE [ORIGIN]: print FILE with its placeholders filled and its blocks resolved;
 # errors name ORIGIN (default: FILE).
@@ -209,7 +240,7 @@ render() {
 			exit 1
 		}
 		BEGIN {
-			n = split("user they them their language co_author assistant_name assistant_email assistant_signing_key assistant_github analyst analyst_github assistant_style analyst_style", keys, " ")
+			n = split("user they them their language co_author assistant_name assistant_email assistant_signing_key assistant_github analyst analyst_github assistant_style analyst_style coder coder_name coder_email coder_signing_key coder_github", keys, " ")
 			for (k = 1; k <= n; k++) known[keys[k]] = 1
 			depth = 0
 			hidden = 0
