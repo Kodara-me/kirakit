@@ -164,6 +164,40 @@ jobs:
           grep -qx 'model: opus' "$RUNNER_TEMP/ps-coder/agents/cleo.md"
           test -f "$RUNNER_TEMP/ps-coder/output-styles/cleo.md"
           test ! -e "$RUNNER_TEMP/ps-analyst/agents/cleo.md"
+          # The members' permission rules are in the settings compared above (#67 R10).
+          grep -qF '"Bash(GH_TOKEN=$(gh auth token --user kira-bot) gh issue create:*)",' "$RUNNER_TEMP/ps-assistant/settings.json"
+          grep -qF '"Bash(GH_TOKEN=$(gh auth token --user iris-bot) gh project item-list:*)"' "$RUNNER_TEMP/ps-analyst/settings.json"
+      - name: Permission rules in an existing settings.json
+        # Both installers merge the rules into the same shapes, and leave the others unchanged.
+        run: |
+          shapes=$RUNNER_TEMP/shapes
+          mkdir -p "$shapes"
+          printf '{\n  "permissions": {\n    "allow": [],\n    "deny": []\n  }\n}\n' >"$shapes/empty.json"
+          printf '{\n  "permissions": {\n    "allow": [\n    ]\n  }\n}\n' >"$shapes/empty-lines.json"
+          printf '{\n  "keep": true,\n  "permissions": {\n    "allow": [\n      "Bash(make:*)",\n      "Bash(git push origin main)"\n    ],\n    "defaultMode": "auto"\n  }\n}\n' >"$shapes/mine.json"
+          printf '{\n  "outputStyle": "Kira (cozy)",\n  "attribution": {"commit": "", "pr": ""},\n  "permissions": {"allow": ["Bash(make:*)"]}\n}\n' >"$shapes/unknown.json"
+          for shape in empty empty-lines mine unknown; do
+            for tool in sh ps; do
+              dir=$RUNNER_TEMP/perm-$shape-$tool
+              mkdir -p "$dir"
+              cp "$shapes/$shape.json" "$dir/settings.json"
+              if [ "$tool" = sh ]; then
+                CLAUDE_CONFIG_DIR="$dir" sh get-kira.sh --copy --only claude --name Alex --gender male \
+                  --language auto --assistant 'Kira <kira@example.com>' --assistant-github kira-bot \
+                  --analyst-github iris-bot </dev/null >"$dir.log"
+              else
+                CLAUDE_CONFIG_DIR="$dir" pwsh -File get-kira.ps1 -Copy -Only claude -Name Alex -Gender male \
+                  -Language auto -Assistant 'Kira <kira@example.com>' -AssistantGithub kira-bot \
+                  -AnalystGithub iris-bot </dev/null >"$dir.log"
+              fi
+            done
+            diff "$RUNNER_TEMP/perm-$shape-sh/settings.json" "$RUNNER_TEMP/perm-$shape-ps/settings.json"
+            # The rules each installer reports, without its own paths.
+            diff <(grep -E 'set permission|^  "Bash' "$RUNNER_TEMP/perm-$shape-sh.log" | sed 's/ in .*settings.json$//') \
+              <(grep -E 'set permission|^  "Bash' "$RUNNER_TEMP/perm-$shape-ps.log" | sed 's/ in .*settings.json$//')
+          done
+          cmp "$shapes/unknown.json" "$RUNNER_TEMP/perm-unknown-ps/settings.json"
+          grep -q 'warning: cannot add the permission rules' "$RUNNER_TEMP/perm-unknown-ps.log"
       - name: Optional files
         # A template wholly inside a block that is dropped is neither built nor installed, and
         # is removed when an earlier run installed it, by both installers.

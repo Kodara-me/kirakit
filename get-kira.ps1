@@ -914,7 +914,138 @@ function Install-KiraOutputStyle([string]$Style) {
     }
 }
 
-function Install-KiraClaude([string]$Style) {
+# The permission rules the members' GitHub accounts need, without duplicates (#67 R1, R2;
+# mirrors permission_rules in get-kira.sh).
+function Get-KiraPermissionRule([string]$AssistantLogin, [string]$AnalystLogin) {
+    $rules = New-Object System.Collections.Generic.List[string]
+    if ($AssistantLogin) {
+        $gh = 'GH_TOKEN=$(gh auth token --user ' + $AssistantLogin + ') gh'
+        foreach ($command in @('issue create', 'issue edit', 'issue comment', 'issue close',
+                'pr create', 'pr comment', 'pr review', 'label create')) {
+            $rules.Add("Bash($gh ${command}:*)")
+        }
+        foreach ($type in @('feat', 'fix', 'docs', 'refactor', 'test', 'chore', 'ci')) {
+            $rules.Add("Bash(git push -u origin $type/:*)")
+            $rules.Add("Bash(git push origin $type/:*)")
+        }
+        $rules.Add('Bash(git push origin main)')
+        $rules.Add('Bash(git push origin --delete:*)')
+        $rules.Add("Bash($gh project item-edit:*)")
+        $rules.Add("Bash($gh project item-add:*)")
+    }
+    if ($AnalystLogin) {
+        $gh = 'GH_TOKEN=$(gh auth token --user ' + $AnalystLogin + ') gh'
+        foreach ($command in @('issue create', 'issue edit', 'issue comment', 'issue close',
+                'label create', 'project item-edit', 'project item-list')) {
+            $rules.Add("Bash($gh ${command}:*)")
+        }
+    }
+    $unique = New-Object System.Collections.Generic.List[string]
+    foreach ($rule in $rules) {
+        if (-not $unique.Contains($rule)) { $unique.Add($rule) }
+    }
+    return $unique.ToArray()
+}
+
+# TEXT with RULES added to "permissions.allow", or $null when the shape of TEXT is not one
+# that text processing can change safely (#67 R4, R6; mirrors add_permission_rules in
+# get-kira.sh).
+function Add-KiraPermissionRule([string[]]$Rules, [string]$Text) {
+    $last = $Rules.Count - 1
+    if ($Text.Length -eq 0 -or ($Text -replace '\s', '') -eq '{}') {
+        $out = New-Object System.Collections.Generic.List[string]
+        $out.Add('{'); $out.Add('  "permissions": {'); $out.Add('    "allow": [')
+        for ($k = 0; $k -le $last; $k++) {
+            $out.Add('      "' + $Rules[$k] + '"' + $(if ($k -lt $last) { ',' } else { '' }))
+        }
+        $out.Add('    ]'); $out.Add('  }'); $out.Add('}')
+        return Join-KiraLine $out.ToArray()
+    }
+    $permissions = ([regex]::Matches($Text, '"permissions"')).Count
+    $allow = ([regex]::Matches($Text, '"allow"')).Count
+    $lines = @(Split-KiraLine $Text)
+    $out = New-Object System.Collections.Generic.List[string]
+    $done = $false
+    if ($permissions -eq 0) {
+        # No permissions key: a new one, as the first setting.
+        if (-not $Text.Contains('{')) { return $null }
+        foreach ($line in $lines) {
+            $i = $line.IndexOf('{')
+            if (-not $done -and $i -ge 0) {
+                $out.Add($line.Substring(0, $i + 1))
+                $out.Add('  "permissions": {')
+                $out.Add('    "allow": [')
+                for ($k = 0; $k -le $last; $k++) {
+                    $out.Add('      "' + $Rules[$k] + '"' + $(if ($k -lt $last) { ',' } else { '' }))
+                }
+                $out.Add('    ]')
+                $out.Add('  },')
+                $rest = $line.Substring($i + 1)
+                if ($rest -match '[^ \t]') { $out.Add($rest) }
+                $done = $true
+                continue
+            }
+            $out.Add($line)
+        }
+        return Join-KiraLine $out.ToArray()
+    }
+    # A single "allow" key, whose array opens at the end of its line or is empty.
+    if ($permissions -ne 1 -or $allow -ne 1) { return $null }
+    $shaped = $false
+    foreach ($line in $lines) {
+        if ($line -cmatch '"allow"\s*:\s*\[\s*(\].*)?$') { $shaped = $true }
+    }
+    if (-not $shaped) { return $null }
+    $empty = ($Text -replace '\s', '').Contains('"allow":[]')
+    foreach ($line in $lines) {
+        $m = [regex]::Match($line, '"allow"[ \t]*:[ \t]*\[')
+        if (-not $done -and $m.Success) {
+            $end = $m.Index + $m.Length
+            $indent = [regex]::Match($line, '^[ \t]*').Value
+            $out.Add($line.Substring(0, $end))
+            for ($k = 0; $k -le $last; $k++) {
+                $out.Add($indent + '  "' + $Rules[$k] + '"' + $(if ($k -lt $last -or -not $empty) { ',' } else { '' }))
+            }
+            $rest = $line.Substring($end) -replace '^[ \t]*', ''
+            if ($rest -ne '') { $out.Add($indent + $rest) }
+            $done = $true
+            continue
+        }
+        $out.Add($line)
+    }
+    return Join-KiraLine $out.ToArray()
+}
+
+# Add the members' permission rules to "permissions.allow" in settings.json, leaving every
+# other setting and rule as it is (#67 R1, R2, R4, R5, R6, R9; mirrors set_permissions in
+# get-kira.sh).
+function Install-KiraPermission([string]$AssistantLogin, [string]$AnalystLogin) {
+    $settings = Join-Path $ClaudeDir 'settings.json'
+    $text = if (Test-Path -LiteralPath $settings) { Read-KiraText $settings } else { '' }
+    $expected = @(Get-KiraPermissionRule $AssistantLogin $AnalystLogin)
+    # R5: a rule already present is not added again.
+    $missing = @($expected | Where-Object { -not $text.Contains('"' + $_ + '"') })
+    if ($missing.Count -eq 0) {
+        if ($expected.Count -gt 0) { Write-KiraLog "up to date: $settings (permissions)" }
+        return
+    }
+
+    $new = Add-KiraPermissionRule $missing $text
+    if ($null -eq $new) {
+        Write-KiraLog "warning: cannot add the permission rules to $settings safely; left unchanged. Add them by hand to `"permissions`": {`"allow`": [...]}:"
+        foreach ($rule in $missing) { Write-Host ('  "' + $rule + '"') }
+        return
+    }
+
+    Backup-KiraSetting $settings
+    foreach ($rule in $missing) { Write-KiraLog "set permission: $rule in $settings" }
+    if (-not $DryRun) {
+        Initialize-KiraDirectory $ClaudeDir
+        Write-KiraText $settings $new
+    }
+}
+
+function Install-KiraClaude([string]$Style, [string]$AssistantLogin, [string]$AnalystLogin) {
     if (Test-Path -LiteralPath (Join-Path (Join-Path $script:Src 'claude') 'CLAUDE.md')) {
         Install-KiraBuilt 'CLAUDE.md' (Join-Path $ClaudeDir 'CLAUDE.md')
     }
@@ -947,6 +1078,7 @@ function Install-KiraClaude([string]$Style) {
     }
     Install-KiraOutputStyle $Style
     Install-KiraAttribution
+    Install-KiraPermission $AssistantLogin $AnalystLogin
 }
 
 # Copy github\ into the target repository's .github directory. Files are always copied:
@@ -1097,7 +1229,7 @@ try {
             Test-KiraSigningKey 'the coder' $userProfile.coder_signing_key
             Build-KiraOutput $userProfile
             if (-not $Only -or $Only -eq 'styles') { Install-KiraStyle }
-            if (-not $Only -or $Only -eq 'claude') { Install-KiraClaude $userProfile.style }
+            if (-not $Only -or $Only -eq 'claude') { Install-KiraClaude $userProfile.style $userProfile.assistant_github $userProfile.analyst_github }
             if (-not $Only -or $Only -eq 'launchers') {
                 Write-KiraLog 'notice: the launchers (assistant, analyst, team) are not supported on Windows; none is installed'
             }
