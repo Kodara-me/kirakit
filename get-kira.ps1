@@ -1342,8 +1342,18 @@ try {
             $repoDir = Join-Path (Get-KiraWorkDir) 'repo'
             $ref = Get-KiraRef
             Write-KiraLog "fetching $Repo ($ref)"
-            & git clone --quiet --depth 1 --branch $ref -- $Repo $repoDir
-            if ($LASTEXITCODE -ne 0) { throw "could not fetch $Repo" }
+            # An empty repository, a shallow fetch and a checkout of FETCH_HEAD: unlike a
+            # shallow clone, they print no detached HEAD advice and no "is not a commit"
+            # warning for an annotated tag, while git's errors are still shown.
+            # Windows PowerShell 5.1 turns a native command's error output into a terminating
+            # error when it is redirected: keep git's message, then throw kirakit's own.
+            $ErrorActionPreference = 'Continue'
+            & git init --quiet -- $repoDir
+            if ($LASTEXITCODE -eq 0) { & git -C $repoDir fetch --quiet --depth 1 -- $Repo $ref }
+            if ($LASTEXITCODE -eq 0) { & git -C $repoDir -c advice.detachedHead=false checkout --quiet FETCH_HEAD }
+            $fetched = $LASTEXITCODE -eq 0
+            $ErrorActionPreference = 'Stop'
+            if (-not $fetched) { throw "could not fetch $Repo" }
             $script:Src = $repoDir
             $script:Mode = 'copy'
         }

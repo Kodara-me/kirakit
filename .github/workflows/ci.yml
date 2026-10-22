@@ -88,6 +88,8 @@ jobs:
           if ($rerun -match 'kirakit: (copy|link|backup|set|save)') { throw "rerun changed files:`n$rerun" }
           ./get-kira.ps1 -Uninstall
           if (Test-Path (Join-Path $styles 'kira-cozy.md')) { throw 'uninstall left styles' }
+      - name: Fetch without a clone
+        run: ./scripts/test.ps1
 
   parity:
     # get-kira.ps1 reimplements the build: its output must match build.sh byte for byte.
