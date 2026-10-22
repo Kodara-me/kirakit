@@ -27,6 +27,10 @@
 #   {{coder_name}} {{coder_email}}  the coder's name and email, or nothing
 #   {{coder_signing_key}}     path to the coder's public SSH signing key, or nothing
 #   {{coder_github}}          the coder's GitHub login, or nothing
+#   {{committer}}             who commits with the assistant-commit skill: "the coder" when the
+#                             team has a coder, "the assistant" otherwise
+#   {{committer_name}} {{committer_email}} {{committer_signing_key}}  that member's git identity
+#                             and signing key: the coder's with a coder, the assistant's otherwise
 #   {{assistant_style}}       the name of the assistant's output style, e.g. "Kira (cozy)"
 #   {{analyst_style}}         the name of the analyst's output style, "Iris"
 # In the launchers, {{assistant_name}} is "Kira" when the assistant has no git identity.
@@ -199,6 +203,14 @@ done
 [ -n "$analyst" ] || analyst_github=
 # Nor do the coder's key and account without a coder.
 [ -n "$coder" ] || coder_signing_key='' coder_github=''
+# With a coder, she commits; the assistant leads and never commits.
+if [ -n "$coder" ]; then
+	committer='the coder' committer_name=$coder_name committer_email=$coder_email
+	committer_signing_key=$coder_signing_key
+else
+	committer='the assistant' committer_name=$assistant_name committer_email=$assistant_email
+	committer_signing_key=$assistant_signing_key
+fi
 
 # The launchers start a member with the name of their output style.
 case $assistant_style in
@@ -219,7 +231,9 @@ export KIRA_USER="$user" KIRA_THEY="$they" KIRA_THEM="$them" KIRA_THEIR="$their"
 	KIRA_ASSISTANT_GITHUB="$assistant_github" KIRA_ANALYST="$analyst" KIRA_ANALYST_GITHUB="$analyst_github" \
 	KIRA_ASSISTANT_STYLE="$assistant_style_name" KIRA_ANALYST_STYLE="$analyst_style_name" \
 	KIRA_CODER="$coder" KIRA_CODER_NAME="$coder_name" KIRA_CODER_EMAIL="$coder_email" \
-	KIRA_CODER_SIGNING_KEY="$coder_signing_key" KIRA_CODER_GITHUB="$coder_github"
+	KIRA_CODER_SIGNING_KEY="$coder_signing_key" KIRA_CODER_GITHUB="$coder_github" \
+	KIRA_COMMITTER="$committer" KIRA_COMMITTER_NAME="$committer_name" KIRA_COMMITTER_EMAIL="$committer_email" \
+	KIRA_COMMITTER_SIGNING_KEY="$committer_signing_key"
 
 # render FILE [ORIGIN]: print FILE with its placeholders filled and its blocks resolved;
 # errors name ORIGIN (default: FILE).
@@ -240,7 +254,7 @@ render() {
 			exit 1
 		}
 		BEGIN {
-			n = split("user they them their language co_author assistant_name assistant_email assistant_signing_key assistant_github analyst analyst_github assistant_style analyst_style coder coder_name coder_email coder_signing_key coder_github", keys, " ")
+			n = split("user they them their language co_author assistant_name assistant_email assistant_signing_key assistant_github analyst analyst_github assistant_style analyst_style coder coder_name coder_email coder_signing_key coder_github committer committer_name committer_email committer_signing_key", keys, " ")
 			for (k = 1; k <= n; k++) known[keys[k]] = 1
 			depth = 0
 			hidden = 0

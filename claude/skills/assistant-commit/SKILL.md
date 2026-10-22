@@ -1,34 +1,39 @@
 ---
 name: assistant-commit
-description: Commits the code the assistant wrote, under the assistant's own identity and signing key, with the user as co-author, in Conventional Commits format after checks (tests, build, lint, sensitive files). Use when the assistant commits its own work; the commit skill is for the user's commits.
+description: Commits the code {{committer}} wrote, under {{committer}}'s own identity and signing key, with the user as co-author, in Conventional Commits format after checks (tests, build, lint, sensitive files). Use when {{committer}} commits its own work; the commit skill is for the user's commits.
 model: haiku
 ---
 
-# Commit as the assistant
+# Commit as {{committer}}
 
 Answer in {{language}}.
 
-{{^assistant_signing_key}}
-No signing key is configured for the assistant, so it never commits as itself. Do not commit:
+{{^committer_signing_key}}
+No signing key is configured for {{committer}}, so it never commits as itself. Do not commit:
 say so, and suggest the `commit` skill, or setting a key with the installer
+{{^coder}}
 (`--assistant-signing-key`).
-{{/assistant_signing_key}}
-{{#assistant_signing_key}}
-This skill commits as {{assistant_name}} <{{assistant_email}}>, signed with
-`{{assistant_signing_key}}`. The repository and global git configuration stay the user's: the
+{{/coder}}
+{{#coder}}
+(`--coder-signing-key`).
+{{/coder}}
+{{/committer_signing_key}}
+{{#committer_signing_key}}
+This skill commits as {{committer_name}} <{{committer_email}}>, signed with
+`{{committer_signing_key}}`. The repository and global git configuration stay the user's: the
 identity and key are passed on the command line only.
 
 ## 1. Check the key
 
-- `{{assistant_signing_key}}` and the private key next to it (the same path without `.pub`)
+- `{{committer_signing_key}}` and the private key next to it (the same path without `.pub`)
   must exist. If one is missing, do not commit: report it.
 
 ## 2. Review the changes
 
 - `git status` and `git diff` (plus `git diff --staged` if files are already staged).
 - `git log --oneline -10` to follow the repository's message style (language, scopes in use).
-- Commit only changes the assistant wrote in this session. If other changes are mixed in,
-  stage only the assistant's, or ask the user.
+- Commit only changes {{committer}} wrote in this session. If other changes are mixed in,
+  stage only {{committer}}'s, or ask the user.
 - If there is nothing to commit, say so and stop.
 
 ## 3. Pre-commit checks
@@ -85,7 +90,7 @@ everything passes), "Edit the message" and "Cancel".
 - Commit with exactly this command, the message passed through a heredoc:
 
   ```sh
-  git -c user.name="{{assistant_name}}" -c user.email="{{assistant_email}}" -c user.signingkey="{{assistant_signing_key}}" -c gpg.format=ssh -c commit.gpgsign=true commit -F - <<'MESSAGE'
+  git -c user.name="{{committer_name}}" -c user.email="{{committer_email}}" -c user.signingkey="{{committer_signing_key}}" -c gpg.format=ssh -c commit.gpgsign=true commit -F - <<'MESSAGE'
   <message>
   MESSAGE
   ```
@@ -93,9 +98,9 @@ everything passes), "Edit the message" and "Cancel".
 - Never use `--no-verify`, `--amend` or `--no-gpg-sign` without an explicit request. If a
   pre-commit hook fails, fix the issue and create a new commit.
 - Check the result: `git log -1 --format='%an <%ae>'` must show
-  {{assistant_name}} <{{assistant_email}}>, and `git cat-file commit HEAD` must hold a
+  {{committer_name}} <{{committer_email}}>, and `git cat-file commit HEAD` must hold a
   `gpgsig` header (`%G?` is not enough: it shows `N` for an SSH signature when no
   `gpg.ssh.allowedSignersFile` is configured). If the commit is not signed, stop and report
   it.
 - Show `git log --oneline -1` and the final `git status`. Do not push.
-{{/assistant_signing_key}}
+{{/committer_signing_key}}

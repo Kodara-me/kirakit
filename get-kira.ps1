@@ -122,7 +122,7 @@ $ManifestPath = Join-Path $ClaudeDir '.kirakit-manifest'
 $OriginalsPath = Join-Path $ClaudeDir '.kirakit-originals'
 $PlaceholderKeys = @('user', 'they', 'them', 'their', 'language', 'co_author', 'assistant_name', 'assistant_email',
     'assistant_signing_key', 'assistant_github', 'analyst', 'analyst_github', 'coder', 'coder_name', 'coder_email',
-    'coder_signing_key', 'coder_github')
+    'coder_signing_key', 'coder_github', 'committer', 'committer_name', 'committer_email', 'committer_signing_key')
 
 $script:Work = $null
 $script:BackupDir = $null
@@ -612,6 +612,11 @@ function Get-KiraValue($UserProfile) {
         analyst = $analystValue; analyst_github = $analystGithub
         coder = $coderValue; coder_name = $coderName; coder_email = $coderEmail
         coder_signing_key = $coderSigningKey; coder_github = $coderGithub
+        # With a coder, she commits; the assistant leads and never commits.
+        committer = if ($coderValue) { 'the coder' } else { 'the assistant' }
+        committer_name = if ($coderValue) { $coderName } else { $assistantName }
+        committer_email = if ($coderValue) { $coderEmail } else { $assistantEmail }
+        committer_signing_key = if ($coderValue) { $coderSigningKey } else { $signingKey }
     }
 }
 

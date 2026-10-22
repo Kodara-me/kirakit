@@ -466,6 +466,42 @@ check 'lead-analyst: next task started as before (R24)' contains "$tmp/lead-anal
 check 'lead-analyst: merge after approval as before (R24)' contains "$tmp/lead-analyst/CLAUDE.md" 'merge only after approval, and asking before'
 check 'lead: no team rules without a member' test ! -e "$tmp/build/rules/team.md"
 
+# --- the coder commits and opens pull requests as herself (#79 R17, R20, R24) --------------
+
+$shell "$root/scripts/build.sh" -o "$tmp/commit-coder" --analyst --assistant 'Kira <kira@example.com>' \
+	--assistant-signing-key /keys/kira.pub --assistant-github kira-bot --co-author 'Kira <kira@example.com>' \
+	--coder 'Cleo <cleo@example.com>' --coder-signing-key /keys/cleo.pub --coder-github cleo-bot >/dev/null
+git_rules=$tmp/commit-coder/rules/git.md
+commit_skill=$tmp/commit-coder/skills/assistant-commit/SKILL.md
+check 'coder commits: she writes and commits the code (R17)' contains "$git_rules" 'The team has a coder, Cleo: she writes the code, commits it'
+check 'coder commits: the lead never commits (R17)' contains "$git_rules" 'never writes code or commits'
+check 'coder commits: her identity and key (R17)' contains "$git_rules" 'git -c user.name="Cleo" -c user.email=cleo@example.com'
+check 'coder commits: not the assistant'"'"'s (R17)' sh -c '! grep -q "/keys/kira.pub" "$1"' _ "$git_rules"
+check 'coder commits: user as co-author (R17)' contains "$git_rules" 'Commits made by the coder (the `assistant-commit` skill) end with exactly one line'
+check 'coder commits: her account (R17)' contains "$git_rules" 'GH_TOKEN=$(gh auth token --user cleo-bot)'
+check 'coder commits: the lead reviews her pull requests (R17)' contains "$git_rules" '--assignee cleo-bot --reviewer kira-bot'
+check 'coder commits: tasks assigned to her (R17)' contains "$git_rules" 'The tasks she works on are assigned to `cleo-bot`.'
+check 'coder commits: gaps go to the analyst (R20)' contains "$git_rules" 'she asks the analyst in a comment on that issue'
+check 'coder commits: the coder implements the tasks' contains "$git_rules" 'splits them into tasks; the coder implements the tasks.'
+check 'coder commits: skill commits as the coder (R17)' contains "$commit_skill" 'This skill commits as Cleo <cleo@example.com>, signed with'
+check 'coder commits: skill uses her key (R17)' contains "$commit_skill" 'git -c user.name="Cleo" -c user.email="cleo@example.com" -c user.signingkey="/keys/cleo.pub"'
+check 'coder commits: skill credits the user (R17)' contains "$commit_skill" 'Co-Authored-By: <user name> <<user email>>'
+check 'coder commits: board moves as her account (R17)' contains "$tmp/commit-coder/skills/board-status/SKILL.md" 'GH_TOKEN=$(gh auth token --user cleo-bot)'
+check 'coder commits: no placeholder' no_placeholder "$tmp/commit-coder"
+$shell "$root/scripts/build.sh" -o "$tmp/commit-coder-solo" --coder 'Cleo <cleo@example.com>' \
+	--coder-github cleo-bot >/dev/null
+check 'coder commits: gaps go to the user without an analyst (R20)' contains "$tmp/commit-coder-solo/rules/git.md" 'she asks the user in a comment on that issue'
+check 'coder commits: the user reviews without a lead account' contains "$tmp/commit-coder-solo/rules/git.md" '--assignee cleo-bot --reviewer <the user'"'"'s login>'
+check 'coder commits: no key, no commit' contains "$tmp/commit-coder-solo/skills/assistant-commit/SKILL.md" '(`--coder-signing-key`).'
+check 'coder commits: no key said in the rules' contains "$tmp/commit-coder-solo/rules/git.md" 'No signing key is configured for the coder'
+$shell "$root/scripts/build.sh" -o "$tmp/commit-assistant" --analyst --assistant 'Kira <kira@example.com>' \
+	--assistant-signing-key /keys/kira.pub --assistant-github kira-bot --co-author 'Kira <kira@example.com>' >/dev/null
+check 'no coder: the assistant commits as before (R24)' contains "$tmp/commit-assistant/skills/assistant-commit/SKILL.md" 'This skill commits as Kira <kira@example.com>, signed with'
+check 'no coder: skill title as before (R24)' grep -qx '# Commit as the assistant' "$tmp/commit-assistant/skills/assistant-commit/SKILL.md"
+check 'no coder: rules as before (R24)' contains "$tmp/commit-assistant/rules/git.md" 'the code it wrote with the `assistant-commit` skill, under its own identity.'
+check 'no coder: no coder text (R24)' sh -c '! grep -qi "coder" "$1" "$2" "$3"' _ "$tmp/commit-assistant/rules/git.md" \
+	"$tmp/commit-assistant/skills/assistant-commit/SKILL.md" "$tmp/commit-assistant/skills/board-status/SKILL.md"
+
 # --- Iris, a team member (#15 R1, R2, R11, R4, R9) -----------------------------------------
 
 $shell "$root/scripts/build.sh" -o "$tmp/iris-build" --name Alex --gender female --analyst \

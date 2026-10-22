@@ -28,6 +28,12 @@ with the user's account, without the prefix, and keep using the user's account f
 board.
 
 {{/assistant_github}}
+{{#coder_github}}
+When the coder runs this skill, her writes are made as her own account instead, by
+prefixing them with `GH_TOKEN=$(gh auth token --user {{coder_github}})`, with the same
+fallback to the user's account.
+
+{{/coder_github}}
 ## Steps
 
 1. Repository owner: `gh repo view --json owner --jq .owner.login`. Boards are looked up
