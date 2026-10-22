@@ -109,6 +109,28 @@ jobs:
           CLAUDE_CONFIG_DIR="$RUNNER_TEMP/ps-analyst" pwsh -File get-kira.ps1 -Copy -Name Alex -Gender female \
             -Language auto -Assistant 'Kira <kira@example.com>' -AnalystGithub iris-bot
           grep -qx 'analyst=yes' "$RUNNER_TEMP/ps-analyst/.kirakit-profile"
+          CLAUDE_CONFIG_DIR="$RUNNER_TEMP/sh-coder" sh get-kira.sh --copy --name Alex --gender female \
+            --language auto --assistant 'Kira <kira@example.com>' --coder 'Cleo <cleo@example.com>' \
+            --coder-signing-key /keys/cleo.pub --coder-github cleo-bot
+          CLAUDE_CONFIG_DIR="$RUNNER_TEMP/ps-coder" pwsh -File get-kira.ps1 -Copy -Name Alex -Gender female \
+            -Language auto -Assistant 'Kira <kira@example.com>' -Coder 'Cleo <cleo@example.com>' \
+            -CoderSigningKey /keys/cleo.pub -CoderGithub cleo-bot
+          grep -qx 'coder=Cleo <cleo@example.com>' "$RUNNER_TEMP/ps-coder/.kirakit-profile"
+          grep -qx 'coder_github=cleo-bot' "$RUNNER_TEMP/ps-coder/.kirakit-profile"
+          # The coder's keys are reloaded on the next run, and asked for no more.
+          rerun=$(CLAUDE_CONFIG_DIR="$RUNNER_TEMP/ps-coder" pwsh -File get-kira.ps1 -Copy </dev/null)
+          printf '%s\n' "$rerun" | grep -F 'coder Cleo <cleo@example.com>'
+          ! printf '%s\n' "$rerun" | grep -F 'no terminal to ask for'
+          # A profile saved before the coder reads as having none, and asks nothing.
+          mkdir -p "$RUNNER_TEMP/ps-earlier"
+          printf 'name=Alex\ngender=male\nlanguage=auto\nassistant_name=Kira\nassistant_email=kira@example.com\nassistant_signing_key=\nassistant_github=\nco_author_trailer=yes\nanalyst=no\nanalyst_github=\nstyle=kira-cozy\n' \
+            >"$RUNNER_TEMP/ps-earlier/.kirakit-profile"
+          earlier=$(CLAUDE_CONFIG_DIR="$RUNNER_TEMP/ps-earlier" pwsh -File get-kira.ps1 -Copy </dev/null)
+          ! printf '%s\n' "$earlier" | grep -F 'no terminal to ask for'
+          grep -qx 'coder=' "$RUNNER_TEMP/ps-earlier/.kirakit-profile"
+          # Invalid values are refused.
+          ! CLAUDE_CONFIG_DIR="$RUNNER_TEMP/ps-bad" pwsh -File get-kira.ps1 -DryRun -Coder Cleo
+          ! CLAUDE_CONFIG_DIR="$RUNNER_TEMP/ps-bad" pwsh -File get-kira.ps1 -DryRun -CoderGithub 'a/b'
           CLAUDE_CONFIG_DIR="$RUNNER_TEMP/sh-generic" sh get-kira.sh --copy </dev/null
           CLAUDE_CONFIG_DIR="$RUNNER_TEMP/ps-generic" pwsh -File get-kira.ps1 -Copy </dev/null
       - name: Same release tag picked without a clone
@@ -127,7 +149,7 @@ jobs:
             grep -F '(v0.10.0)'
       - name: Compare
         run: |
-          for pair in sh:ps sh-assistant:ps-assistant sh-analyst:ps-analyst sh-generic:ps-generic; do
+          for pair in sh:ps sh-assistant:ps-assistant sh-analyst:ps-analyst sh-generic:ps-generic sh-coder:ps-coder; do
             a=$RUNNER_TEMP/${pair%%:*} b=$RUNNER_TEMP/${pair##*:}
             for path in output-styles skills rules CLAUDE.md settings.json; do
               diff -r "$a/$path" "$b/$path"

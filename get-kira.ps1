@@ -11,8 +11,8 @@ and linked elsewhere. Without a clone, the repository is fetched into a temporar
 and files are copied.
 
 Output styles, skills, agents and CLAUDE.md are personalized from a profile: how Kira calls
-the user, the user's gender, the answer language and the assistant (git identity, signing
-key, GitHub account, Co-Authored-By trailers). The installer asks once and saves the answers
+the user, the user's gender, the answer language, the assistant (git identity, signing
+key, GitHub account, Co-Authored-By trailers), the analyst and the coder. The installer asks once and saves the answers
 in $CLAUDE_CONFIG_DIR\.kirakit-profile for later runs.
 
 Without -Only, styles and claude are installed. The github component copies issue and pull
@@ -48,6 +48,12 @@ Add Iris, an analyst for ideas and specifications, to the team.
 No analyst: Kira writes ideas and specifications herself.
 .PARAMETER AnalystGithub
 The analyst's own GitHub account (implies -Analyst; empty: none).
+.PARAMETER Coder
+The coder's git identity, for Cleo, as "NAME <EMAIL>" (default: none).
+.PARAMETER CoderSigningKey
+The coder's public SSH signing key (empty: none).
+.PARAMETER CoderGithub
+The coder's own GitHub account (empty: none).
 .PARAMETER DefaultStyle
 Output style selected in settings.json (default: kira-cozy).
 .PARAMETER Reconfigure
@@ -82,6 +88,9 @@ param(
     [switch]$Analyst,
     [switch]$NoAnalyst,
     [string]$AnalystGithub,
+    [string]$Coder,
+    [string]$CoderSigningKey,
+    [string]$CoderGithub,
     [string]$DefaultStyle,
     [switch]$Reconfigure,
     [string[]]$Persona = @(),
@@ -112,7 +121,8 @@ $ProfilePath = Join-Path $ClaudeDir '.kirakit-profile'
 $ManifestPath = Join-Path $ClaudeDir '.kirakit-manifest'
 $OriginalsPath = Join-Path $ClaudeDir '.kirakit-originals'
 $PlaceholderKeys = @('user', 'they', 'them', 'their', 'language', 'co_author', 'assistant_name', 'assistant_email',
-    'assistant_signing_key', 'assistant_github', 'analyst', 'analyst_github')
+    'assistant_signing_key', 'assistant_github', 'analyst', 'analyst_github', 'coder', 'coder_name', 'coder_email',
+    'coder_signing_key', 'coder_github')
 
 $script:Work = $null
 $script:BackupDir = $null
@@ -325,19 +335,21 @@ function Test-KiraGithub([string]$Value) {
     return $Value -cnotmatch '[^A-Za-z0-9-]'
 }
 
-function Read-KiraAssistant([string]$Current) {
+# Ask for a git identity, such as WHOSE = "Assistant's"; return "NAME <EMAIL>", or nothing when
+# no email is given.
+function Read-KiraIdentity([string]$Whose, [string]$DefaultName, [string]$Current) {
     if ($Current -match '^(.+) <(.+)>$') {
         $currentName = $Matches[1]
         $currentEmail = $Matches[2]
     } else {
-        $currentName = 'Kira'
+        $currentName = $DefaultName
         $currentEmail = ''
     }
-    $assistantName = Read-KiraAnswer "Assistant's name" $currentName
+    $identityName = Read-KiraAnswer "$Whose name" $currentName
     while ($true) {
-        $assistantEmail = Read-KiraAnswer "Assistant's email (empty: none)" $currentEmail
-        if (-not $assistantEmail) { return '' }
-        $value = "$assistantName <$assistantEmail>"
+        $identityEmail = Read-KiraAnswer "$Whose email (empty: none)" $currentEmail
+        if (-not $identityEmail) { return '' }
+        $value = "$identityName <$identityEmail>"
         if (Test-KiraCoAuthor $value) { return $value }
         Write-Host 'Expected an email address such as kira@example.com.'
     }
@@ -394,6 +406,12 @@ function Read-KiraProfile {
         $saved.analyst = 'no'
         $saved.analyst_github = ''
     }
+    # Profiles before the coder: the team had none, and the question is not asked again.
+    if ($saved.Count -gt 0 -and -not $saved.ContainsKey('coder')) {
+        $saved.coder = ''
+        $saved.coder_signing_key = ''
+        $saved.coder_github = ''
+    }
     return $saved
 }
 
@@ -412,6 +430,9 @@ function Get-KiraProfile {
         # An analyst's account means an analyst, unless -NoAnalyst says otherwise.
         analyst               = $Analyst -or $NoAnalyst -or [bool]$AnalystGithub
         analyst_github        = $Bound.ContainsKey('AnalystGithub')
+        coder                 = $Bound.ContainsKey('Coder')
+        coder_signing_key     = $Bound.ContainsKey('CoderSigningKey')
+        coder_github          = $Bound.ContainsKey('CoderGithub')
     }
     $result = @{
         name                  = if ($given.name) { $Name } elseif ($saved.ContainsKey('name')) { $saved.name } else { '' }
@@ -422,19 +443,24 @@ function Get-KiraProfile {
         assistant_github      = if ($given.assistant_github) { $AssistantGithub } elseif ($saved.ContainsKey('assistant_github')) { $saved.assistant_github } else { '' }
         analyst               = if ($NoAnalyst) { 'no' } elseif ($Analyst -or $AnalystGithub) { 'yes' } elseif ($saved.ContainsKey('analyst')) { $saved.analyst } else { 'no' }
         analyst_github        = if ($given.analyst_github) { $AnalystGithub } elseif ($saved.ContainsKey('analyst_github')) { $saved.analyst_github } else { '' }
+        coder                 = if ($given.coder) { $Coder } elseif ($saved.ContainsKey('coder')) { $saved.coder } else { '' }
+        coder_signing_key     = if ($given.coder_signing_key) { $CoderSigningKey } elseif ($saved.ContainsKey('coder_signing_key')) { $saved.coder_signing_key } else { '' }
+        coder_github          = if ($given.coder_github) { $CoderGithub } elseif ($saved.ContainsKey('coder_github')) { $saved.coder_github } else { '' }
         style                 = if ($DefaultStyle) { $DefaultStyle } elseif ($saved.ContainsKey('style') -and $saved.style) { $saved.style } else { 'kira-cozy' }
     }
     $defaultTrailer = if ($result.assistant) { 'yes' } else { 'no' }
     $result.co_author_trailer = if ($NoCoAuthor) { 'no' } elseif ($Bound.ContainsKey('CoAuthor')) { 'yes' } elseif ($saved.ContainsKey('co_author_trailer')) { $saved.co_author_trailer } else { $defaultTrailer }
 
     $missing = @()
-    foreach ($key in @('name', 'gender', 'language', 'assistant', 'assistant_signing_key', 'assistant_github', 'co_author_trailer', 'analyst', 'analyst_github')) {
+    foreach ($key in @('name', 'gender', 'language', 'assistant', 'assistant_signing_key', 'assistant_github', 'co_author_trailer', 'analyst', 'analyst_github', 'coder', 'coder_signing_key', 'coder_github')) {
         # Meaningless without an assistant identity, unless it is about to be asked.
         if (($key -ne 'assistant' -and $key.StartsWith('assistant')) -or $key -eq 'co_author_trailer') {
             if ($missing -notcontains 'assistant' -and -not $result.assistant) { continue }
         }
         # Meaningless without an analyst, unless one is about to be asked for.
         if ($key -eq 'analyst_github' -and $missing -notcontains 'analyst' -and $result.analyst -ne 'yes') { continue }
+        # Meaningless without a coder identity, unless it is about to be asked.
+        if ($key -ne 'coder' -and $key.StartsWith('coder') -and $missing -notcontains 'coder' -and -not $result.coder) { continue }
         if (-not $given[$key] -and ($Reconfigure -or -not $saved.ContainsKey($key))) { $missing += $key }
     }
     $save = $true
@@ -452,7 +478,7 @@ function Get-KiraProfile {
             'name' { $result.name = Read-KiraAnswer 'How should Kira call you?' $result.name }
             'gender' { $result.gender = Read-KiraGender $result.gender }
             'language' { $result.language = Read-KiraAnswer 'Which language should Kira answer in? (auto follows the conversation)' $result.language }
-            'assistant' { $result.assistant = Read-KiraAssistant $result.assistant }
+            'assistant' { $result.assistant = Read-KiraIdentity "Assistant's" 'Kira' $result.assistant }
             'assistant_signing_key' {
                 if ($result.assistant) { $result.assistant_signing_key = Read-KiraAnswer "Assistant's public SSH signing key (empty: the assistant does not commit as itself)" $result.assistant_signing_key }
             }
@@ -465,6 +491,12 @@ function Get-KiraProfile {
             'analyst' { $result.analyst = Read-KiraAnalyst $result.analyst }
             # R8: the analyst never commits, so she has a GitHub account but no signing key.
             'analyst_github' { if ($result.analyst -eq 'yes') { $result.analyst_github = Read-KiraGithub "Analyst's" $result.analyst_github } }
+            'coder' { $result.coder = Read-KiraIdentity "Coder's" 'Cleo' $result.coder }
+            # The other coder values mean nothing without a coder identity.
+            'coder_signing_key' {
+                if ($result.coder) { $result.coder_signing_key = Read-KiraAnswer "Coder's public SSH signing key (empty: the coder does not commit as itself)" $result.coder_signing_key }
+            }
+            'coder_github' { if ($result.coder) { $result.coder_github = Read-KiraGithub "Coder's" $result.coder_github } }
         }
     }
     if ($result.analyst -ne 'yes') {
@@ -477,6 +509,11 @@ function Get-KiraProfile {
         $result.co_author_trailer = 'no'
     }
     $result.assistant_signing_key = Expand-KiraHome $result.assistant_signing_key
+    if (-not $result.coder) {
+        $result.coder_signing_key = ''
+        $result.coder_github = ''
+    }
+    $result.coder_signing_key = Expand-KiraHome $result.coder_signing_key
     $result.co_author = if ($result.co_author_trailer -eq 'yes') { $result.assistant } else { '' }
     if ($result.assistant -match '^(.+) <(.+)>$') {
         $assistantName = $Matches[1]; $assistantEmail = $Matches[2]
@@ -493,7 +530,8 @@ function Get-KiraProfile {
         "assistant_name=$assistantName${Nl}assistant_email=$assistantEmail${Nl}" +
         "assistant_signing_key=$($result.assistant_signing_key)${Nl}assistant_github=$($result.assistant_github)${Nl}" +
         "co_author_trailer=$($result.co_author_trailer)${Nl}analyst=$($result.analyst)${Nl}" +
-        "analyst_github=$($result.analyst_github)${Nl}style=$($result.style)${Nl}" +
+        "analyst_github=$($result.analyst_github)${Nl}coder=$($result.coder)${Nl}" +
+        "coder_signing_key=$($result.coder_signing_key)${Nl}coder_github=$($result.coder_github)${Nl}style=$($result.style)${Nl}" +
         "assistant_style=$assistantStyle${Nl}bin_dir=$binDir$Nl"
     $current = if (Test-Path -LiteralPath $ProfilePath) { Read-KiraText $ProfilePath } else { $null }
     if ($current -ne $text) {
@@ -509,13 +547,13 @@ function Get-KiraProfile {
 }
 
 # R8: warn about a signing key that is not there; the installer never creates one.
-function Test-KiraSigningKey($UserProfile) {
-    $key = $UserProfile.assistant_signing_key
-    if (-not $key) { return }
-    if (-not (Test-Path -LiteralPath $key -PathType Leaf)) {
-        Write-KiraLog "warning: the assistant's signing key $key does not exist; it cannot commit as itself until it does"
-    } elseif (-not (Test-Path -LiteralPath ($key -replace '\.pub$', '') -PathType Leaf)) {
-        Write-KiraLog "warning: no private key next to $key; the assistant cannot sign with it"
+# Test-KiraSigningKey WHO KEY, such as WHO = "the assistant".
+function Test-KiraSigningKey([string]$Who, [string]$Key) {
+    if (-not $Key) { return }
+    if (-not (Test-Path -LiteralPath $Key -PathType Leaf)) {
+        Write-KiraLog "warning: $Who's signing key $Key does not exist; $Who cannot commit as itself until it does"
+    } elseif (-not (Test-Path -LiteralPath ($Key -replace '\.pub$', '') -PathType Leaf)) {
+        Write-KiraLog "warning: no private key next to $Key; $Who cannot sign with it"
     }
 }
 
@@ -528,7 +566,12 @@ function Get-KiraValue($UserProfile) {
     # The analyst's account means nothing without an analyst.
     $analystValue = if ($UserProfile['analyst'] -eq 'yes') { 'yes' } else { '' }
     $analystGithub = if ($analystValue) { [string]$UserProfile['analyst_github'] } else { '' }
-    foreach ($value in @($UserProfile.name, $UserProfile.language, $UserProfile.co_author, $assistant, $signingKey)) {
+    $coderValue = [string]$UserProfile['coder']
+    # Nor do the coder's key and account without a coder.
+    $coderSigningKey = if ($coderValue) { [string]$UserProfile['coder_signing_key'] } else { '' }
+    $coderGithub = if ($coderValue) { [string]$UserProfile['coder_github'] } else { '' }
+    foreach ($value in @($UserProfile.name, $UserProfile.language, $UserProfile.co_author, $assistant, $signingKey, $coderValue,
+            $coderSigningKey)) {
         if ($value -match "`n|\{\{|\}\}") { throw "invalid value: $value" }
     }
     switch ($UserProfile.gender) {
@@ -552,7 +595,14 @@ function Get-KiraValue($UserProfile) {
     } else {
         throw "invalid assistant: $assistant (expected `"NAME <EMAIL>`")"
     }
-    foreach ($login in @($github, $analystGithub)) {
+    if ($coderValue -eq '') {
+        $coderName = ''; $coderEmail = ''
+    } elseif ($coderValue -match '^(.+) <(.+@.+)>$') {
+        $coderName = $Matches[1]; $coderEmail = $Matches[2]
+    } else {
+        throw "invalid coder: $coderValue (expected `"NAME <EMAIL>`")"
+    }
+    foreach ($login in @($github, $analystGithub, $coderGithub)) {
         if ($login -cmatch '[^A-Za-z0-9-]') { throw "invalid GitHub login: $login" }
     }
     return @{
@@ -560,6 +610,8 @@ function Get-KiraValue($UserProfile) {
         co_author = $coAuthorValue; assistant_name = $assistantName; assistant_email = $assistantEmail
         assistant_signing_key = $signingKey; assistant_github = $github
         analyst = $analystValue; analyst_github = $analystGithub
+        coder = $coderValue; coder_name = $coderName; coder_email = $coderEmail
+        coder_signing_key = $coderSigningKey; coder_github = $coderGithub
     }
 }
 
@@ -989,6 +1041,11 @@ try {
     if ($AssistantSigningKey -match "`n") { throw "invalid signing key path: $AssistantSigningKey" }
     if (-not (Test-KiraGithub $AssistantGithub)) { throw "invalid GitHub login: $AssistantGithub" }
     if (-not (Test-KiraGithub $AnalystGithub)) { throw "invalid GitHub login: $AnalystGithub" }
+    if ($Bound.ContainsKey('Coder') -and ($Coder -eq '' -or -not (Test-KiraCoAuthor $Coder))) {
+        throw "invalid coder: $Coder (expected `"NAME <EMAIL>`")"
+    }
+    if ($CoderSigningKey -match "`n") { throw "invalid signing key path: $CoderSigningKey" }
+    if (-not (Test-KiraGithub $CoderGithub)) { throw "invalid GitHub login: $CoderGithub" }
     foreach ($personaName in @($Persona) + @($DefaultStyle | Where-Object { $_ })) {
         if ($personaName -notmatch '^[A-Za-z0-9_-]+$') { throw "invalid persona name: $personaName" }
     }
@@ -1028,8 +1085,9 @@ try {
             }
             $shownName = if ($userProfile.name) { $userProfile.name } else { '(no name)' }
             $shownAssistant = if ($userProfile.assistant) { $userProfile.assistant } else { 'none' }
-            Write-KiraLog "profile: $shownName, $($userProfile.gender), language $($userProfile.language), assistant $shownAssistant, co-author trailers $($userProfile.co_author_trailer), analyst $($userProfile.analyst)$(if ($userProfile.analyst_github) { " ($($userProfile.analyst_github))" }), style $($userProfile.style)"
-            Test-KiraSigningKey $userProfile
+            Write-KiraLog "profile: $shownName, $($userProfile.gender), language $($userProfile.language), assistant $shownAssistant, co-author trailers $($userProfile.co_author_trailer), analyst $($userProfile.analyst)$(if ($userProfile.analyst_github) { " ($($userProfile.analyst_github))" }), coder $(if ($userProfile.coder) { $userProfile.coder } else { 'none' }), style $($userProfile.style)"
+            Test-KiraSigningKey 'the assistant' $userProfile.assistant_signing_key
+            Test-KiraSigningKey 'the coder' $userProfile.coder_signing_key
             Build-KiraOutput $userProfile
             if (-not $Only -or $Only -eq 'styles') { Install-KiraStyle }
             if (-not $Only -or $Only -eq 'claude') { Install-KiraClaude $userProfile.style }
