@@ -595,40 +595,47 @@ check 'colors: none outside Konsole (#36 R12)' test -z "$(colors)"
 
 # --- launchers: team (#36 R3, R13, R14) ----------------------------------------------------
 
-# Only the tools team needs, so that the real Konsole is never in reach; fake konsole and
-# qdbus6 that record their arguments, and a qdbus6 that answers nothing with FAKE_DBUS_DOWN.
+# Only the tools team needs, so that the real Konsole is never in reach, and a fake konsole
+# that records its arguments, then the layout it was given.
 teambin=$tmp/teambin
 mkdir -p "$teambin"
-for tool in bash dirname sleep; do
+for tool in bash cat dirname mktemp rm sed sleep; do
 	ln -s "$(command -v "$tool")" "$teambin/$tool"
 done
-printf '%s\n' '#!/bin/sh' 'printf "%s\n" "$$" "$@" >"$FAKE_KONSOLE_ARGS"' >"$teambin/konsole"
-printf '%s\n' '#!/bin/sh' '[ -z "${FAKE_DBUS_DOWN-}" ] || exit 1' 'printf "%s\n" "$1" >"$FAKE_DBUS_SERVICE"' \
-	'shift' 'printf "%s\n" "$*" >>"$FAKE_DBUS_CALLS"' >"$teambin/qdbus6"
-chmod +x "$teambin/konsole" "$teambin/qdbus6"
-calls=$tmp/team-calls
-opened=$tmp/team-konsole
+printf '%s\n' '#!/bin/sh' 'printf "%s\n" "$1" "$2" >"$FAKE_KONSOLE_ARGS.args"' 'cat "$3" >"$FAKE_KONSOLE_ARGS"' \
+	>"$teambin/konsole"
+chmod +x "$teambin/konsole"
+opened=$tmp/team-layout
 # team_run BIN [ARGS...]: run BIN/team with only the fake tools on the PATH.
 team_run() {
-	rm -f "$calls" "$opened" "$tmp/team-service"
+	rm -f "$opened" "$opened.args"
 	team=$1/team
 	shift
-	env PATH="$teambin" FAKE_DBUS_CALLS="$calls" FAKE_KONSOLE_ARGS="$opened" \
-		FAKE_DBUS_SERVICE="$tmp/team-service" "$team" "$@"
+	env PATH="$teambin" FAKE_KONSOLE_ARGS="$opened" "$team" "$@"
 }
-# konsole_opened: wait for the fake konsole started in the background, then print its arguments.
+# konsole_opened: wait for the fake konsole started in the background, then print the layout.
 konsole_opened() {
 	i=0
-	while [ ! -f "$opened" ] && [ $i -lt 50 ]; do
+	while [ ! -s "$opened" ] && [ $i -lt 50 ]; do
 		sleep 0.1
 		i=$((i + 1))
 	done
-	sed 1d "$opened"
+	cat "$opened"
 }
-# Konsole is reached at the service named after its process.
-konsole_service() {
-	konsole_opened >/dev/null
-	test "$(cat "$tmp/team-service")" = "org.kde.konsole-$(head -n 1 "$opened")"
+# layout BIN MEMBER...: the layout expected for these members of BIN, in $workdir.
+layout() {
+	bin=$1
+	shift
+	printf '{\n    "Orientation": "Horizontal",\n    "Widgets": [\n'
+	while [ $# -gt 0 ]; do
+		separator=,
+		[ $# -gt 1 ] || separator=
+		cat <<EOF
+        { "SessionRestoreId": 0, "Command": "sh -c 'cd -- \\"\$1\\" && exec \\"\$2\\"' team '$tmp/it'\\\\''s here' '$bin/$1'" }$separator
+EOF
+		shift
+	done
+	printf '    ]\n}\n'
 }
 
 workdir="$tmp/it's here"
@@ -636,21 +643,16 @@ mkdir -p "$workdir"
 solo=$tmp/members-noid-bin
 check 'team: installed with the assistant (#36 R3)' test -x "$solo/team"
 team_run "$solo" "$workdir" >/dev/null 2>&1
-check 'team: a new Konsole window in DIR (#36 R13)' test "$(konsole_opened)" = "$(expected --separate --workdir "$workdir")"
-check 'team: one member, no split (#36 R13)' test "$(cat "$calls")" = "$(expected /Sessions/1 \
-	"/Sessions/1 org.kde.konsole.Session.runCommand cd '$tmp/it'\\''s here' && '$solo/assistant'")"
-check "team: Konsole's service (#36 R13)" konsole_service
+check 'team: one member, one pane in DIR (#36 R13)' test "$(konsole_opened)" = "$(layout "$solo" assistant)"
+check 'team: a new Konsole window with the layout (#36 R13)' \
+	test "$(cat "$opened.args")" = "$(expected --separate --layout)"
 
 claude=$tmp/team
 kira_profile --copy --bin-dir "$claude-bin" --analyst >/dev/null
 duo=$claude-bin
 (cd "$workdir" && team_run "$duo") >/dev/null 2>&1
-check 'team: the current directory by default (#36 R13)' test "$(konsole_opened)" = "$(expected --separate --workdir "$workdir")"
-check 'team: two members side by side (#36 R13)' test "$(cat "$calls")" = "$(expected /Sessions/1 \
-	'/Windows/1 org.kde.konsole.Window.createSplit 0 true' /Sessions/2 \
-	"/Sessions/1 org.kde.konsole.Session.runCommand cd '$tmp/it'\\''s here' && '$duo/assistant'" \
-	"/Sessions/2 org.kde.konsole.Session.runCommand cd '$tmp/it'\\''s here' && '$duo/analyst'")"
-
+check 'team: two members side by side, in the current directory by default (#36 R13)' \
+	test "$(konsole_opened)" = "$(layout "$duo" assistant analyst)"
 
 # team_fails MESSAGE BIN [ARGS...]: whether BIN/team fails with MESSAGE and opens no window.
 team_fails() {
@@ -658,20 +660,12 @@ team_fails() {
 	shift
 	! team_run "$@" 2>"$tmp/team-error" &&
 		grep -qF "team: $message" "$tmp/team-error" &&
-		[ ! -f "$calls" ] && { sleep 0.2; [ ! -f "$opened" ]; }
+		{ sleep 0.2; [ ! -f "$opened.args" ]; }
 }
 check 'team: an invalid DIR fails (#36 R14)' team_fails 'not a directory' "$duo" "$tmp/nope"
 mv "$teambin/konsole" "$tmp/konsole"
 check 'team: fails without Konsole (#36 R14)' team_fails 'Konsole is not installed' "$duo" "$workdir"
 mv "$tmp/konsole" "$teambin/konsole"
-FAKE_DBUS_DOWN=1
-export FAKE_DBUS_DOWN
-dbus_down() {
-	! team_run "$duo" "$workdir" 2>"$tmp/team-error" &&
-		grep -qF 'team: Konsole did not answer on D-Bus' "$tmp/team-error"
-}
-check 'team: fails when Konsole does not answer on D-Bus (#36 R14)' dbus_down
-unset FAKE_DBUS_DOWN
 
 # The shell is split on purpose, to allow options.
 # shellcheck disable=SC2086

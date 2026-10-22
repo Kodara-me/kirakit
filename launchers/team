@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # team [DIR]: open a new Konsole window with one pane per team member, side by side, each
 # running its member's launcher in DIR (default: the current directory).
+#
+# Konsole gets a layout file with a command per pane. Konsole ignores --workdir with --layout,
+# so each pane enters DIR itself, and it refuses Session.runCommand over D-Bus unless its
+# security-sensitive D-Bus API is enabled, hence no D-Bus.
 set -u
 
 members=(assistant)
@@ -18,40 +22,45 @@ dir=${1:-$PWD}
 [ -d "$dir" ] || die "not a directory: $dir"
 dir=$(cd -- "$dir" && pwd) || die "cannot enter $dir"
 bin=$(cd -- "$(dirname -- "$0")" && pwd) || die 'cannot find the launchers'
-# The panes' shell reads the command; single quotes are the only quoting fish and POSIX
-# shells share, and fish reads a backslash in them differently.
+# Konsole splits each command like a POSIX shell; a backslash or a newline would need more
+# than the quoting below.
 case $dir$bin in
 *\\* | *$'\n'*) die "cannot use a path with a backslash or a newline: $dir" ;;
 esac
-
 command -v konsole >/dev/null || die 'Konsole is not installed'
-qdbus=$(command -v qdbus6 || command -v qdbus) || die 'qdbus6 or qdbus is not installed'
 
-# quote STRING: STRING in single quotes, for the panes' shell.
+# quote STRING: STRING in single quotes. A loop rather than ${1//…}: bash 3.2 (macOS) reads
+# the quotes of its replacement differently.
 quote() {
-	printf "'%s'" "${1//\'/\'\\\'\'}"
-}
-
-konsole --separate --workdir "$dir" >/dev/null 2>&1 &
-service=org.kde.konsole-$!
-
-# wait_for OBJECT: wait up to 5 s for an object of the new window on D-Bus.
-wait_for() {
-	local i
-	for ((i = 0; i < 50; i++)); do
-		"$qdbus" "$service" "$1" >/dev/null 2>&1 && return 0
-		sleep 0.1
+	local rest=$1 out="'"
+	while [[ $rest == *\'* ]]; do
+		out+="${rest%%\'*}'\\''"
+		rest=${rest#*\'}
 	done
-	return 1
+	printf "%s'" "$out$rest"
 }
 
-wait_for /Sessions/1 || die 'Konsole did not answer on D-Bus'
-for ((i = 2; i <= ${#members[@]}; i++)); do
-	"$qdbus" "$service" /Windows/1 org.kde.konsole.Window.createSplit 0 true >/dev/null
-	wait_for "/Sessions/$i" || die 'Konsole did not split the window'
-done
-for ((i = 1; i <= ${#members[@]}; i++)); do
-	"$qdbus" "$service" "/Sessions/$i" org.kde.konsole.Session.runCommand \
-		"cd $(quote "$dir") && $(quote "$bin/${members[i - 1]}")" >/dev/null ||
-		die 'Konsole did not run the command'
-done
+# json STRING: STRING as a JSON string; the paths hold no backslash or control character.
+json() {
+	printf '"%s"' "$(printf '%s' "$1" | sed 's/[\\"]/\\&/g')"
+}
+
+layout_dir=$(mktemp -d "${TMPDIR:-/tmp}/kirakit-team.XXXXXX") || die 'cannot write the layout'
+layout=$layout_dir/layout.json
+{
+	printf '{\n    "Orientation": "Horizontal",\n    "Widgets": [\n'
+	for ((i = 0; i < ${#members[@]}; i++)); do
+		command="sh -c 'cd -- \"\$1\" && exec \"\$2\"' team $(quote "$dir") $(quote "$bin/${members[i]}")"
+		separator=,
+		[ $((i + 1)) -lt ${#members[@]} ] || separator=
+		printf '        { "SessionRestoreId": 0, "Command": %s }%s\n' "$(json "$command")" "$separator"
+	done
+	printf '    ]\n}\n'
+} >"$layout" || die 'cannot write the layout'
+
+konsole --separate --layout "$layout" >/dev/null 2>&1 &
+# Konsole reads the layout as it starts.
+(
+	sleep 30
+	rm -rf "$layout_dir"
+) >/dev/null 2>&1 &
