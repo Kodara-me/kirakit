@@ -73,8 +73,12 @@ jobs:
         env:
           CLAUDE_CONFIG_DIR: ${{ runner.temp }}\claude
         run: |
-          ./get-kira.ps1 -Name CI -Gender female -Language French -CoAuthor 'Kira <kira@example.com>'
-          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $install = ./get-kira.ps1 -Name CI -Gender female -Language French -CoAuthor 'Kira <kira@example.com>' *>&1 | Out-String
+          if ($LASTEXITCODE -ne 0) { Write-Host $install; exit 1 }
+          if (-not $install.Contains('not supported on Windows')) { throw "no launchers notice:`n$install" }
+          $launchers = ./get-kira.ps1 -Only launchers *>&1 | Out-String
+          if ($LASTEXITCODE -ne 0) { Write-Host $launchers; exit 1 }
+          if (-not $launchers.Contains('not supported on Windows')) { throw "no launchers notice with -Only launchers:`n$launchers" }
           $styles = Join-Path $env:CLAUDE_CONFIG_DIR 'output-styles'
           if (-not (Test-Path (Join-Path $styles 'kira-cozy.md'))) { throw 'styles not installed' }
           $settings = Get-Content (Join-Path $env:CLAUDE_CONFIG_DIR 'settings.json') -Raw

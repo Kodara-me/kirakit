@@ -56,6 +56,8 @@ Ask all profile questions again.
 Install only these personas (default: all).
 .PARAMETER Only
 Install one component: styles, claude (CLAUDE.md, rules, settings, agents, skills) or github.
+launchers is accepted for parity with get-kira.sh, but the launchers are not supported on
+Windows: nothing is installed.
 .PARAMETER Target
 Repository for -Only github (default: the current one).
 .PARAMETER Link
@@ -83,7 +85,7 @@ param(
     [string]$DefaultStyle,
     [switch]$Reconfigure,
     [string[]]$Persona = @(),
-    [ValidateSet('styles', 'claude', 'github')]
+    [ValidateSet('styles', 'claude', 'launchers', 'github')]
     [string]$Only,
     [string]$Target,
     [switch]$Link,
@@ -1031,6 +1033,9 @@ try {
             Build-KiraOutput $userProfile
             if (-not $Only -or $Only -eq 'styles') { Install-KiraStyle }
             if (-not $Only -or $Only -eq 'claude') { Install-KiraClaude $userProfile.style }
+            if (-not $Only -or $Only -eq 'launchers') {
+                Write-KiraLog 'notice: the launchers (assistant, analyst, team) are not supported on Windows; none is installed'
+            }
             Save-KiraManifest
         }
     }

@@ -10,6 +10,7 @@ machine with one command.
 | `personas/` | Claude Code output styles: `_core.md` holds the traits shared by every persona, each other file is an overlay (`kira-cozy.md`, …) |
 | `team/` | Team members beside Kira, one file each (`iris.md`), built into an output style and an agent |
 | `claude/` | Content for `~/.claude/`: `CLAUDE.md`, `skills/`, `agents/` |
+| `launchers/` | Commands that start a team member or the whole team (`assistant`, `analyst`, `team`), and their Konsole color schemes |
 | `github/` | Issue and pull request templates, a workflow and Copilot instructions to copy into a repository's `.github/` |
 | `.github/workflows/` | This repository's CI, and reusable workflows other repositories can call |
 | `scripts/` | `build.sh` (builds the personalized files into `dist/`) and `test.sh` (end-to-end tests) |
@@ -65,6 +66,15 @@ In `$CLAUDE_CONFIG_DIR` (default: `~/.claude`):
 | `.kirakit-profile`, `.kirakit-manifest`, `.kirakit-originals` | Profile and the record used by `--uninstall` |
 | `.kirakit-backups/<timestamp>/` | Files that were replaced or removed |
 
+Outside it, on Linux and macOS (see [Launchers](#launchers)):
+
+| Path | Component |
+| --- | --- |
+| `assistant`, `team`, `kirakit-session` in `~/.local/bin` (or `--bin-dir`) | `launchers` |
+| `analyst` in the same directory, with an analyst | `launchers` |
+| `kirakit-assistant.colorscheme` in `$XDG_DATA_HOME/konsole` (default: `~/.local/share/konsole`) | `launchers` |
+| `kirakit-analyst.colorscheme` in the same directory, with an analyst | `launchers` |
+
 The `github` component is installed only on request (`--only github`), into a repository's
 `.github/`: issue templates (bug report, and a feature request written as a specification),
 a pull request template, Copilot instructions, and a workflow that checks pull request titles.
@@ -89,9 +99,11 @@ see `Get-Help .\get-kira.ps1 -Detailed`).
 | `--no-analyst` | No analyst: Kira writes ideas and specifications herself |
 | `--analyst-github LOGIN` | The analyst's own GitHub account (implies `--analyst`; empty: none) |
 | `--default-style PERSONA` | Style selected in `settings.json` (default: `kira-cozy`) |
+| `--assistant-style PERSONA` | Style of the `assistant` launcher (default: the default style) |
+| `--bin-dir DIR` | Where the launchers go, an absolute path (default: `~/.local/bin`) |
 | `--reconfigure` | Ask all profile questions again |
 | `--persona NAME` | Install only this persona (repeatable; default: all) |
-| `--only COMPONENT` | `styles`, `claude` or `github`; default: `styles` and `claude` |
+| `--only COMPONENT` | `styles`, `claude`, `launchers` or `github`; default: `styles`, `claude` and `launchers` |
 | `--target DIR` | Repository for `--only github` (default: the current one) |
 | `--link` / `--copy` | Force symlink or copy mode |
 | `--uninstall` | Remove what kirakit installed and restore the files it replaced |
@@ -99,6 +111,7 @@ see `Get-Help .\get-kira.ps1 -Detailed`).
 Environment variables:
 
 - `CLAUDE_CONFIG_DIR` — Claude Code configuration directory (default: `~/.claude`)
+- `XDG_DATA_HOME` — where the Konsole color schemes go, in `konsole/` (default: `~/.local/share`)
 - `KIRAKIT_REPO`, `KIRAKIT_REF` — repository and branch or tag fetched without a clone
   (default: the release the installer comes from, otherwise the latest `vX.Y.Z` tag; set
   `KIRAKIT_REF=main` for unreleased changes)
@@ -241,8 +254,11 @@ From a clone, update with `git pull` then run the installer again.
 were there before kirakit (for example your own `CLAUDE.md`). It keeps the profile, the
 backups and the `outputStyle` and `attribution` settings.
 
+`--uninstall` also removes the launchers and color schemes, and restores the files they
+replaced.
+
 Requirements: `git`, and a POSIX shell with standard utilities (`awk`, `sed`, `cmp`, `diff`,
-`mktemp`) or PowerShell 5+.
+`mktemp`) or PowerShell 5+. The launchers need `bash`; `team` and the colors need Konsole.
 
 ## Personas
 
@@ -279,9 +295,8 @@ Iris is calm, precise and curious. She asks "why" before "how", restates what sh
 understood, points out gaps and contradictions, settles the questions that have a good
 answer and records them, and asks only about real trade-offs.
 
-- **Talk to her** by switching the session's output style to `Iris` (`/config`), or start
-  one with `claude --settings '{"outputStyle":"Iris"}'`. Switch back to a Kira style the
-  same way.
+- **Talk to her** with the `analyst` command (see [Launchers](#launchers)), or by switching
+  the session's output style to `Iris` (`/config`). Switch back to a Kira style the same way.
 - **Hand her work** through the `iris` agent: a Kira session delegates a clarification or a
   specification question to her, and she answers in her own voice.
 - `claude --agent iris` is not the way to talk to her: an agent session keeps the global
@@ -292,6 +307,36 @@ and `agents/<name>.md`, with the same body. Its front matter holds `name` and `d
 for the output style, and `delegate`, the agent's description: when to hand work to this
 member. Iris's file sits in a `{{#analyst}}` block, so without an analyst nothing is built or
 installed.
+
+## Launchers
+
+The `launchers` component installs one command per team member, and one for the whole team:
+
+| Command | What it does |
+| --- | --- |
+| `assistant [ARGS…]` | Starts Claude Code as the assistant: a session named after it (Kira without a git identity), in its style |
+| `analyst [ARGS…]` | The same for Iris, with an analyst |
+| `team [DIR]` | Opens a new Konsole window with every member side by side (the assistant on the left), each running its command in `DIR` (default: the current directory) |
+
+`assistant` and `analyst` pass their arguments to Claude Code (`assistant --resume`,
+`analyst -p "…"`) and exit with its status. The assistant's style is the default style, or
+the one given with `--assistant-style`.
+
+In Konsole, each member's pane takes its own color scheme while Claude Code runs: Catppuccin
+Mocha with a mauve (assistant) or peach (analyst) background. The scheme of the Konsole
+profile comes back when Claude Code exits, fails or is interrupted. Outside Konsole, no color
+changes; the color sequences go to the terminal, never to redirected output.
+
+`team` needs Konsole. It writes a temporary layout with one pane per member and opens it with
+`konsole --separate --layout`. It uses no D-Bus: Konsole refuses to run commands over D-Bus
+unless its security-sensitive D-Bus API is enabled.
+
+The installer warns when the bin directory is not on your `PATH`, and when another command
+with a launcher's name comes first in it. A shell function or alias of the same name, such
+as a hand-written `team` fish function, also wins over the launcher, and the installer
+cannot see it: remove it once the launchers are installed.
+
+The launchers are not supported on Windows: `get-kira.ps1` prints a notice and installs none.
 
 ## Skills
 
@@ -328,7 +373,9 @@ The formats are defined in `claude/skills/idea/SKILL.md` and `claude/skills/spec
 ## Placeholders
 
 Personal details live only in the profile. Every Markdown file under `personas/` and
-`claude/` can use these placeholders, filled at build time:
+`claude/`, and every file under `launchers/`, can use these placeholders, filled at build
+time (in the launchers, `{{assistant_name}}` is "Kira" when the assistant has no git
+identity):
 
 | Placeholder | Value |
 | --- | --- |
@@ -339,6 +386,7 @@ Personal details live only in the profile. Every Markdown file under `personas/`
 | `{{assistant_name}}`, `{{assistant_email}}` | The assistant's git identity, or nothing |
 | `{{assistant_signing_key}}` | Path to the assistant's public SSH signing key, or nothing |
 | `{{assistant_github}}` | The assistant's GitHub login, or nothing |
+| `{{assistant_style}}`, `{{analyst_style}}` | The name of the assistant's and the analyst's output style, e.g. "Kira (cozy)" and "Iris" |
 
 A line holding only a placeholder that expands to nothing is removed.
 

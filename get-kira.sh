@@ -74,7 +74,7 @@ Options:
   --reconfigure              Ask all profile questions again
   --persona NAME             Install only this persona (repeatable; default: all)
   --only COMPONENT           styles, claude (CLAUDE.md, rules, settings, agents, skills),
-                             launchers (assistant, analyst, Konsole color schemes) or github
+                             launchers (assistant, analyst, team, Konsole color schemes) or github
   --target DIR               Repository for --only github (default: the current one)
   --link                     Symlink files to the local clone (default from a clone)
   --copy                     Copy files (default without a clone)
