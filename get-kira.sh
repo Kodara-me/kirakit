@@ -1212,7 +1212,12 @@ if [ -z "$src" ]; then
 	work_dir
 	ref=$(resolve_ref)
 	log "fetching $KIRAKIT_REPO ($ref)"
-	git clone --quiet --depth 1 --branch "$ref" -- "$KIRAKIT_REPO" "$work/repo" ||
+	# An empty repository, a shallow fetch and a checkout of FETCH_HEAD: unlike a shallow
+	# clone, they print no detached HEAD advice and no "is not a commit" warning for an
+	# annotated tag, while git's errors still reach stderr.
+	{ git init --quiet -- "$work/repo" &&
+		git -C "$work/repo" fetch --quiet --depth 1 -- "$KIRAKIT_REPO" "$ref" &&
+		git -C "$work/repo" -c advice.detachedHead=false checkout --quiet FETCH_HEAD; } ||
 		die "could not fetch $KIRAKIT_REPO"
 	src=$work/repo
 	mode=copy

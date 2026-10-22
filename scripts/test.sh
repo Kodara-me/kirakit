@@ -1340,6 +1340,55 @@ sed 's/^KIRAKIT_VERSION=$/KIRAKIT_VERSION=v0.9.0/' "$root/get-kira.sh" >"$tmp/st
 check 'ref: a stamped copy installs its own version' test "$(fetched "$tmp/stamped.sh")" = v0.9.0
 check 'ref: KIRAKIT_REF wins' test "$(KIRAKIT_REF=main fetched "$tmp/stamped.sh")" = main
 
+# A release tag is annotated (and signed), and main moves on after it.
+git -C "$tmp/remote" -c tag.gpgsign=false tag -a -m 'v0.11.0' v0.11.0
+printf '\nafter the tag\n' >>"$tmp/remote/claude/skills/pull/SKILL.md"
+git -C "$tmp/remote" -c user.name=test -c user.email=test@example.com -c commit.gpgsign=false \
+	commit -q -a -m 'after the tag'
+
+# fetch_output REF: everything a dry run fetching REF writes, stdout and stderr, in the
+# French locale when the system has it, with git's advice left at its defaults.
+fetch_output() {
+	CLAUDE_CONFIG_DIR=$tmp/quiet KIRAKIT_REPO="file://$tmp/remote" KIRAKIT_REF=$1 \
+		LANG=fr_CA.UTF-8 LC_ALL=fr_CA.UTF-8 $shell -s -- --dry-run \
+		--name Alex --gender female --language auto --no-co-author \
+		<"$root/get-kira.sh" 2>&1
+}
+
+# only_kirakit FILE: whether every line from "fetching" to "source" is kirakit's own.
+only_kirakit() {
+	grep -q '^kirakit: fetching ' "$1" && grep -q '^kirakit: source: ' "$1" &&
+		! sed -n '/^kirakit: fetching /,/^kirakit: source: /p' "$1" | grep -v '^kirakit:'
+}
+
+fetch_output v0.11.0 >"$tmp/fetch-tag.out" || true
+check 'fetch: only kirakit lines for an annotated tag (#86 R1)' only_kirakit "$tmp/fetch-tag.out"
+fetch_output main >"$tmp/fetch-main.out" || true
+check 'fetch: only kirakit lines for a branch (#86 R2)' only_kirakit "$tmp/fetch-main.out"
+
+# R4: the installed source is the commit the requested ref points to.
+CLAUDE_CONFIG_DIR=$tmp/at-tag KIRAKIT_REPO="file://$tmp/remote" KIRAKIT_REF=v0.11.0 \
+	$shell -s -- --name Alex --gender female --language auto --no-co-author \
+	<"$root/get-kira.sh" >/dev/null 2>&1 || true
+check 'fetch: a tag installs the commit it points to (#86 R4)' \
+	sh -c 'test -f "$1" && ! grep -qF "after the tag" "$1"' _ "$tmp/at-tag/skills/pull/SKILL.md"
+CLAUDE_CONFIG_DIR=$tmp/at-main KIRAKIT_REPO="file://$tmp/remote" KIRAKIT_REF=main \
+	$shell -s -- --name Alex --gender female --language auto --no-co-author \
+	<"$root/get-kira.sh" >/dev/null 2>&1 || true
+check 'fetch: a branch installs its last commit (#86 R4)' \
+	contains "$tmp/at-main/skills/pull/SKILL.md" 'after the tag'
+
+# R3: an unknown ref fails, with git's error and kirakit's, and installs nothing.
+status=0
+CLAUDE_CONFIG_DIR=$tmp/unknown KIRAKIT_REPO="file://$tmp/remote" KIRAKIT_REF=no-such-ref \
+	LC_ALL=C $shell -s -- --name Alex --gender female --language auto --no-co-author \
+	<"$root/get-kira.sh" >"$tmp/fetch-unknown.out" 2>&1 || status=$?
+check 'fetch: an unknown ref fails (#86 R3)' test "$status" -ne 0
+check "fetch: an unknown ref shows git's error (#86 R3)" contains "$tmp/fetch-unknown.out" "couldn't find remote ref no-such-ref"
+check 'fetch: an unknown ref shows could not fetch (#86 R3)' \
+	contains "$tmp/fetch-unknown.out" "could not fetch file://$tmp/remote"
+check 'fetch: an unknown ref installs nothing (#86 R3)' test ! -e "$tmp/unknown"
+
 # --- the clone -----------------------------------------------------------------------------
 
 check "clone: dist/ unchanged" test "$(dist_fingerprint)" = "$dist_before"
