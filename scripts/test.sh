@@ -449,10 +449,10 @@ for dir in "$tmp/lead-coder" "$tmp/lead-both"; do
 	check "$what: code goes to the coder (R15)" contains "$team" 'Code goes to the coder, the `cleo` agent, run in the background'
 	check "$what: the lead never codes (R15)" contains "$team" 'The assistant never writes'
 	check "$what: one coder task at a time (R16)" contains "$team" 'One coder task at a time.'
-	check "$what: the lead reviews first (R18)" contains "$team" 'the assistant reviews it on GitHub as its'
+	check "$what: the lead reviews first (R18)" contains "$team" 'the assistant posts that verdict on GitHub as its own'
 	check "$what: the user reviews after the lead (R18)" contains "$team" 'on approval, it requests the user'"'"'s review'
 	check "$what: changes go back to the coder (R19)" contains "$team" 'it hands the pull request back to'
-	check "$what: report in a few lines (R21)" contains "$team" 'the tasks it closes, its own review result, and any question for the user'
+	check "$what: report in a few lines (R21)" contains "$team" 'the tasks it closes, its own review result, the review'"'"'s "For the user" items, and any'
 	check "$what: merge on the user's own approval (R22)" contains "$team" 'only when the user'"'"'s own latest review is an approval'
 	check "$what: not on reviewDecision (R22)" contains "$team" 'never on `reviewDecision`'
 	check "$what: focused conversation kept" contains "$team" '## Keeping the conversation focused'
@@ -654,7 +654,7 @@ check 'team rules: no section without an analyst' sh -c '! grep -q "The team\|Ir
 # that a new agent or skill fails until it is listed here and in the README.
 expected_model() {
 	case $1 in
-	iris | cleo | idea | spec) echo opus ;;
+	iris | cleo | idea | spec | review-pr) echo opus ;;
 	next-task | diffv | pull-request) echo sonnet ;;
 	board-status | test | pull | push | commit | assistant-commit) echo haiku ;;
 	esac
@@ -662,7 +662,7 @@ expected_model() {
 # forked NAME: whether the skill runs in a forked context.
 forked() {
 	case $1 in
-	next-task | board-status | test | pull | push | diffv) return 0 ;;
+	next-task | board-status | test | pull | push | diffv | review-pr) return 0 ;;
 	*) return 1 ;;
 	esac
 }
@@ -726,6 +726,45 @@ check 'pull-request: no account hard-coded (#97 D9)' sh -c '! grep -qi "kira\|cl
 check 'pull-request: the coder opens hers with it (#97 R5)' contains "$full/agents/cleo.md" 'She opens the pull request with the `pull-request` skill'
 check 'pull-request: CLAUDE.md points to it without a coder (#97 R5)' contains "$tmp/commit-assistant/CLAUDE.md" 'Pull requests are opened with the `pull-request` skill.'
 check 'pull-request: not in CLAUDE.md with a coder (#97 R5)' sh -c '! grep -q "pull-request" "$1"' _ "$full/CLAUDE.md"
+
+# The review-pr skill (#130).
+review=$full/skills/review-pr/SKILL.md
+check 'review-pr: built with a coder (#130 R11)' test -f "$review"
+for build in commit-assistant iris-build build2; do
+	check "review-pr: none without a coder, $build (#130 R11)" test ! -e "$tmp/$build/skills/review-pr"
+done
+check 'review-pr: runs forked on Opus (#130 R1)' sh -c 'grep -qx "model: opus" "$1" && grep -qx "context: fork" "$1"' _ "$review"
+check 'review-pr: front matter on the first line (#130 R1)' test "$(head -n 1 "$review")" = ---
+check 'review-pr: takes a reference and notes (#130 R2)' contains "$review" 'argument-hint: "PR [notes]"'
+check 'review-pr: URL, OWNER/REPO#N or number (#130 R2)' contains "$review" 'a URL (`https://github.com/OWNER/REPO/pull/N`),'
+check 'review-pr: any directory, no clone (#130 R2)' contains "$review" 'Pass `-R OWNER/REPO` to every `gh pr`'
+check 'review-pr: three verdicts (#130 R3)' contains "$review" 'Verdict: approve | request changes | not ready'
+check 'review-pr: one row per check (#130 R3)' sh -c 'for row in "Requirements (R4)" "Tests (R5)" "Security (R6)" "CI (R7)" "Fast-forward (R8)"; do grep -qF "| $row |" "$1" || exit 1; done' _ "$review"
+check 'review-pr: comments with path:line (#130 R3)' contains "$review" '- `path:line` — the finding and what to change.'
+check 'review-pr: For the user, Nothing or items (#130 R3)' sh -c 'grep -qx "## For the user" "$1" && grep -qF "says exactly \`Nothing.\`" "$1"' _ "$review"
+check 'review-pr: neutral result (#130 R3)' contains "$review" 'in neutral language (no persona, no greeting)'
+check 'review-pr: reads the tasks and their specification (#130 R4)' contains "$review" 'read it and its parent specification'
+check 'review-pr: requirement not met blocks (#130 R4)' contains "$review" 'A requirement not met leads to `request changes`.'
+check 'review-pr: no task reported (#130 R4)' contains "$review" 'that references no task is reported as such'
+check 'review-pr: tests name their requirement (#130 R5)' contains "$review" 'A testable requirement with no such test leads'
+check 'review-pr: not testable does not block (#130 R5)' contains "$review" 'is reported as `not testable` and does not block.'
+check 'review-pr: security changes for the user (#130 R6)' sh -c 'for item in "credentials, tokens and signing keys" "permission rules and \`allowed-tools\`" "Git identity and signing" "network downloads and remote scripts" "files written or deleted outside the project" "CI workflows"; do grep -qF -- "$item" "$1" || exit 1; done && grep -qF "does not by itself lead to \`request changes\`" "$1"' _ "$review"
+check 'review-pr: pending CI, not ready (#130 R7)' contains "$review" 'any `pending`: the verdict is `not ready`, naming the pending checks, whatever the other'
+check 'review-pr: failed CI blocks (#130 R7)' contains "$review" 'any `fail` or `cancel`: the CI check fails'
+check 'review-pr: no CI does not block (#130 R7)' contains "$review" 'say that the repository has no CI check;'
+check 'review-pr: fast-forward through compare (#130 R8)' contains "$review" '`behind_by` is 0 exactly when'
+check 'review-pr: rebase with the other findings (#130 R8)' contains "$review" 'asking to rebase the branch on `BASE`, together with every'
+check 'review-pr: only reads (#130 R9)' contains "$review" 'This skill only reads. It posts no review, comment or label'
+check 'review-pr: no write in allowed-tools (#130 R9)' sh -c 'tools=$(grep "^allowed-tools: " "$1") && ! printf "%s\n" "$tools" | grep -Eq "review|comment|edit|merge|close|create|project|push|commit|Write|Edit|gh api:|gh api\)|gh api \*" && printf "%s\n" "$tools" | grep -qF "Bash(gh api repos/*/compare/*)"' _ "$review"
+check 'review-pr: every gh api call a GET (#130 R9)' contains "$review" 'Every `gh api` call is a GET'
+team=$full/rules/team.md
+check 'review-pr: the lead runs it (#130 R10)' contains "$team" '`review-pr OWNER/REPO#<n> [notes]`, with the user'"'"'s direction for the task as notes.'
+check 'review-pr: the lead posts the verdict herself (#130 R10)' contains "$team" 'the assistant posts that verdict on GitHub as its own'
+check 'review-pr: reruns on not ready (#130 R10)' contains "$team" 'background step and runs `review-pr` again;'
+check 'review-pr: no approval against the verdict (#130 R10)' contains "$team" 'It never posts an approval when the'
+check 'review-pr: For the user reported (#130 R10)' contains "$team" 'anything under "For the user" in the result is said to the user'
+check 'review-pr: also with a coder only (#130 R10)' contains "$tmp/commit-coder-solo/rules/team.md" '`review-pr OWNER/REPO#<n> [notes]`'
+check 'review-pr: the README describes the review (#130 R12)' contains "$root/README.md" 'The review runs in the `review-pr`'
 
 # Background agents (#97 R6, D10).
 for build in commit-coder iris-build commit-coder-solo; do

@@ -499,9 +499,16 @@ With a coder, code goes through Cleo the same way:
 - **Kira hands her the work.** The task `next-task` gives, and any change to code you ask
   for, goes to the `cleo` agent in the background, one task at a time. Kira never writes
   code or commits herself, and a new request about Cleo's running task goes to that task.
-- **Cleo opens the pull request, Kira reviews it first.** Kira reviews it on GitHub as her own
-  account. Once she approves, she requests your review; changes requested, by her or by you,
-  go back to Cleo, who makes them, replies to the comments and asks Kira again.
+- **Cleo opens the pull request, Kira reviews it first.** The review runs in the `review-pr`
+  skill, forked on Opus whatever model Kira's session uses: it reads the pull request, its
+  tasks and their specification, the diff, the CI checks and whether the branch can be
+  fast-forwarded, through `gh` only, and returns a verdict (`approve`, `request changes` or
+  `not ready` while CI runs) with its comments and a "For the user" section, while the diff
+  stays out of Kira's conversation. It writes nothing: Kira posts its verdict on GitHub as her
+  own account, in her own voice, and never approves against it. Once she approves, she
+  requests your review and tells you what the review flagged for you (security-sensitive
+  changes, questions); changes requested, by her or by you, go back to Cleo, who makes them,
+  replies to the comments and asks Kira again.
 - **Kira reports in a few lines:** the pull request's URL, the tasks it closes, her review
   result and any question for you. Cleo's intermediate work stays out of the conversation.
 - **Kira merges after your own approval.** Her approval also counts in GitHub's
@@ -594,6 +601,7 @@ when a member invokes it herself, it runs on her model.
 | `idea` | Captures an idea as an issue | opus | inline |
 | `spec` | Turns an idea into a specification and its tasks | opus | inline |
 | `pull-request` | Writes and opens the pull request of a task | sonnet | inline |
+| `review-pr` | Reviews a pull request of the coder and returns a verdict | opus | forked |
 
 The lead's and the analyst's own sessions (`assistant`, `analyst`) run on your model, from
 your Claude Code settings: kirakit does not pin it. `board-status` takes the account that
