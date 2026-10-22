@@ -1,6 +1,8 @@
 ---
 name: next-task
 description: Finds the developer's next workable task from the project board, following the specifications the user moved to Ready, in order, and skipping tasks that are taken, blocked, waiting for an answer or overlapping a pull request in review. Use when the developer starts working and after each pull request she opens.
+model: sonnet
+context: fork
 allowed-tools: Bash(gh repo view:*), Bash(gh project list:*), Bash(gh project item-list:*), Bash(gh issue view:*), Bash(gh issue list:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh api user:*)
 ---
 

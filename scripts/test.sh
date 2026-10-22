@@ -168,9 +168,12 @@ check 'next-task: issues with no specification (#89 R11)' contains "$next" 'issu
 check 'next-task: nothing workable (#89 R13)' contains "$next" 'Nothing workable.'
 board=$tmp/build3/skills/board-status/SKILL.md
 check 'board-status: built (#64)' test -f "$board"
-check 'board-status: writes as the developer (#64 R6)' contains "$board" 'GH_TOKEN=$(gh auth token --user kira-bot)'
+check 'board-status: writes as the account it is given (#64 R6, #97 R3)' contains "$board" 'GH_TOKEN=$(gh auth token --user ACCOUNT)'
+check 'board-status: documents --as ACCOUNT (#97 R3)' sh -c 'grep -q "^argument-hint: \"NUMBER STATUS \[--as ACCOUNT\]" "$1" && grep -q "With \`--as ACCOUNT\`, ACCOUNT is the GitHub login" "$1"' _ "$board"
+check 'board-status: never infers the account (#97 R3)' contains "$board" 'The account comes only from `--as`'
 check "board-status: falls back to the user's account (#64 R6)" contains "$board" 'make the same write again'
-check 'board-status: user account without a login (#64 R6)' sh -c '! grep -q GH_TOKEN "$1"' _ "$tmp/build2/skills/board-status/SKILL.md"
+check 'board-status: user account without --as (#64 R6, #97 R3)' contains "$board" 'every write uses the user'"'"'s account'
+check 'board-status: same skill whatever the profile (#97 R3)' cmp -s "$board" "$tmp/build/skills/board-status/SKILL.md"
 check 'board-status: missing option reported (#64 R4)' contains "$board" 'No *STATUS* column on the TITLE board'
 check 'board-status: no board, no word (#64 R5)' contains "$board" 'stop without a word'
 check 'board-status: pull request added to the boards (#64 R9)' contains "$board" 'gh project item-add BOARD'
@@ -486,7 +489,7 @@ check 'coder commits: the coder implements the tasks' contains "$git_rules" 'spl
 check 'coder commits: skill commits as the coder (R17)' contains "$commit_skill" 'This skill commits as Cleo <cleo@example.com>, signed with'
 check 'coder commits: skill uses her key (R17)' contains "$commit_skill" 'git -c user.name="Cleo" -c user.email="cleo@example.com" -c user.signingkey="/keys/cleo.pub"'
 check 'coder commits: skill credits the user (R17)' contains "$commit_skill" 'Co-Authored-By: <user name> <<user email>>'
-check 'coder commits: board moves as her account (R17)' contains "$tmp/commit-coder/skills/board-status/SKILL.md" 'GH_TOKEN=$(gh auth token --user cleo-bot)'
+check 'coder commits: board moves as her account (R17, #97 R3)' contains "$git_rules" '(`board-status NUMBER STATUS --as cleo-bot`)'
 check 'coder commits: no placeholder' no_placeholder "$tmp/commit-coder"
 $shell "$root/scripts/build.sh" -o "$tmp/commit-coder-solo" --coder 'Cleo <cleo@example.com>' \
 	--coder-github cleo-bot >/dev/null
@@ -528,7 +531,7 @@ check 'iris build: agent has her voice in comments (#79 R11)' contains "$iris_ag
 check 'iris build: specifications stay neutral (#79 R12)' contains "$iris_agent" 'Her ideas, specifications and tasks, and any other issue body or document'
 check 'iris build: agent shares the voice (#59 R1)' contains "$iris_agent" 'Her voice is warm and lively, with a dry, playful wit.'
 check 'iris build: agent keeps the emoticon rule (#59 R3, R4)' contains "$iris_agent" 'without emoticons.'
-tail -n +6 "$iris_agent" >"$tmp/iris-agent-body"
+tail -n +7 "$iris_agent" >"$tmp/iris-agent-body"
 check 'iris build: one body for both' sh -c 'tail -n +7 "$1" | cmp -s - "$2"' _ "$iris_style" "$tmp/iris-agent-body"
 # --- Cleo, the coder (#79 R14, R24) --------------------------------------------------------
 
@@ -626,6 +629,81 @@ check 'team rules: gaps asked, not decided' contains "$rules" 'it does not decid
 check 'team rules: no account lines without a login' sh -c 'grep -q "## The team" "$1" && ! grep -q "On GitHub, the analyst" "$1"' _ \
 	"$tmp/analyst-no-login/rules/git.md"
 check 'team rules: no section without an analyst' sh -c '! grep -q "The team\|Iris" "$1"' _ "$tmp/iris-none/rules/git.md"
+
+# --- models of the agents and skills (#97 R1–R4, R6–R9) ----------------------------------
+
+# expected_model NAME: the model an agent or skill declares, or nothing for an unknown one, so
+# that a new agent or skill fails until it is listed here and in the README.
+expected_model() {
+	case $1 in
+	iris | cleo | idea | spec) echo opus ;;
+	next-task | diffv) echo sonnet ;;
+	board-status | test | pull | push | commit | assistant-commit) echo haiku ;;
+	esac
+}
+# forked NAME: whether the skill runs in a forked context.
+forked() {
+	case $1 in
+	next-task | board-status | test | pull | push | diffv) return 0 ;;
+	*) return 1 ;;
+	esac
+}
+# front FILE KEY: the value of KEY in the front matter of FILE.
+front() {
+	awk -v key="$2: " 'NR == 1 && $0 != "---" { exit } NR > 1 && $0 == "---" { exit } index($0, key) == 1 { print substr($0, length(key) + 1); exit }' "$1"
+}
+# has_model FILE NAME: whether FILE declares the model expected for NAME.
+has_model() {
+	expected=$(expected_model "$2")
+	[ -n "$expected" ] && [ "$(front "$1" model)" = "$expected" ]
+}
+# in_readme NAME RUNS: whether the README table lists NAME with its model and how it runs.
+in_readme() {
+	grep -q "^| \`$1\`.* | $(expected_model "$1") | $2 |\$" "$root/README.md"
+}
+full=$tmp/commit-coder
+check 'models: every skill built (#97 R7)' test "$(find "$full/skills" -name SKILL.md | wc -l)" -ge 10
+for skill_file in "$full"/skills/*/SKILL.md; do
+	skill=$(basename "$(dirname "$skill_file")")
+	check "models: $skill declares $(expected_model "$skill") (#97 R2, R3, R4, R7)" has_model "$skill_file" "$skill"
+	if forked "$skill"; then
+		check "models: $skill runs forked (#97 R3, R4, R7)" test "$(front "$skill_file" context)" = fork
+		check "models: $skill in the README, forked (#97 R8)" in_readme "$skill" forked
+	else
+		check "models: $skill runs inline (#97 R2, R4, R7)" test -z "$(front "$skill_file" context)"
+		check "models: $skill in the README, inline (#97 R8)" in_readme "$skill" inline
+	fi
+done
+check 'models: both members built (#97 R7)' test -f "$full/agents/iris.md" -a -f "$full/agents/cleo.md"
+for agent_file in "$full"/agents/*.md; do
+	agent=$(basename "$agent_file" .md)
+	check "models: agent $agent declares $(expected_model "$agent") (#97 R1, R7, R9)" has_model "$agent_file" "$agent"
+	check "models: agent $agent in the README (#97 R8)" in_readme "$agent" agent
+	style=$full/output-styles/$agent.md
+	[ ! -f "$style" ] || check "models: style $agent without a model (#97 R1, R9)" test -z "$(front "$style" model)"
+done
+check 'models: the README says the members'"'"' sessions use your model (#97 R8)' contains "$root/README.md" 'The lead'"'"'s and the analyst'"'"'s own sessions'
+mkdir -p "$blocks/team"
+printf '%s\n' --- 'name: Bad' 'description: no model' 'delegate: Use Bad.' --- '' 'Body.' >"$blocks/team/bad.md"
+check 'models: rejects a member without a model (#97 R7)' sh -c '! $1 "$2/scripts/build.sh" -o "$3" 2>"$4" >/dev/null && grep -q "bad.md: missing model" "$4"' _ "$shell" "$blocks" "$tmp/x" "$tmp/x.err"
+rm -r "$blocks/team"
+
+# board-status: callers pass the account that writes (#97 R3).
+check 'models: the lead passes its account in the git rules (#97 R3)' contains "$tmp/build3/rules/git.md" 'its board moves pass `--as kira-bot` to the `board-status` skill'
+check 'models: the analyst passes her account in the git rules (#97 R3)' contains "$tmp/iris-build/rules/git.md" '`--as iris-bot` to the `board-status` skill'
+check 'models: the coder passes her account in cleo.md (#97 R3)' contains "$full/agents/cleo.md" '`board-status NUMBER STATUS --as cleo-bot`'
+check 'models: the lead passes its account in the team rules (#97 R3)' sh -c 'grep -qF "(\`board-status <n> Ready --as kira-bot\`)" "$1" && grep -qF "(\`board-status <n> In review --as kira-bot\`)" "$1"' _ "$full/rules/team.md"
+check 'models: spec moves as the analyst (#97 R3)' contains "$tmp/iris-build/skills/spec/SKILL.md" '`board-status <parent> Specified --as iris-bot`'
+check 'models: spec moves as the developer without an analyst account (#97 R3)' contains "$tmp/build3/skills/spec/SKILL.md" '`board-status <parent> Specified --as kira-bot`'
+check 'models: no --as without an account (#97 R3)' sh -c '! grep -rq -- "--as [a-z]" "$1/rules" "$1/skills"' _ "$tmp/build2"
+
+# Background agents (#97 R6, D10).
+for build in commit-coder iris-build commit-coder-solo; do
+	check "models: background agents' models, $build (#97 R6)" sh -c 'grep -qF "\`model: haiku\` for an agent that reads CI logs or runs the tests" "$1" && grep -qF "\`model: sonnet\` for" "$1"' _ "$tmp/$build/rules/team.md"
+done
+check 'models: no model for iris and cleo (#97 D10)' contains "$full/rules/team.md" 'No `model` is passed when starting `iris` or `cleo`'
+check 'models: no model for iris (#97 D10)' contains "$tmp/iris-build/rules/team.md" 'No `model` is passed when starting `iris`:'
+check 'models: no model for cleo (#97 D10)' contains "$tmp/commit-coder-solo/rules/team.md" 'No `model` is passed when starting `cleo`:'
 
 # --- launchers: Konsole color schemes (#36 R4, R6, R7, R8, R16, R17) -----------------------
 

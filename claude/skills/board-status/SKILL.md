@@ -1,7 +1,9 @@
 ---
 name: board-status
 description: Sets the status of a task, a specification or a pull request on every project board it is on, and can first add a pull request to the boards of the task it closes. Use when the developer starts a task, opens a pull request, gets changes requested or asks for a new review.
-argument-hint: "NUMBER STATUS [--add-to-boards-of ISSUE]"
+model: haiku
+context: fork
+argument-hint: "NUMBER STATUS [--as ACCOUNT] [--add-to-boards-of ISSUE]"
 allowed-tools: Bash(gh issue view:*), Bash(gh pr view:*), Bash(gh repo view:*), Bash(gh project list:*), Bash(gh project item-list:*), Bash(gh project field-list:*)
 ---
 
@@ -11,29 +13,23 @@ Answer in {{language}}.
 
 Arguments: `NUMBER STATUS`, where NUMBER is an issue (a task or a specification) or a pull
 request of the current repository, and STATUS is the name of a `Status` option, such as
-`In progress` or `In review`. With `--add-to-boards-of ISSUE`, NUMBER is a pull request that
+`In progress` or `In review`. With `--as ACCOUNT`, ACCOUNT is the GitHub login of the
+account that makes the writes. With `--add-to-boards-of ISSUE`, NUMBER is a pull request that
 is first added to the boards ISSUE is on.
 
 Use only `gh project`, `gh issue view`, `gh pr view` and `gh repo view` commands, never
 `gh api graphql`: a narrow permission rule must be enough.
 
-{{#assistant_github}}
 ## Account
 
 Reads use the user's account. Writes (`gh project item-add`, `gh project item-edit`) are
-made as the developer's account, by prefixing them with
-`GH_TOKEN=$(gh auth token --user {{assistant_github}})`. When a write fails because that
-account cannot write to the board (it is not a Writer of it), make the same write again
-with the user's account, without the prefix, and keep using the user's account for that
-board.
+made as ACCOUNT when `--as ACCOUNT` is given, by prefixing them with
+`GH_TOKEN=$(gh auth token --user ACCOUNT)`. When a write fails because that account cannot
+write to the board (it is not a Writer of it), make the same write again with the user's
+account, without the prefix, and keep using the user's account for that board. Without
+`--as`, every write uses the user's account. The account comes only from `--as`: never infer
+it from the session or the conversation.
 
-{{/assistant_github}}
-{{#coder_github}}
-When the coder runs this skill, her writes are made as her own account instead, by
-prefixing them with `GH_TOKEN=$(gh auth token --user {{coder_github}})`, with the same
-fallback to the user's account.
-
-{{/coder_github}}
 ## Steps
 
 1. Repository owner: `gh repo view --json owner --jq .owner.login`. Boards are looked up

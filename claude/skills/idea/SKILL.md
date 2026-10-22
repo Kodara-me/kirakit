@@ -1,7 +1,7 @@
 ---
 name: idea
 description: Captures an idea as a GitHub issue in the format of the "Idea" issue form (problem, desired outcome, context), without analysis or specification. Use when the user wants to note, capture or log an idea, a problem or an opportunity for later.
-model: haiku
+model: opus
 argument-hint: "[the idea, in a few words]"
 allowed-tools: Bash(gh issue list:*), Bash(gh label list:*), Bash(gh repo view:*)
 ---

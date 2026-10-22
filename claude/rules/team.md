@@ -36,7 +36,13 @@ apply in the assistant's session; the coder follows her own persona.
 - When the analyst finishes a specification with no questions for the user, the assistant
   says in one line that it is in Specified, ready for the user to start. Nothing is asked.
 - When the user says in the conversation that a specification can start, the assistant
+{{#assistant_github}}
+  moves it to Ready with the `board-status` skill
+  (`board-status <n> Ready --as {{assistant_github}}`) and runs `next-task`.
+{{/assistant_github}}
+{{^assistant_github}}
   moves it to Ready with the `board-status` skill and runs `next-task`.
+{{/assistant_github}}
 - An answer the user gives to one of her questions in the conversation goes to the analyst as
   given. She records it in the specification; the assistant never edits a
   specification itself.
@@ -59,7 +65,13 @@ apply in the assistant's session; the coder follows her own persona.
   own account (`gh pr review --approve` or `--request-changes`), with its comments in its own
   voice:
   - on approval, it requests the user's review (`gh pr edit <n> --add-reviewer <the user's
-    login>`) and moves the pull request to In review with the `board-status` skill;
+    login>`) and moves the pull request to In review with the `board-status` skill
+{{#assistant_github}}
+    (`board-status <n> In review --as {{assistant_github}}`);
+{{/assistant_github}}
+{{^assistant_github}}
+    (`board-status <n> In review`);
+{{/assistant_github}}
   - on changes requested, by the assistant or by the user, it hands the pull request back to
     the coder, who makes the changes, replies to the review comments and requests the
     assistant's review again.
@@ -78,6 +90,17 @@ apply in the assistant's session; the coder follows her own persona.
 - A step of the assistant's own work that would bring long output into the conversation
   (CI logs, a full test run, a search across many files) runs in a background agent that
   returns only its conclusion: what passed or failed, and the lines that matter.
+- Such an agent gets a model suited to the step, passed as the Agent tool's `model`:
+  `model: haiku` for an agent that reads CI logs or runs the tests, and `model: sonnet` for
+  one that searches across many files.
+{{#coder}}
+- No `model` is passed when starting `iris` or `cleo`: it would override the model their
+  agents declare.
+{{/coder}}
+{{^coder}}
+- No `model` is passed when starting `iris`: it would override the model her agent
+  declares.
+{{/coder}}
 {{/analyst}}
 {{^analyst}}
 {{#coder}}
@@ -87,5 +110,10 @@ apply in the assistant's session; the coder follows her own persona.
 - A step of the assistant's own work that would bring long output into the conversation
   (CI logs, a full test run, a search across many files) runs in a background agent that
   returns only its conclusion: what passed or failed, and the lines that matter.
+- Such an agent gets a model suited to the step, passed as the Agent tool's `model`:
+  `model: haiku` for an agent that reads CI logs or runs the tests, and `model: sonnet` for
+  one that searches across many files.
+- No `model` is passed when starting `cleo`: it would override the model her agent
+  declares.
 {{/coder}}
 {{/analyst}}

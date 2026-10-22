@@ -82,7 +82,9 @@ project's `CLAUDE.md` cannot override the attribution rules.
 - Never commit a secret (API key, token, password, `.env`) or a generated file.
 - On a project board, a task goes to In progress when you start it, before creating its
   branch; to In review when its pull request is opened or a new review is requested; and
-  back to In progress when changes are requested. Use the `board-status` skill.
+  back to In progress when changes are requested. Use the `board-status` skill, with `--as`
+  and the GitHub login of the member who makes the move when that member has one (below);
+  without `--as`, it writes with the user's account.
 - The first task of a specification also moves the specification to In progress. A pull
   request is added to its tasks' boards in In review (`board-status` with
   `--add-to-boards-of`), and follows the same moves as its task. Done is left to the
@@ -112,7 +114,8 @@ project's `CLAUDE.md` cannot override the attribution rules.
   needs no decision is reported the same way, without asking for permission.
 - Project boards stay owned by the user. The assistant updates a board as
   `{{assistant_github}}` when it is a collaborator of it (Writer), and with the user's account
-  otherwise.
+  otherwise: its board moves pass `--as {{assistant_github}}` to the `board-status` skill,
+  which falls back to the user's account.
 {{/assistant_github}}
 {{#coder_github}}
 
@@ -122,8 +125,8 @@ project's `CLAUDE.md` cannot override the attribution rules.
   with Write access.
 - Everything the coder writes on GitHub is done as `{{coder_github}}`, by prefixing the `gh`
   command with `GH_TOKEN=$(gh auth token --user {{coder_github}})`: her pull requests,
-  comments, replies to review comments, and board moves (the `board-status` skill writes as
-  her account when she runs it).
+  comments, replies to review comments, and board moves
+  (`board-status NUMBER STATUS --as {{coder_github}}`).
 {{#assistant_github}}
 - Her pull requests: `--assignee {{coder_github}} --reviewer {{assistant_github}}`, so the
   assistant reviews each one first; the user is requested as reviewer after its approval.
@@ -153,7 +156,8 @@ project's `CLAUDE.md` cannot override the attribution rules.
   prefixing the `gh` command with `GH_TOKEN=$(gh auth token --user {{analyst_github}})`:
   ideas, specifications, sub-issues, their labels, and clarification comments. This applies
   to that work whoever does it, the assistant running the `idea` or `spec` skill included,
-  and takes precedence over the assistant's own account.
+  and takes precedence over the assistant's own account. Her board moves pass
+  `--as {{analyst_github}}` to the `board-status` skill.
 {{^coder}}
 - The assistant writes everything else: pull requests, reviews, code comments, replies to
   them, and commits.

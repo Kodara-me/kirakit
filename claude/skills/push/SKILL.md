@@ -2,6 +2,7 @@
 name: push
 description: Pushes the local commits of the current branch to its remote. Use when the user asks to push their commits.
 model: haiku
+context: fork
 disable-model-invocation: true
 allowed-tools: Bash(git status:*), Bash(git fetch:*), Bash(git push:*), Bash(git branch:*), Bash(git rev-parse:*), Bash(git log:*), Bash(git rev-list:*), Bash(git remote:*)
 ---

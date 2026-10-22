@@ -1,6 +1,7 @@
 ---
 name: spec
 description: Turns an idea into a feature specification (context, requirements, design, decisions, tasks) in a GitHub issue, settling on its own the questions that have a good answer and asking only about real trade-offs, and creates each task as a sub-issue. Starts from an idea issue, an existing specification to resume, a specification file, or a description. Use when the user asks to specify, spec out, clarify or plan a feature or an idea.
+model: opus
 argument-hint: "[issue number or URL, path to a specification file, or a description]"
 allowed-tools: Bash(gh issue view:*), Bash(gh issue list:*), Bash(gh label list:*), Bash(gh repo view:*), Bash(git log:*), Bash(git status:*), Read, Grep, Glob
 ---
@@ -189,9 +190,17 @@ confirmation:
   `status:specified` label marks it. When the board has no Specified option, say so in one
   line in the summary comment and in the closing lines.
 {{#analyst_github}}
-- The board's writes in that skill are made as `{{analyst_github}}`, with
-  `GH_TOKEN=$(gh auth token --user {{analyst_github}})`, and with the user's account when
-  `{{analyst_github}}` cannot write to the board.
+- Pass the analyst's account, so that the board's writes are made as `{{analyst_github}}`:
+  `board-status <parent> Specified --as {{analyst_github}}`. The skill falls back to the
+  user's account when `{{analyst_github}}` cannot write to the board.
+{{/analyst_github}}
+{{^analyst_github}}
+{{#assistant_github}}
+- Pass the developer's account, so that the board's writes are made as
+  `{{assistant_github}}`: `board-status <parent> Specified --as {{assistant_github}}`. The
+  skill falls back to the user's account when `{{assistant_github}}` cannot write to the
+  board.
+{{/assistant_github}}
 {{/analyst_github}}
 
 Once the tasks are published, post a summary comment on the parent that mentions the user

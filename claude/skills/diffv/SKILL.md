@@ -2,6 +2,7 @@
 name: diffv
 description: Compares the current code (including uncommitted changes) with the latest version of the branch and gives a concise analysis of the changes. Use when the user asks what changed, for a summary or an analysis of the diff.
 model: sonnet
+context: fork
 argument-hint: "[ref to compare with, e.g. main, origin/main, HEAD~3]"
 allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git fetch:*), Bash(git rev-parse:*), Bash(git merge-base:*), Bash(git branch:*), Bash(git show:*), Read, Grep, Glob
 ---

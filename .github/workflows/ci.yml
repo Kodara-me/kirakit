@@ -168,6 +168,7 @@ jobs:
           test -f "$RUNNER_TEMP/ps-analyst/output-styles/iris.md"
           test -f "$RUNNER_TEMP/ps-coder/agents/cleo.md"
           grep -qx 'model: opus' "$RUNNER_TEMP/ps-coder/agents/cleo.md"
+          grep -qx 'model: opus' "$RUNNER_TEMP/ps-analyst/agents/iris.md"
           test -f "$RUNNER_TEMP/ps-coder/output-styles/cleo.md"
           test ! -e "$RUNNER_TEMP/ps-analyst/agents/cleo.md"
           # The members' permission rules are in the settings compared above (#67 R10).
@@ -315,6 +316,22 @@ jobs:
           test -s "$RUNNER_TEMP/rec-ps/.kirakit-permissions"
           step uninstall --uninstall
           test ! -e "$RUNNER_TEMP/rec-ps/.kirakit-permissions"
+      - name: A member without a model
+        # Both installers refuse to build a team member that declares no model (#97 R7).
+        run: |
+          src=$RUNNER_TEMP/no-model-src
+          cp -r . "$src"
+          sed -i '/^model: /d' "$src/team/iris.md"
+          if CLAUDE_CONFIG_DIR="$RUNNER_TEMP/no-model-sh" sh "$src/get-kira.sh" --copy --name Alex \
+            --gender male --language auto --analyst </dev/null 2>"$RUNNER_TEMP/no-model-sh.err"; then
+            echo "::error::get-kira.sh built a member without a model"; exit 1
+          fi
+          grep -F 'iris.md: missing model' "$RUNNER_TEMP/no-model-sh.err"
+          if CLAUDE_CONFIG_DIR="$RUNNER_TEMP/no-model-ps" pwsh -File "$src/get-kira.ps1" -Copy -Name Alex \
+            -Gender male -Language auto -Analyst </dev/null 2>"$RUNNER_TEMP/no-model-ps.err"; then
+            echo "::error::get-kira.ps1 built a member without a model"; exit 1
+          fi
+          grep -F 'iris.md: missing model' "$RUNNER_TEMP/no-model-ps.err"
       - name: Optional files
         # A template wholly inside a block that is dropped is neither built nor installed, and
         # is removed when an earlier run installed it, by both installers.

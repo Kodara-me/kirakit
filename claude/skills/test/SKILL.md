@@ -2,6 +2,7 @@
 name: test
 description: Builds and runs the project's unit tests, then shows the results in a clear table (summary per suite, failure details). Use when the user asks to run or check the tests.
 model: haiku
+context: fork
 argument-hint: "[optional filter: suite or test name]"
 ---
 

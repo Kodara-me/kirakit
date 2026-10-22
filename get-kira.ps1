@@ -734,6 +734,7 @@ function Build-KiraMember([string]$Out, [string]$Path, $Values) {
     if ($end -lt 0 -or -not $fields['name'] -or -not $fields['description'] -or -not $fields['delegate']) {
         throw "${Path}: missing front matter with name, description and delegate"
     }
+    if (-not $fields['model']) { throw "${Path}: missing model in the front matter" }
     # Body, without the blank lines that follow the front matter.
     $body = New-Object System.Collections.Generic.List[string]
     for ($i = $end + 1; $i -lt $lines.Count; $i++) {
@@ -742,9 +743,7 @@ function Build-KiraMember([string]$Out, [string]$Path, $Values) {
     }
     foreach ($file in @($style, $agent)) { New-Item -ItemType Directory -Force -Path (Split-Path -Parent $file) | Out-Null }
     Write-KiraText $style (Join-KiraLine (@('---', "name: $($fields.name)", "description: $($fields.description)", 'keep-coding-instructions: true', '---', '') + $body.ToArray()))
-    $agentHead = @('---', "name: $member", "description: $($fields.delegate)")
-    if ($fields['model']) { $agentHead += "model: $($fields.model)" }
-    Write-KiraText $agent (Join-KiraLine ($agentHead + @('---', '') + $body.ToArray()))
+    Write-KiraText $agent (Join-KiraLine (@('---', "name: $member", "description: $($fields.delegate)", "model: $($fields.model)", '---', '') + $body.ToArray()))
 }
 
 function Build-KiraOutput($UserProfile) {

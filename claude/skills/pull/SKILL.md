@@ -2,6 +2,7 @@
 name: pull
 description: Fetches and pulls the current Git branch from its remote. Use when the user asks to update, sync or pull the current branch.
 model: haiku
+context: fork
 allowed-tools: Bash(git status:*), Bash(git fetch:*), Bash(git pull:*), Bash(git branch:*), Bash(git rev-parse:*), Bash(git log:*), Bash(git rev-list:*)
 ---
 
