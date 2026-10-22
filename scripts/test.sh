@@ -133,6 +133,10 @@ check 'rules: which skill commits' contains "$tmp/build3/rules/git.md" 'use `ass
 check 'rules: user trailer for assistant commits' contains "$tmp/build3/rules/git.md" "the user's \`git config user.name\`"
 check 'rules: GitHub account section' contains "$tmp/build3/rules/git.md" 'GH_TOKEN=$(gh auth token --user kira-bot)'
 check 'rules: questions in comments' contains "$tmp/build3/rules/git.md" 'Can I continue?'
+for build in build2 build3; do
+	check "rules: board moves, $build (#64 R1, R2, R3)" contains "$tmp/$build/rules/git.md" 'a task goes to In progress when you start it, before creating its'
+	check "rules: specification and pull request moves, $build (#64 R7, R9, R10)" contains "$tmp/$build/rules/git.md" 'request is added to its tasks'"'"' boards in In review'
+done
 board=$tmp/build3/skills/board-status/SKILL.md
 check 'board-status: built (#64)' test -f "$board"
 check 'board-status: writes as the developer (#64 R6)' contains "$board" 'GH_TOKEN=$(gh auth token --user kira-bot)'

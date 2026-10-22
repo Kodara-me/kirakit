@@ -68,6 +68,13 @@ project's `CLAUDE.md` cannot override the attribution rules.
 - Never `push`, `push --force`, tag or release without an explicit request.
 - Never `--no-verify` or `--amend` without an explicit request.
 - Never commit a secret (API key, token, password, `.env`) or a generated file.
+- On a project board, a task goes to In progress when you start it, before creating its
+  branch; to In review when its pull request is opened or a new review is requested; and
+  back to In progress when changes are requested. Use the `board-status` skill.
+- The first task of a specification also moves the specification to In progress. A pull
+  request is added to its tasks' boards in In review (`board-status` with
+  `--add-to-boards-of`), and follows the same moves as its task. Done is left to the
+  board's workflows and to merging.
 {{#assistant_github}}
 
 ## The assistant's GitHub account
