@@ -13,6 +13,8 @@ set -eu
 clone=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 shell=${1:-sh}
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/kirakit-test.XXXXXX")
+# Without the double slash of a TMPDIR that ends with one (macOS), as pwd prints it.
+tmp=$(cd "$tmp" && pwd)
 trap 'rm -rf "$tmp"' EXIT
 failures=0
 claude=
