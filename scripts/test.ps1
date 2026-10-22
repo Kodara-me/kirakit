@@ -136,3 +136,5 @@ if ($failures) {
     exit 1
 }
 Write-Host 'all checks passed'
+# The last run failed on purpose: do not leave its exit code as the script's.
+exit 0
