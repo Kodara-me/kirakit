@@ -54,6 +54,10 @@ The coder's git identity, for Cleo, as "NAME <EMAIL>" (default: none).
 The coder's public SSH signing key (empty: none).
 .PARAMETER CoderGithub
 The coder's own GitHub account (empty: none).
+.PARAMETER AllowReleases
+Let the assistant create releases and push tags without a prompt.
+.PARAMETER NoAllowReleases
+Releases and tags stay behind a prompt (default).
 .PARAMETER DefaultStyle
 Output style selected in settings.json (default: kira-cozy).
 .PARAMETER Reconfigure
@@ -91,6 +95,8 @@ param(
     [string]$Coder,
     [string]$CoderSigningKey,
     [string]$CoderGithub,
+    [switch]$AllowReleases,
+    [switch]$NoAllowReleases,
     [string]$DefaultStyle,
     [switch]$Reconfigure,
     [string[]]$Persona = @(),
@@ -120,6 +126,7 @@ $Sep = [IO.Path]::DirectorySeparatorChar
 $ProfilePath = Join-Path $ClaudeDir '.kirakit-profile'
 $ManifestPath = Join-Path $ClaudeDir '.kirakit-manifest'
 $OriginalsPath = Join-Path $ClaudeDir '.kirakit-originals'
+$PermissionsPath = Join-Path $ClaudeDir '.kirakit-permissions'
 $PlaceholderKeys = @('user', 'they', 'them', 'their', 'language', 'co_author', 'assistant_name', 'assistant_email',
     'assistant_signing_key', 'assistant_github', 'analyst', 'analyst_github', 'coder', 'coder_name', 'coder_email',
     'coder_signing_key', 'coder_github', 'committer', 'committer_name', 'committer_email', 'committer_signing_key')
@@ -448,6 +455,8 @@ function Get-KiraProfile {
         coder_github          = if ($given.coder_github) { $CoderGithub } elseif ($saved.ContainsKey('coder_github')) { $saved.coder_github } else { '' }
         style                 = if ($DefaultStyle) { $DefaultStyle } elseif ($saved.ContainsKey('style') -and $saved.style) { $saved.style } else { 'kira-cozy' }
     }
+    # R3: releases stay behind a prompt unless asked; not a question, an option.
+    $result.allow_releases = if ($AllowReleases) { 'yes' } elseif ($NoAllowReleases) { 'no' } elseif ($saved.ContainsKey('allow_releases') -and $saved.allow_releases -eq 'yes') { 'yes' } else { 'no' }
     $defaultTrailer = if ($result.assistant) { 'yes' } else { 'no' }
     $result.co_author_trailer = if ($NoCoAuthor) { 'no' } elseif ($Bound.ContainsKey('CoAuthor')) { 'yes' } elseif ($saved.ContainsKey('co_author_trailer')) { $saved.co_author_trailer } else { $defaultTrailer }
 
@@ -531,7 +540,8 @@ function Get-KiraProfile {
         "assistant_signing_key=$($result.assistant_signing_key)${Nl}assistant_github=$($result.assistant_github)${Nl}" +
         "co_author_trailer=$($result.co_author_trailer)${Nl}analyst=$($result.analyst)${Nl}" +
         "analyst_github=$($result.analyst_github)${Nl}coder=$($result.coder)${Nl}" +
-        "coder_signing_key=$($result.coder_signing_key)${Nl}coder_github=$($result.coder_github)${Nl}style=$($result.style)${Nl}" +
+        "coder_signing_key=$($result.coder_signing_key)${Nl}coder_github=$($result.coder_github)${Nl}" +
+        "allow_releases=$($result.allow_releases)${Nl}style=$($result.style)${Nl}" +
         "assistant_style=$assistantStyle${Nl}bin_dir=$binDir$Nl"
     $current = if (Test-Path -LiteralPath $ProfilePath) { Read-KiraText $ProfilePath } else { $null }
     if ($current -ne $text) {
@@ -914,12 +924,14 @@ function Install-KiraOutputStyle([string]$Style) {
     }
 }
 
-# The permission rules the members' GitHub accounts need, without duplicates (#67 R1, R2;
+# The permission rules the members' GitHub accounts need, without duplicates (#67 R1, R2, R3;
 # mirrors permission_rules in get-kira.sh).
-function Get-KiraPermissionRule([string]$AssistantLogin, [string]$AnalystLogin) {
+function Get-KiraPermissionRule($UserProfile) {
     $rules = New-Object System.Collections.Generic.List[string]
-    if ($AssistantLogin) {
-        $gh = 'GH_TOKEN=$(gh auth token --user ' + $AssistantLogin + ') gh'
+    $assistantLogin = [string]$UserProfile.assistant_github
+    $analystLogin = [string]$UserProfile.analyst_github
+    if ($assistantLogin) {
+        $gh = 'GH_TOKEN=$(gh auth token --user ' + $assistantLogin + ') gh'
         foreach ($command in @('issue create', 'issue edit', 'issue comment', 'issue close',
                 'pr create', 'pr comment', 'pr review', 'label create')) {
             $rules.Add("Bash($gh ${command}:*)")
@@ -932,9 +944,13 @@ function Get-KiraPermissionRule([string]$AssistantLogin, [string]$AnalystLogin) 
         $rules.Add('Bash(git push origin --delete:*)')
         $rules.Add("Bash($gh project item-edit:*)")
         $rules.Add("Bash($gh project item-add:*)")
+        if ($UserProfile.allow_releases -eq 'yes') {
+            $rules.Add("Bash($gh release create:*)")
+            $rules.Add('Bash(git push origin v:*)')
+        }
     }
-    if ($AnalystLogin) {
-        $gh = 'GH_TOKEN=$(gh auth token --user ' + $AnalystLogin + ') gh'
+    if ($analystLogin) {
+        $gh = 'GH_TOKEN=$(gh auth token --user ' + $analystLogin + ') gh'
         foreach ($command in @('issue create', 'issue edit', 'issue comment', 'issue close',
                 'label create', 'project item-edit', 'project item-list')) {
             $rules.Add("Bash($gh ${command}:*)")
@@ -945,6 +961,17 @@ function Get-KiraPermissionRule([string]$AssistantLogin, [string]$AnalystLogin) 
         if (-not $unique.Contains($rule)) { $unique.Add($rule) }
     }
     return $unique.ToArray()
+}
+
+# Whether TEXT has a single "permissions" key and a single "allow" key, whose array opens at
+# the end of its line or is empty (mirrors allow_shape in get-kira.sh).
+function Test-KiraAllowShape([string]$Text) {
+    if (([regex]::Matches($Text, '"permissions"')).Count -ne 1) { return $false }
+    if (([regex]::Matches($Text, '"allow"')).Count -ne 1) { return $false }
+    foreach ($line in @(Split-KiraLine $Text)) {
+        if ($line -cmatch '"allow"\s*:\s*\[\s*(\].*)?$') { return $true }
+    }
+    return $false
 }
 
 # TEXT with RULES added to "permissions.allow", or $null when the shape of TEXT is not one
@@ -962,7 +989,6 @@ function Add-KiraPermissionRule([string[]]$Rules, [string]$Text) {
         return Join-KiraLine $out.ToArray()
     }
     $permissions = ([regex]::Matches($Text, '"permissions"')).Count
-    $allow = ([regex]::Matches($Text, '"allow"')).Count
     $lines = @(Split-KiraLine $Text)
     $out = New-Object System.Collections.Generic.List[string]
     $done = $false
@@ -989,13 +1015,7 @@ function Add-KiraPermissionRule([string[]]$Rules, [string]$Text) {
         }
         return Join-KiraLine $out.ToArray()
     }
-    # A single "allow" key, whose array opens at the end of its line or is empty.
-    if ($permissions -ne 1 -or $allow -ne 1) { return $null }
-    $shaped = $false
-    foreach ($line in $lines) {
-        if ($line -cmatch '"allow"\s*:\s*\[\s*(\].*)?$') { $shaped = $true }
-    }
-    if (-not $shaped) { return $null }
+    if (-not (Test-KiraAllowShape $Text)) { return $null }
     $empty = ($Text -replace '\s', '').Contains('"allow":[]')
     foreach ($line in $lines) {
         $m = [regex]::Match($line, '"allow"[ \t]*:[ \t]*\[')
@@ -1016,36 +1036,129 @@ function Add-KiraPermissionRule([string[]]$Rules, [string]$Text) {
     return Join-KiraLine $out.ToArray()
 }
 
-# Add the members' permission rules to "permissions.allow" in settings.json, leaving every
-# other setting and rule as it is (#67 R1, R2, R4, R5, R6, R9; mirrors set_permissions in
-# get-kira.sh).
-function Install-KiraPermission([string]$AssistantLogin, [string]$AnalystLogin) {
-    $settings = Join-Path $ClaudeDir 'settings.json'
-    $text = if (Test-Path -LiteralPath $settings) { Read-KiraText $settings } else { '' }
-    $expected = @(Get-KiraPermissionRule $AssistantLogin $AnalystLogin)
-    # R5: a rule already present is not added again.
-    $missing = @($expected | Where-Object { -not $text.Contains('"' + $_ + '"') })
-    if ($missing.Count -eq 0) {
-        if ($expected.Count -gt 0) { Write-KiraLog "up to date: $settings (permissions)" }
-        return
+# TEXT without one occurrence of each of RULES in "permissions.allow", and the comma that
+# follows it, or precedes it for the last rule; $null when the shape of TEXT is not
+# recognized, or a rule is not alone on its line in the array (#67 R7, R8, R14, R15; mirrors
+# remove_permission_rules in get-kira.sh).
+function Undo-KiraPermissionRule([string[]]$Rules, [string]$Text) {
+    if (-not (Test-KiraAllowShape $Text)) { return $null }
+    $wanted = New-Object 'System.Collections.Generic.Dictionary[string,bool]'
+    foreach ($rule in $Rules) { $wanted['"' + $rule + '"'] = $true }
+    $left = $wanted.Count
+    $out = New-Object System.Collections.Generic.List[string]
+    $held = $false
+    $prev = ''
+    $inside = $false
+    foreach ($line in @(Split-KiraLine $Text)) {
+        if ($inside -and $line -match '^[ \t]*\]') { $inside = $false }
+        if ($inside) {
+            $key = $line -replace '^[ \t]+', '' -replace '[ \t]+$', ''
+            $comma = $key.EndsWith(',')
+            if ($comma) { $key = $key.Substring(0, $key.Length - 1) }
+            if ($wanted.ContainsKey($key) -and $wanted[$key]) {
+                $wanted[$key] = $false
+                $left--
+                # The last rule: the comma before it goes too.
+                if (-not $comma -and $held) { $prev = $prev -replace ',[ \t]*$', '' }
+                continue
+            }
+        }
+        if ($line -cmatch '"allow"[ \t]*:[ \t]*\[[ \t]*$') { $inside = $true }
+        if ($held) { $out.Add($prev) }
+        $prev = $line
+        $held = $true
     }
+    if ($held) { $out.Add($prev) }
+    if ($left -gt 0) { return $null }
+    return Join-KiraLine $out.ToArray()
+}
 
-    $new = Add-KiraPermissionRule $missing $text
-    if ($null -eq $new) {
-        Write-KiraLog "warning: cannot add the permission rules to $settings safely; left unchanged. Add them by hand to `"permissions`": {`"allow`": [...]}:"
-        foreach ($rule in $missing) { Write-Host ('  "' + $rule + '"') }
-        return
-    }
+# Print RULES as JSON strings, for the user to copy.
+function Write-KiraRule([string[]]$Rules) {
+    foreach ($rule in $Rules) { Write-Host ('  "' + $rule + '"') }
+}
 
-    Backup-KiraSetting $settings
-    foreach ($rule in $missing) { Write-KiraLog "set permission: $rule in $settings" }
-    if (-not $DryRun) {
-        Initialize-KiraDirectory $ClaudeDir
-        Write-KiraText $settings $new
+function Clear-KiraPermissionRecord {
+    if (Test-Path -LiteralPath $PermissionsPath) {
+        Write-KiraLog "remove permission record: $PermissionsPath"
+        if ($DryRun) { Write-DryRun "remove $PermissionsPath" } else { Remove-Item -LiteralPath $PermissionsPath -Force }
     }
 }
 
-function Install-KiraClaude([string]$Style, [string]$AssistantLogin, [string]$AnalystLogin) {
+# Bring "permissions.allow" in settings.json in line with the rules the profile expects, and
+# record in .kirakit-permissions the rules kirakit inserted. A rule already present that
+# kirakit did not insert is the user's: neither recorded nor removed. With -Uninstall, every
+# recorded rule is removed (#67 R1 to R10, R12 to R15; mirrors sync_permissions in
+# get-kira.sh).
+function Sync-KiraPermission($UserProfile, [switch]$Uninstall) {
+    $settings = Join-Path $ClaudeDir 'settings.json'
+    $exists = Test-Path -LiteralPath $settings
+    $text = if ($exists) { Read-KiraText $settings } else { '' }
+    $expected = @(if (-not $Uninstall) { Get-KiraPermissionRule $UserProfile })
+    $recorded = @(if (Test-Path -LiteralPath $PermissionsPath) {
+            [IO.File]::ReadAllLines($PermissionsPath, $Utf8) | Where-Object { $_ -ne '' }
+        })
+    # R5, R13: an expected rule missing from the file is added, recorded or not.
+    $add = @($expected | Where-Object { -not $text.Contains('"' + $_ + '"') })
+    # R7, R8: a recorded rule no longer expected is removed, when it is still there.
+    $remove = @($recorded | Where-Object { $expected -cnotcontains $_ -and $exists -and $text.Contains('"' + $_ + '"') })
+
+    $changed = $false
+    if ($add.Count -eq 0 -and $remove.Count -eq 0) {
+        if ($expected.Count -gt 0) { Write-KiraLog "up to date: $settings (permissions)" }
+    } else {
+        $new = $text
+        if ($remove.Count -gt 0) {
+            $new = Undo-KiraPermissionRule $remove $new
+            if ($null -eq $new) {
+                Write-KiraLog "warning: cannot remove the permission rules from $settings safely; left unchanged. Remove them by hand from `"permissions`": {`"allow`": [...]}:"
+                Write-KiraRule $remove
+                if ($add.Count -gt 0) {
+                    Write-KiraLog "warning: nor add the permission rules; add them by hand to `"permissions`": {`"allow`": [...]}:"
+                    Write-KiraRule $add
+                }
+                # R15: the record is kept, so that a later run retries; uninstall drops it.
+                if ($Uninstall) { Clear-KiraPermissionRecord }
+                return
+            }
+        }
+        if ($add.Count -gt 0) {
+            $new = Add-KiraPermissionRule $add $new
+            if ($null -eq $new) {
+                Write-KiraLog "warning: cannot add the permission rules to $settings safely; left unchanged. Add them by hand to `"permissions`": {`"allow`": [...]}:"
+                Write-KiraRule $add
+                return
+            }
+        }
+        Backup-KiraSetting $settings
+        foreach ($rule in $remove) { Write-KiraLog "remove permission: $rule from $settings" }
+        foreach ($rule in $add) { Write-KiraLog "set permission: $rule in $settings" }
+        if (-not $DryRun) {
+            Initialize-KiraDirectory $ClaudeDir
+            Write-KiraText $settings $new
+        }
+        $changed = $true
+    }
+
+    if ($Uninstall) { Clear-KiraPermissionRecord; return }
+    # The record: the expected rules kirakit inserted, now or earlier (R12).
+    $record = @($expected | Where-Object { $recorded -ccontains $_ -or ($changed -and $add -ccontains $_) })
+    if ($record.Count -eq 0) {
+        Clear-KiraPermissionRecord
+        return
+    }
+    $recordText = Join-KiraLine $record
+    $current = if (Test-Path -LiteralPath $PermissionsPath) { Read-KiraText $PermissionsPath } else { $null }
+    if ($current -cne $recordText) {
+        Write-KiraLog "save permission record: $PermissionsPath"
+        if (-not $DryRun) {
+            Initialize-KiraDirectory $ClaudeDir
+            Write-KiraText $PermissionsPath $recordText
+        }
+    }
+}
+
+function Install-KiraClaude([string]$Style, $UserProfile) {
     if (Test-Path -LiteralPath (Join-Path (Join-Path $script:Src 'claude') 'CLAUDE.md')) {
         Install-KiraBuilt 'CLAUDE.md' (Join-Path $ClaudeDir 'CLAUDE.md')
     }
@@ -1078,7 +1191,7 @@ function Install-KiraClaude([string]$Style, [string]$AssistantLogin, [string]$An
     }
     Install-KiraOutputStyle $Style
     Install-KiraAttribution
-    Install-KiraPermission $AssistantLogin $AnalystLogin
+    Sync-KiraPermission $UserProfile
 }
 
 # Copy github\ into the target repository's .github directory. Files are always copied:
@@ -1164,6 +1277,8 @@ function Invoke-KiraUninstall {
         Remove-Item -LiteralPath $ManifestPath -Force
         if (Test-Path -LiteralPath $OriginalsPath) { Remove-Item -LiteralPath $OriginalsPath -Force }
     }
+    # R8: only the rules kirakit added, as recorded.
+    Sync-KiraPermission @{} -Uninstall
     Write-KiraLog "kept: $ProfilePath, $(Join-Path $ClaudeDir '.kirakit-backups') and the outputStyle and attribution settings"
 }
 
@@ -1229,7 +1344,7 @@ try {
             Test-KiraSigningKey 'the coder' $userProfile.coder_signing_key
             Build-KiraOutput $userProfile
             if (-not $Only -or $Only -eq 'styles') { Install-KiraStyle }
-            if (-not $Only -or $Only -eq 'claude') { Install-KiraClaude $userProfile.style $userProfile.assistant_github $userProfile.analyst_github }
+            if (-not $Only -or $Only -eq 'claude') { Install-KiraClaude $userProfile.style $userProfile }
             if (-not $Only -or $Only -eq 'launchers') {
                 Write-KiraLog 'notice: the launchers (assistant, analyst, team) are not supported on Windows; none is installed'
             }

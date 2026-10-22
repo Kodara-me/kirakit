@@ -157,6 +157,10 @@ jobs:
             # Agents exist only for some profiles (Iris with an analyst); both or neither.
             if [ -e "$a/agents" ] || [ -e "$b/agents" ]; then diff -r "$a/agents" "$b/agents"; fi
             diff "$a/.kirakit-profile" "$b/.kirakit-profile" || [ ! -e "$a/.kirakit-profile" ]
+            # The record of the permission rules, with a GitHub account (#67 R10).
+            if [ -e "$a/.kirakit-permissions" ] || [ -e "$b/.kirakit-permissions" ]; then
+              diff "$a/.kirakit-permissions" "$b/.kirakit-permissions"
+            fi
           done
           test -f "$RUNNER_TEMP/ps-analyst/agents/iris.md"
           test -f "$RUNNER_TEMP/ps-analyst/output-styles/iris.md"
@@ -198,6 +202,104 @@ jobs:
           done
           cmp "$shapes/unknown.json" "$RUNNER_TEMP/perm-unknown-ps/settings.json"
           grep -q 'warning: cannot add the permission rules' "$RUNNER_TEMP/perm-unknown-ps.log"
+      - name: Permission rules recorded, updated and removed
+        # Both installers keep the same settings.json and the same record through a series of
+        # runs and hand edits (#67 R3, R7, R8, R10, R12 to R15).
+        run: |
+          # kira TOOL DIR ARGS: run one installer, with get-kira.sh options turned into
+          # get-kira.ps1 parameters for the PowerShell one.
+          kira() {
+            tool=$1 dir=$2
+            shift 2
+            if [ "$tool" = sh ]; then
+              CLAUDE_CONFIG_DIR="$dir" sh get-kira.sh "$@" </dev/null
+              return
+            fi
+            set -- "$@" END
+            while [ "$1" != END ]; do
+              case $1 in
+              --copy) set -- "$@" -Copy ;;
+              --uninstall) set -- "$@" -Uninstall ;;
+              --allow-releases) set -- "$@" -AllowReleases ;;
+              --no-allow-releases) set -- "$@" -NoAllowReleases ;;
+              --no-analyst) set -- "$@" -NoAnalyst ;;
+              --only) set -- "$@" -Only "$2"; shift ;;
+              --name) set -- "$@" -Name "$2"; shift ;;
+              --gender) set -- "$@" -Gender "$2"; shift ;;
+              --language) set -- "$@" -Language "$2"; shift ;;
+              --assistant) set -- "$@" -Assistant "$2"; shift ;;
+              --assistant-github) set -- "$@" -AssistantGithub "$2"; shift ;;
+              --analyst-github) set -- "$@" -AnalystGithub "$2"; shift ;;
+              *) echo "::error::no PowerShell form for $1"; exit 1 ;;
+              esac
+              shift
+            done
+            shift
+            CLAUDE_CONFIG_DIR="$dir" pwsh -File get-kira.ps1 "$@" </dev/null
+          }
+          # step NAME ARGS: run both installers, then compare their settings and records.
+          step() {
+            name=$1
+            shift
+            for tool in sh ps; do
+              kira "$tool" "$RUNNER_TEMP/rec-$tool" "$@" >"$RUNNER_TEMP/rec-$tool.log"
+            done
+            diff "$RUNNER_TEMP/rec-sh/settings.json" "$RUNNER_TEMP/rec-ps/settings.json" ||
+              { echo "::error::settings.json differs after: $name"; exit 1; }
+            if [ -e "$RUNNER_TEMP/rec-sh/.kirakit-permissions" ] || [ -e "$RUNNER_TEMP/rec-ps/.kirakit-permissions" ]; then
+              diff "$RUNNER_TEMP/rec-sh/.kirakit-permissions" "$RUNNER_TEMP/rec-ps/.kirakit-permissions" ||
+                { echo "::error::record differs after: $name"; exit 1; }
+            fi
+            diff "$RUNNER_TEMP/rec-sh/.kirakit-profile" "$RUNNER_TEMP/rec-ps/.kirakit-profile" ||
+              { echo "::error::profile differs after: $name"; exit 1; }
+            # The rules each installer reports, without its own paths.
+            diff <(grep -E 'permission|^  "Bash' "$RUNNER_TEMP/rec-sh.log" | sed "s|$RUNNER_TEMP/rec-sh|DIR|g") \
+              <(grep -E 'permission|^  "Bash' "$RUNNER_TEMP/rec-ps.log" | sed "s|$RUNNER_TEMP/rec-ps|DIR|g") ||
+              { echo "::error::reports differ after: $name"; exit 1; }
+          }
+          # edit COMMAND: apply the same hand edit, a filter, to both settings.json.
+          edit() {
+            for tool in sh ps; do
+              "$@" <"$RUNNER_TEMP/rec-$tool/settings.json" >"$RUNNER_TEMP/edit.json"
+              cat "$RUNNER_TEMP/edit.json" >"$RUNNER_TEMP/rec-$tool/settings.json"
+            done
+          }
+          kira_rule='"Bash(GH_TOKEN=$(gh auth token --user kira-bot) gh issue create:*)"'
+          for tool in sh ps; do
+            mkdir -p "$RUNNER_TEMP/rec-$tool"
+            # R12: a rule of the user's, identical to one of kirakit's.
+            printf '{\n  "permissions": {\n    "allow": [\n      "Bash(make:*)",\n      "Bash(git push origin main)"\n    ]\n  }\n}\n' \
+              >"$RUNNER_TEMP/rec-$tool/settings.json"
+          done
+          step install --copy --only claude --name Alex --gender male --language auto \
+            --assistant 'Kira <kira@example.com>' --assistant-github kira-bot --analyst-github iris-bot
+          step 'releases on' --copy --only claude --allow-releases
+          grep -qF 'release create' "$RUNNER_TEMP/rec-ps/settings.json"
+          step 'releases off' --copy --only claude --no-allow-releases
+          if grep -qF 'release create' "$RUNNER_TEMP/rec-ps/settings.json"; then exit 1; fi
+          # R13: a kirakit rule deleted by hand comes back.
+          edit grep -vF "$kira_rule"
+          step 'rule deleted by hand' --copy --only claude
+          grep -qF "$kira_rule" "$RUNNER_TEMP/rec-ps/settings.json"
+          # R14: a kirakit rule added a second time by hand.
+          edit awk -v rule="$kira_rule" '{ print } /"allow": \[/ { print "      " rule "," }'
+          step 'login changed' --copy --only claude --assistant-github kira-new
+          test "$(grep -cF "$kira_rule" "$RUNNER_TEMP/rec-ps/settings.json")" = 1
+          step 'shared rule' --copy --only claude --analyst-github kira-new
+          step 'analyst removed' --copy --only claude --no-analyst
+          grep -qF 'user kira-new) gh issue create' "$RUNNER_TEMP/rec-ps/settings.json"
+          # R15: an array on one line; removal is refused, the record kept.
+          edit awk '/"allow": \[/ { line = $0; joined = 1; next }
+            joined && /^ *\]/ { sub(/^ */, ""); print line $0; joined = 0; next }
+            joined { sub(/^ */, ""); line = line $0; next }
+            { print }'
+          cp "$RUNNER_TEMP/rec-ps/settings.json" "$RUNNER_TEMP/one-line.json"
+          step 'removal refused' --copy --only claude --assistant-github ''
+          cmp "$RUNNER_TEMP/one-line.json" "$RUNNER_TEMP/rec-ps/settings.json"
+          grep -q 'warning: cannot remove the permission rules' "$RUNNER_TEMP/rec-ps.log"
+          test -s "$RUNNER_TEMP/rec-ps/.kirakit-permissions"
+          step uninstall --uninstall
+          test ! -e "$RUNNER_TEMP/rec-ps/.kirakit-permissions"
       - name: Optional files
         # A template wholly inside a block that is dropped is neither built nor installed, and
         # is removed when an earlier run installed it, by both installers.
