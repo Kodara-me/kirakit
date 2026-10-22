@@ -97,6 +97,10 @@ Read `$ARGUMENTS`:
   - Read its comments too (`gh issue view <n> --comments`). When the user answered a
     comment of questions (step 2), take those answers and resume where the questions
     stopped, without asking for them again in the conversation.
+{{#analyst}}
+  - Answers the lead relays from the conversation are the user's answers: record them under
+    Decisions as the user's, noted "answered in the conversation", and resume from them.
+{{/analyst}}
 - **A file** (a specification kept in the repository): read it and map its content onto
   the format, then resume like a specification. Once the issue exists, offer to delete the
   file in a separate commit.
@@ -124,6 +128,11 @@ Ask those questions all at once, in a single comment on the issue (`gh issue com
 each question with its options and your recommendation, most important first, ending with
 a short question such as "Can I go on?". In the conversation, show only one line with the
 comment's link. Without an issue yet, ask them in the conversation instead.
+{{#analyst}}
+When running in the background for the lead, without an issue yet, return them to the lead
+instead, with their options and your recommendation: the lead asks the user and relays the
+answers.
+{{/analyst}}
 
 Wait only for the answers that block the specification; the other questions go to Open
 questions with your recommendation, and the writing goes on. The idea's content feeds the

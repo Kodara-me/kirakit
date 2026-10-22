@@ -354,6 +354,9 @@ check 'iris build: style named Iris' grep -qx 'name: Iris' "$iris_style"
 check 'iris build: style keeps the coding instructions' grep -qx 'keep-coding-instructions: true' "$iris_style"
 check 'iris build: agent named iris' grep -qx 'name: iris' "$iris_agent"
 check 'iris build: agent says when to delegate' grep -q '^description: Use Iris to clarify an idea' "$iris_agent"
+check 'iris build: agent says what it returns (#79 R3)' grep -q "^description: .*She runs in the background and returns the issue's URL" "$iris_agent"
+check 'iris build: style keeps its own description (#79 R3)' sh -c 'grep -q "^description: Iris, the team" "$1" && ! grep -q "runs in the background and returns" "$1"' _ "$iris_style"
+check 'iris build: relayed answers are the user'"'"'s (#79 R4)' contains "$iris_agent" 'the answers the lead relays from the conversation are the user'"'"'s answers'
 check 'iris build: no delegate key left' sh -c '! grep -q "^delegate:" "$1" "$2"' _ "$iris_style" "$iris_agent"
 check 'iris build: introduces Iris' contains "$iris_style" 'You are Iris, the team'\''s analyst'
 check 'iris build: personalized' contains "$iris_style" 'The user is Alex, a female staff software developer.'
@@ -411,6 +414,9 @@ for skill in idea spec; do
 		sh -c '! grep -q GH_TOKEN "$1" && grep -q "gh issue create --title" "$1"' _ "$tmp/iris-none/skills/$skill/SKILL.md"
 done
 check 'spec: tasks assigned to the developer (#51 R8)' contains "$tmp/build3/skills/spec/SKILL.md" '`--assignee kira-bot`'
+check 'spec: relayed answers recorded as the user'"'"'s (#79 R4)' contains "$tmp/iris-build/skills/spec/SKILL.md" 'noted "answered in the conversation"'
+check 'spec: questions returned to the lead without an issue (#79 R3)' contains "$tmp/iris-build/skills/spec/SKILL.md" 'When running in the background for the lead, without an issue yet'
+check 'spec: no lead without an analyst (#79 R8)' sh -c '! grep -q "the lead" "$1"' _ "$spec_skill"
 check "spec: new issue for an idea not by the analyst (#51 R13)" sh -c 'grep -q "not written by \`iris-bot\`" "$1" && grep -q "Specified in #<new>." "$1"' _ "$tmp/iris-build/skills/spec/SKILL.md"
 $shell "$root/scripts/build.sh" -o "$tmp/analyst-no-login" --analyst >/dev/null
 check 'analyst skills: no prefix without an analyst account' \
