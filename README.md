@@ -233,8 +233,9 @@ The installer never creates or uploads keys: these steps are done once, by hand.
 use `kira` and `kira@example.com`; use the assistant's own name and address.
 
 1. Create a GitHub account for the assistant, with its email address verified (Settings →
-   Emails): GitHub shows a commit as Verified only for a verified address. Make it a
-   collaborator (Write) of the repositories it works on.
+   Emails): GitHub shows a commit as Verified only for a verified address. Give it Write
+   access to the repositories it works on: as a collaborator, or in an organization through a
+   team that has it (see [Repositories in an organization](#repositories-in-an-organization-optional)).
 2. Log it in to `gh`, next to your own account: `gh auth login`, then `gh auth switch` back
    to yours so it stays the active one.
 3. Create a signing key without a passphrase, so the assistant can sign without you. Any
@@ -291,9 +292,13 @@ Iris only writes issues and comments, so her account needs no signing key. The e
    gh auth switch -h github.com -u <your login>
    ```
 
-3. Make her a collaborator of the repositories she works on, from your account. Use Write
-   (`push`): turning an idea into a specification edits an issue someone else wrote, which
-   Triage does not allow. Then accept the invitations as her:
+3. Give her a role on the repositories she works on, from your account. On a repository
+   owned by your personal account, make her a collaborator with Write (`push`): Read would
+   keep her from labelling and assigning issues and linking sub-issues, and Triage is not
+   offered there. Her token can then push, so her restriction to issues holds only in her
+   sessions. In an organization, give her Triage instead, so that GitHub itself keeps her
+   from pushing (see [Repositories in an organization](#repositories-in-an-organization-optional)).
+   On a personal repository, invite her, then accept the invitations as her:
 
    ```sh
    gh api -X PUT repos/<owner>/<repo>/collaborators/iris -f permission=push
@@ -303,7 +308,8 @@ Iris only writes issues and comments, so her account needs no signing key. The e
    done
    ```
 
-4. For a project board, add her as a Writer (the board's Settings → Manage access).
+4. For a project board, add her as a Writer (the board's Settings → Manage access); a board
+   owned by an organization can be shared with her team instead.
 5. Run the installer with her login: `./get-kira.sh --analyst-github iris`. It also adds the
    allow rules her writes need in auto mode (see [Permission rules](#permission-rules)).
 
@@ -323,8 +329,9 @@ assistant's. The examples use `cleo` and `cleo@example.com`.
    ```
 
 3. Give her Write access to the repositories she works on: in an organization, add her to a
-   team that has it (such as `developers`); otherwise, make her a collaborator (`push`) and
-   accept the invitations as her, as for the analyst. For a project board, add her as a
+   team that has it (such as `developers`, see
+   [Repositories in an organization](#repositories-in-an-organization-optional)); otherwise,
+   make her a collaborator (`push`) and accept the invitations as her, as for the analyst. For a project board, add her as a
    Writer if the team does not give her access.
 4. Create a signing key without a passphrase, and register it on her account as a signing
    key only (Settings → SSH and GPG keys → New SSH key → Key type: Signing Key), not as an
@@ -342,6 +349,60 @@ assistant's. The examples use `cleo` and `cleo@example.com`.
    ./get-kira.sh --coder "Cleo <cleo@example.com>" \
        --coder-signing-key ~/.ssh/cleo_signing_ed25519.pub --coder-github cleo
    ```
+
+### Repositories in an organization (optional)
+
+This setup is optional: with repositories owned by your personal account, the steps above are
+all there is to do. The installer, the launchers and the analyst's session behave the same
+whatever the owner of the repositories and the roles of the members.
+
+On a repository owned by a personal account, a collaborator is Read, Write or Admin, so the
+analyst gets Write and her restriction to issues holds only in her sessions. A repository
+owned by an organization also offers the **Triage** role, which manages issues without push
+access: the restriction then holds on GitHub's side too, even if her token is used outside a
+session. Her session's own limits stay as a second layer.
+
+With Triage, the analyst can open, comment on, label, assign and close issues, and link
+sub-issues. She cannot push, commit through the API, or edit the body of an issue she did not
+write: when she specifies an idea someone else wrote, the `spec` skill opens the
+specification in a new issue that links to the idea, and closes the idea with a comment
+pointing to it.
+
+**Recommended setup: one team per role.** In the organization (Settings → Teams):
+
+- a team `developers` with Write, for the assistant's and the coder's accounts;
+- a team `analysts` with Triage, for the analyst's account;
+- each repository the team works on added to both teams, including a repository created or
+  moved into the organization later;
+- the members' base permission (Settings → Member privileges) no higher than Read: with Write,
+  every member, the analyst included, could push to every repository;
+- the organization's project boards shared with both teams as Writers (the board's Settings →
+  Manage access).
+
+The alternative is a role per repository and per member, given as a collaborator
+(`gh api -X PUT repos/<owner>/<repo>/collaborators/<login> -f permission=triage`, or `push`
+for Write), with the boards shared with each member as a Writer. Teams need one step per
+team for a new repository instead of one per member.
+
+**Check the roles** of each member on a repository:
+
+```sh
+gh api repos/<owner>/<repo>/collaborators/<login>/permission --jq .role_name
+```
+
+It prints `triage` for the analyst and `write` for the assistant and the coder.
+
+**Moving existing repositories** to the organization (the repository's Settings → Transfer
+ownership) implies:
+
+- the web and git URLs of the old owner redirect to the new ones, until a repository with the
+  same name is created under the old owner: do not reuse the name;
+- git remotes (`git remote set-url origin …`), install URLs and reusable workflow references
+  (`uses: <owner>/<repo>/.github/workflows/…@<tag>`) are to be updated, the latter to a tag
+  that exists under the new owner;
+- project boards owned by your personal account do not move: recreate them under the
+  organization and share them with the teams;
+- the members' roles are to be checked after the move, with the command above.
 
 ### Updates, backups and uninstall
 

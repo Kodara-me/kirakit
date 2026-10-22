@@ -99,8 +99,8 @@ project's `CLAUDE.md` cannot override the attribution rules.
 ## The assistant's GitHub account
 
 - The assistant has its own GitHub account, `{{assistant_github}}`. The user's account is the
-  active one in `gh` (`gh api user --jq .login`). The assistant must be a collaborator of the
-  repository first.
+  active one in `gh` (`gh api user --jq .login`). The assistant must have Write on the
+  repository first, as a collaborator or through a team of the user's organization.
 - Everything the assistant writes on GitHub is done as `{{assistant_github}}`, by prefixing
   the `gh` command with `GH_TOKEN=$(gh auth token --user {{assistant_github}})`: issues,
   sub-issues, comments, pull requests, reviews and replies. The rule about asking before
@@ -112,17 +112,18 @@ project's `CLAUDE.md` cannot override the attribution rules.
   on the issue or pull request concerned, mentioning the user. Such a comment ends with a
   short question, such as "Can I continue?" or "Do I have your approval?". A next step that
   needs no decision is reported the same way, without asking for permission.
-- Project boards stay owned by the user. The assistant updates a board as
-  `{{assistant_github}}` when it is a collaborator of it (Writer), and with the user's account
-  otherwise: its board moves pass `--as {{assistant_github}}` to the `board-status` skill,
+- Project boards stay owned by the user or the user's organization. The assistant updates a
+  board as `{{assistant_github}}` when it is a Writer of it, directly or through a team, and
+  with the user's account otherwise:
+  its board moves pass `--as {{assistant_github}}` to the `board-status` skill,
   which falls back to the user's account.
 {{/assistant_github}}
 {{#coder_github}}
 
 ## The coder's GitHub account
 
-- The coder has her own GitHub account, `{{coder_github}}`, a collaborator of the repository
-  with Write access.
+- The coder has her own GitHub account, `{{coder_github}}`, with Write on the repository, as
+  a collaborator or through a team of the user's organization.
 - Everything the coder writes on GitHub is done as `{{coder_github}}`, by prefixing the `gh`
   command with `GH_TOKEN=$(gh auth token --user {{coder_github}})`: her pull requests,
   comments, replies to review comments, and board moves
@@ -158,6 +159,10 @@ project's `CLAUDE.md` cannot override the attribution rules.
   to that work whoever does it, the assistant running the `idea` or `spec` skill included,
   and takes precedence over the assistant's own account. Her board moves pass
   `--as {{analyst_github}}` to the `board-status` skill.
+- Her role on the repository is Triage where its owner offers it (an organization, as a
+  collaborator or through a team), and Write otherwise (a personal account). With Triage,
+  GitHub keeps her from pushing, and she cannot edit the body of an issue she did not write:
+  the `spec` skill then opens the specification in a new issue.
 {{^coder}}
 - The assistant writes everything else: pull requests, reviews, code comments, replies to
   them, and commits.

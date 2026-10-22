@@ -491,6 +491,22 @@ check 'coder commits: skill uses her key (R17)' contains "$commit_skill" 'git -c
 check 'coder commits: skill credits the user (R17)' contains "$commit_skill" 'Co-Authored-By: <user name> <<user email>>'
 check 'coder commits: board moves as her account (R17, #97 R3)' contains "$git_rules" '(`board-status NUMBER STATUS --as cleo-bot`)'
 check 'coder commits: no placeholder' no_placeholder "$tmp/commit-coder"
+# --- the members' roles, through a collaborator role or an organization team (#39) ----------
+
+check 'roles: the assistant has Write, as a collaborator or a team (#39 R6)' contains "$git_rules" 'The assistant must have Write on the'
+check 'roles: the coder has Write, as a collaborator or a team (#39 R6)' contains "$git_rules" 'with Write on the repository, as'
+check 'roles: through an organization team (#39 R6)' contains "$git_rules" "a collaborator or through a team of the user's organization."
+check 'roles: boards owned by the user or the organization (#39 R6)' contains "$git_rules" "Project boards stay owned by the user or the user's organization."
+readme=$root/README.md
+check 'roles: README has the organization setup (#39 R1)' grep -q '^### Repositories in an organization (optional)$' "$readme"
+check 'roles: README gives the role check (#39 R1)' contains "$readme" 'gh api repos/<owner>/<repo>/collaborators/<login>/permission --jq .role_name'
+check 'roles: README says what Triage allows and does not (#39 R2)' sh -c 'grep -q "label, assign and close issues, and link" "$1" && grep -q "edit the body of an issue she did not" "$1"' _ "$readme"
+check 'roles: README keeps Write on personal repositories (#39 R3)' contains "$readme" 'so her restriction to issues holds only in her'
+check 'roles: README no longer says Triage prevents specifying (#39 R3)' sh -c '! grep -q "Triage does not allow" "$1"' _ "$readme"
+check 'roles: README grants roles through teams (#39 R4)' sh -c 'grep -q "a team \`developers\` with Write" "$1" && grep -q "a team \`analysts\` with Triage" "$1" && grep -q "base permission (Settings → Member privileges) no higher than Read" "$1"' _ "$readme"
+check 'roles: nothing about organizations in the installers and launchers (#39 R7)' sh -c '! grep -rqi "triage\|organization" "$1/get-kira.sh" "$1/get-kira.ps1" "$1/launchers"' _ "$root"
+check 'roles: README lists what a move implies (#39 R5)' sh -c 'grep -q "until a repository with the" "$1" && grep -q "project boards owned by your personal account do not move" "$1"' _ "$readme"
+
 $shell "$root/scripts/build.sh" -o "$tmp/commit-coder-solo" --coder 'Cleo <cleo@example.com>' \
 	--coder-github cleo-bot >/dev/null
 check 'coder commits: gaps go to the user without an analyst (R20)' contains "$tmp/commit-coder-solo/rules/git.md" 'she asks the user in a comment on that issue'
@@ -628,6 +644,8 @@ check 'team rules: who writes the rest' contains "$rules" 'The assistant writes 
 check 'team rules: gaps asked, not decided' contains "$rules" 'it does not decide alone: it asks the analyst'
 check 'team rules: no account lines without a login' sh -c 'grep -q "## The team" "$1" && ! grep -q "On GitHub, the analyst" "$1"' _ \
 	"$tmp/analyst-no-login/rules/git.md"
+check 'roles: the analyst has Triage or Write (#39 R6)' contains "$rules" 'Her role on the repository is Triage where its owner offers it'
+check 'roles: no analyst role without her account (#39 R6)' sh -c '! grep -q "Triage" "$1"' _ "$tmp/analyst-no-login/rules/git.md"
 check 'team rules: no section without an analyst' sh -c '! grep -q "The team\|Iris" "$1"' _ "$tmp/iris-none/rules/git.md"
 
 # --- models of the agents and skills (#97 R1–R4, R6–R9) ----------------------------------
