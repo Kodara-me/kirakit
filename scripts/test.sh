@@ -1018,6 +1018,97 @@ kira_profile --dry-run >"$tmp/attribution-dry.log"
 check 'attribution: dry run reports' grep -q 'set attribution' "$tmp/attribution-dry.log"
 check 'attribution: dry run writes nothing' sh -c '! grep -q attribution "$1"' _ "$claude/settings.json"
 
+# --- permission rules in settings.json (#67) -----------------------------------------------
+
+kira_rule='"Bash(GH_TOKEN=$(gh auth token --user kira-bot) gh issue create:*)"'
+iris_rule='"Bash(GH_TOKEN=$(gh auth token --user iris-bot) gh project item-list:*)"'
+
+# kira_team ARGS: kira with an assistant and an analyst who both have a GitHub account.
+kira_team() {
+	kira --name Alex --gender female --language auto --assistant 'Kira <kira@example.com>' \
+		--assistant-github kira-bot --analyst-github iris-bot "$@"
+}
+
+# rule_count FILE: how many permission rules FILE holds, one per line.
+rule_count() {
+	grep -c '^ *"Bash(' "$1" || true
+}
+
+# valid_json FILE: whether FILE parses, when a JSON parser is at hand.
+valid_json() {
+	if command -v python3 >/dev/null 2>&1; then
+		python3 -c 'import json, sys; json.load(open(sys.argv[1]))' "$1"
+	fi
+}
+
+claude=$tmp/permissions-missing
+kira_team --copy >/dev/null
+check 'permissions: file missing, created (R1)' contains "$claude/settings.json" "$kira_rule"
+check 'permissions: file missing, valid JSON (R4)' valid_json "$claude/settings.json"
+check 'permissions: assistant board rules (R1)' contains "$claude/settings.json" '"Bash(GH_TOKEN=$(gh auth token --user kira-bot) gh project item-add:*)"'
+check 'permissions: assistant pushes main and branches (R1)' sh -c 'grep -qF "\"Bash(git push origin main)\"" "$1" && grep -qF "\"Bash(git push -u origin feat/:*)\"" "$1" && grep -qF "\"Bash(git push origin --delete:*)\"" "$1"' _ "$claude/settings.json"
+check 'permissions: analyst rules (R2)' contains "$claude/settings.json" "$iris_rule"
+check 'permissions: analyst has nothing else (R2)' test "$(grep -c 'user iris-bot' "$claude/settings.json")" = 7
+check 'permissions: no release rules (R1)' sh -c '! grep -q -e "release create" -e "origin v:" "$1"' _ "$claude/settings.json"
+check 'permissions: 33 rules (R1, R2)' test "$(rule_count "$claude/settings.json")" = 33
+check 'permissions: rerun changes nothing (R5)' unchanged kira --copy
+check 'permissions: no rule twice (R5)' test "$(rule_count "$claude/settings.json")" = 33
+
+claude=$tmp/permissions-none
+mkdir -p "$claude"
+printf '{\n  "keep": true\n}\n' >"$claude/settings.json"
+kira_profile --copy >/dev/null
+check 'permissions: no GitHub account, no rules (R1, R2)' sh -c '! grep -q permissions "$1"' _ "$claude/settings.json"
+
+claude=$tmp/permissions-new
+mkdir -p "$claude"
+printf '{\n  "keep": true,\n  "env": {"A": "1"}\n}\n' >"$claude/settings.json"
+kira_team --copy >/dev/null
+check 'permissions: no permissions key, added (R1)' contains "$claude/settings.json" "$kira_rule"
+check 'permissions: no permissions key, others kept (R4)' sh -c 'grep -qF "\"keep\": true," "$1" && grep -qF "\"env\": {\"A\": \"1\"}" "$1"' _ "$claude/settings.json"
+check 'permissions: no permissions key, valid JSON (R4)' valid_json "$claude/settings.json"
+
+for empty in '"allow": []' '"allow": [\n    ]'; do
+	claude=$tmp/permissions-empty
+	rm -rf "$claude"
+	mkdir -p "$claude"
+	printf "{\n  \"permissions\": {\n    $empty,\n    \"deny\": [\"Bash(rm:*)\"]\n  }\n}\n" >"$claude/settings.json"
+	kira_team --copy >/dev/null
+	check "permissions: empty allow ($empty), added (R1)" test "$(rule_count "$claude/settings.json")" = 33
+	check "permissions: empty allow ($empty), valid JSON (R4)" valid_json "$claude/settings.json"
+	check "permissions: empty allow ($empty), deny kept (R4)" contains "$claude/settings.json" '"deny": ["Bash(rm:*)"]'
+done
+
+claude=$tmp/permissions-mine
+mkdir -p "$claude"
+printf '{\n  "permissions": {\n    "allow": [\n      "Bash(make:*)",\n      %s\n    ],\n    "defaultMode": "auto"\n  },\n  "keep": true\n}\n' "$kira_rule" >"$claude/settings.json"
+kira_team --copy >/dev/null
+check 'permissions: own rules kept (R4)' sh -c 'grep -qxF "      \"Bash(make:*)\"," "$1" && grep -qF "\"defaultMode\": \"auto\"" "$1"' _ "$claude/settings.json"
+check 'permissions: added to own rules (R1)' contains "$claude/settings.json" "$iris_rule"
+check 'permissions: a rule present not added again (R5)' test "$(grep -cF "$kira_rule" "$claude/settings.json")" = 1
+check 'permissions: own rules, valid JSON (R4)' valid_json "$claude/settings.json"
+check 'permissions: own rules, 34 rules (R5)' test "$(rule_count "$claude/settings.json")" = 34
+
+for shape in '"allow": ["Bash(make:*)"]' '"allow": ["Bash(make:*)"], "ask": {"allow": []}'; do
+	claude=$tmp/permissions-unknown
+	rm -rf "$claude"
+	mkdir -p "$claude"
+	printf '{\n  "outputStyle": "Kira (cozy)",\n  "attribution": {"commit": "", "pr": ""},\n  "permissions": {%s}\n}\n' "$shape" >"$claude/settings.json"
+	cp "$claude/settings.json" "$tmp/permissions-unknown.orig"
+	kira_team --copy >"$tmp/permissions-unknown.log"
+	check "permissions: shape not recognized ($shape), warning (R6)" grep -q 'warning: cannot add the permission rules' "$tmp/permissions-unknown.log"
+	check "permissions: shape not recognized ($shape), rules printed (R6)" grep -qxF "  $iris_rule" "$tmp/permissions-unknown.log"
+	check "permissions: shape not recognized ($shape), file unchanged (R6)" cmp -s "$tmp/permissions-unknown.orig" "$claude/settings.json"
+done
+
+claude=$tmp/permissions-dry
+mkdir -p "$claude"
+printf '{\n  "keep": true\n}\n' >"$claude/settings.json"
+kira_team --dry-run >"$tmp/permissions-dry.log"
+check 'permissions: dry run reports the rules (R9)' grep -qF 'set permission: Bash(GH_TOKEN=$(gh auth token --user iris-bot) gh issue create:*)' "$tmp/permissions-dry.log"
+check 'permissions: dry run reports every rule (R9)' test "$(grep -c 'set permission: ' "$tmp/permissions-dry.log")" = 33
+check 'permissions: dry run writes nothing (R9)' sh -c '! grep -q permissions "$1"' _ "$claude/settings.json"
+
 # --- no terminal ---------------------------------------------------------------------------
 
 claude=$tmp/generic

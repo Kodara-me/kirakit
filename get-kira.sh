@@ -708,6 +708,129 @@ set_output_style() {
 	fi
 }
 
+# permission_rules: print the permission rules the members' GitHub accounts need, one per
+# line, without duplicates (#67 R1, R2).
+permission_rules() {
+	{
+		if [ -n "$assistant_github" ]; then
+			gh="GH_TOKEN=\$(gh auth token --user $assistant_github) gh"
+			for command in 'issue create' 'issue edit' 'issue comment' 'issue close' \
+				'pr create' 'pr comment' 'pr review' 'label create'; do
+				printf 'Bash(%s %s:*)\n' "$gh" "$command"
+			done
+			for type in feat fix docs refactor test chore ci; do
+				printf 'Bash(git push -u origin %s/:*)\n' "$type"
+				printf 'Bash(git push origin %s/:*)\n' "$type"
+			done
+			printf '%s\n' 'Bash(git push origin main)' 'Bash(git push origin --delete:*)'
+			printf 'Bash(%s project item-edit:*)\n' "$gh"
+			printf 'Bash(%s project item-add:*)\n' "$gh"
+		fi
+		if [ -n "$analyst_github" ]; then
+			gh="GH_TOKEN=\$(gh auth token --user $analyst_github) gh"
+			for command in 'issue create' 'issue edit' 'issue comment' 'issue close' \
+				'label create' 'project item-edit' 'project item-list'; do
+				printf 'Bash(%s %s:*)\n' "$gh" "$command"
+			done
+		fi
+	} | awk '!seen[$0]++'
+}
+
+# add_permission_rules RULES NEW: write to NEW the settings with RULES (a file, one rule per
+# line) added to "permissions.allow". Fail, writing nothing useful, when the shape of the
+# file is not one that text processing can change safely (#67 R4, R6).
+add_permission_rules() {
+	if [ ! -s "$settings" ] || [ "$(tr -d ' \t\r\n' <"$settings")" = '{}' ]; then
+		awk 'BEGIN { print "{"; print "  \"permissions\": {"; print "    \"allow\": [" }
+			{ rules[++n] = $0 }
+			END {
+				for (k = 1; k <= n; k++) printf "      \"%s\"%s\n", rules[k], (k < n ? "," : "")
+				print "    ]"; print "  }"; print "}"
+			}' "$1" >"$2"
+		return
+	fi
+	permissions=$(grep -o '"permissions"' "$settings" | wc -l)
+	allow=$(grep -o '"allow"' "$settings" | wc -l)
+	if [ "$permissions" -eq 0 ]; then
+		# No permissions key: a new one, as the first setting.
+		grep -q '{' "$settings" || return 1
+		awk 'FNR == NR { rules[++n] = $0; next }
+			!done && (i = index($0, "{")) {
+				print substr($0, 1, i)
+				print "  \"permissions\": {"
+				print "    \"allow\": ["
+				for (k = 1; k <= n; k++) printf "      \"%s\"%s\n", rules[k], (k < n ? "," : "")
+				print "    ]"
+				print "  },"
+				rest = substr($0, i + 1)
+				if (rest ~ /[^ \t]/) print rest
+				done = 1
+				next
+			}
+			{ print }' "$1" "$settings" >"$2"
+		return
+	fi
+	# A single "allow" key, whose array opens at the end of its line or is empty.
+	[ "$permissions" -eq 1 ] && [ "$allow" -eq 1 ] || return 1
+	grep -Eq '"allow"[[:space:]]*:[[:space:]]*\[[[:space:]]*(\].*)?$' "$settings" || return 1
+	case $(tr -d ' \t\r\n' <"$settings") in
+	*'"allow":[]'*) empty=1 ;;
+	*) empty=0 ;;
+	esac
+	awk -v empty="$empty" 'FNR == NR { rules[++n] = $0; next }
+		!done && match($0, /"allow"[ \t]*:[ \t]*\[/) {
+			i = RSTART + RLENGTH - 1
+			indent = $0
+			sub(/[^ \t].*/, "", indent)
+			print substr($0, 1, i)
+			for (k = 1; k <= n; k++)
+				printf "%s  \"%s\"%s\n", indent, rules[k], (k < n || !empty ? "," : "")
+			rest = substr($0, i + 1)
+			sub(/^[ \t]*/, "", rest)
+			if (rest != "") print indent rest
+			done = 1
+			next
+		}
+		{ print }' "$1" "$settings" >"$2"
+}
+
+# Add the members' permission rules to "permissions.allow" in settings.json, leaving every
+# other setting and rule as it is (#67 R1, R2, R4, R5, R6, R9).
+set_permissions() {
+	settings=$CLAUDE_DIR/settings.json
+	work_dir
+	rules=$work/permissions
+	permission_rules | while IFS= read -r rule; do
+		# R5: a rule already present is not added again.
+		if [ ! -f "$settings" ] || ! grep -qF "\"$rule\"" "$settings"; then
+			printf '%s\n' "$rule"
+		fi
+	done >"$rules"
+	if [ ! -s "$rules" ]; then
+		permission_rules | grep -q . && log "up to date: $settings (permissions)"
+		return 0
+	fi
+
+	new=$work/settings.json
+	if ! add_permission_rules "$rules" "$new"; then
+		log "warning: cannot add the permission rules to $settings safely; left unchanged. Add them by hand to \"permissions\": {\"allow\": [...]}:"
+		while IFS= read -r rule; do
+			printf '  "%s"\n' "$rule"
+		done <"$rules"
+		return 0
+	fi
+
+	backup_settings
+	while IFS= read -r rule; do
+		log "set permission: $rule in $settings"
+	done <"$rules"
+	if [ "$dry_run" -eq 0 ]; then
+		mkdir -p "$CLAUDE_DIR"
+		# Write in place to keep the file's permissions and any symlink.
+		cat "$new" >"$settings"
+	fi
+}
+
 install_claude() {
 	if [ -f "$src/claude/CLAUDE.md" ]; then
 		install_built CLAUDE.md "$CLAUDE_DIR/CLAUDE.md"
@@ -736,6 +859,7 @@ install_claude() {
 	done
 	set_output_style
 	set_attribution
+	set_permissions
 }
 
 # Copy github/ into the target repository's .github directory. Files are always copied:
