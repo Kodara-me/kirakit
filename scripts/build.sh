@@ -198,7 +198,7 @@ done
 # The analyst's account means nothing without an analyst.
 [ -n "$analyst" ] || analyst_github=
 # Nor do the coder's key and account without a coder.
-[ -n "$coder" ] || coder_signing_key= coder_github=
+[ -n "$coder" ] || coder_signing_key='' coder_github=''
 
 # The launchers start a member with the name of their output style.
 case $assistant_style in

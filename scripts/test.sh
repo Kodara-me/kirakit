@@ -398,10 +398,8 @@ check 'coder build: no block without a coder (R24)' same_lines "$tmp/blocks-no-c
 	'no coder'
 check 'coder build: rejects an identity without an email (R23)' sh -c '! $1 "$2/scripts/build.sh" -o "$3" --coder Cleo' _ "$shell" "$root" "$tmp/x"
 check 'coder build: rejects a bad GitHub login (R23)' sh -c '! $1 "$2/scripts/build.sh" -o "$3" --coder "Cleo <cleo@example.com>" --coder-github "a b"' _ "$shell" "$root" "$tmp/x"
-check 'coder: installer rejects an identity without an email (R23)' sh -c '! "$@"' _ \
-	env CLAUDE_CONFIG_DIR="$tmp/coder-bad" $shell "$root/get-kira.sh" --copy --dry-run --coder Cleo
-check 'coder: installer rejects a bad GitHub login (R23)' sh -c '! "$@"' _ \
-	env CLAUDE_CONFIG_DIR="$tmp/coder-bad" $shell "$root/get-kira.sh" --copy --dry-run --coder-github 'a/b'
+check 'coder: installer rejects an identity without an email (R23)' sh -c '! env CLAUDE_CONFIG_DIR="$3" $1 "$2/get-kira.sh" --copy --dry-run --coder Cleo' _ "$shell" "$root" "$tmp/coder-bad"
+check 'coder: installer rejects a bad GitHub login (R23)' sh -c '! env CLAUDE_CONFIG_DIR="$3" $1 "$2/get-kira.sh" --copy --dry-run --coder-github a/b' _ "$shell" "$root" "$tmp/coder-bad"
 
 claude=$tmp/coder
 mkdir -p "$tmp/coder-keys"

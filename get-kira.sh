@@ -379,7 +379,7 @@ load_profile() {
 	fi
 	# Profiles before the coder: the team had none, and the question is not asked again.
 	if [ -z "${saved_coder+set}" ]; then
-		saved_coder= saved_coder_signing_key= saved_coder_github=
+		saved_coder='' saved_coder_signing_key='' saved_coder_github=''
 	fi
 	if [ -n "${saved_assistant_name+set}" ]; then
 		if [ -n "$saved_assistant_email" ]; then
