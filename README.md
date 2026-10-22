@@ -192,7 +192,7 @@ for `GH_TOKEN=$(gh auth token --user LOGIN) gh`, with that member's login:
 | Assistant, with `--allow-releases` | Also `Bash(P release create:*)` and `Bash(git push origin v:*)` |
 | Assistant, with a coder's account | Also `Bash(P pr edit:*)`, to request your review on the coder's approved pull requests |
 | Analyst (`--analyst-github`) | `Bash(P issue create:*)`, `issue edit`, `issue comment`, `issue close`; `Bash(P label create:*)`; `Bash(P project item-edit:*)` and `Bash(P project item-list:*)` |
-| Coder (`--coder-github`) | `Bash(P issue create:*)`, `issue edit`, `issue comment`; `Bash(P pr create:*)`, `pr comment`, `pr review`, `pr edit`; the assistant's work branch pushes and `Bash(git push origin --delete:*)`; `Bash(P project item-edit:*)` and `Bash(P project item-add:*)`. Not `git push origin main`: the assistant merges |
+| Coder (`--coder-github`) | `Bash(P issue create:*)`, `issue edit`, `issue comment`; `Bash(P pr create:*)`, `pr comment`, `pr review`, `pr edit`; the assistant's work branch pushes; `Bash(git push origin --delete TYPE/:*)` for the same branch types; `Bash(P project item-edit:*)` and `Bash(P project item-add:*)`. Nothing that pushes or deletes `main`: the assistant merges |
 
 A member without a GitHub account gets no rules. The `git push` rules are not tied to an
 account: with a coder, `git push origin main` is still there when the assistant has an account,

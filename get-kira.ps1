@@ -972,7 +972,10 @@ function Get-KiraPermissionRule($UserProfile) {
             $rules.Add("Bash(git push -u origin $type/:*)")
             $rules.Add("Bash(git push origin $type/:*)")
         }
-        $rules.Add('Bash(git push origin --delete:*)')
+        # Only her work branches: a broad --delete rule would also match main.
+        foreach ($type in @('feat', 'fix', 'docs', 'refactor', 'test', 'chore', 'ci')) {
+            $rules.Add("Bash(git push origin --delete $type/:*)")
+        }
         $rules.Add("Bash($gh project item-edit:*)")
         $rules.Add("Bash($gh project item-add:*)")
     }

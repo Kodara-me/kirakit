@@ -759,7 +759,10 @@ permission_rules() {
 				printf 'Bash(git push -u origin %s/:*)\n' "$type"
 				printf 'Bash(git push origin %s/:*)\n' "$type"
 			done
-			printf '%s\n' 'Bash(git push origin --delete:*)'
+			# Only her work branches: a broad --delete rule would also match main.
+			for type in feat fix docs refactor test chore ci; do
+				printf 'Bash(git push origin --delete %s/:*)\n' "$type"
+			done
 			printf 'Bash(%s project item-edit:*)\n' "$gh"
 			printf 'Bash(%s project item-add:*)\n' "$gh"
 		fi

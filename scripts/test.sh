@@ -1240,6 +1240,15 @@ check 'record: removal refused on uninstall, record removed (R15)' test ! -e "$c
 # --- the coder's permission rules (#79) ----------------------------------------------------
 
 cleo_rule='"Bash(GH_TOKEN=$(gh auth token --user cleo-bot) gh pr edit:*)"'
+
+# allows FILE COMMAND: whether a Bash rule of FILE matches COMMAND, as Claude Code matches
+# them: "Bash(PREFIX:*)" for any command that starts with PREFIX, "Bash(COMMAND)" exactly.
+allows() {
+	sed -n 's/^ *"Bash(\(.*\))",\{0,1\}$/\1/p' "$1" | awk -v command="$2" '
+		/:\*$/ { if (index(command, substr($0, 1, length($0) - 2)) == 1) found = 1; next }
+		$0 == command { found = 1 }
+		END { exit !found }'
+}
 lead_edit_rule='"Bash(GH_TOKEN=$(gh auth token --user kira-bot) gh pr edit:*)"'
 
 claude=$tmp/coder-rules-alone
@@ -1249,10 +1258,14 @@ kira --name Alex --gender female --language auto --assistant 'Kira <kira@example
 check 'coder rules: her pull requests (R25)' contains "$claude/settings.json" "$cleo_rule"
 check 'coder rules: her issues (R25)' contains "$claude/settings.json" '"Bash(GH_TOKEN=$(gh auth token --user cleo-bot) gh issue comment:*)"'
 check 'coder rules: her board moves (R25)' contains "$claude/settings.json" '"Bash(GH_TOKEN=$(gh auth token --user cleo-bot) gh project item-edit:*)"'
-check 'coder rules: her work branches (R25)' sh -c 'grep -qF "\"Bash(git push -u origin feat/:*)\"" "$1" && grep -qF "\"Bash(git push origin --delete:*)\"" "$1"' _ "$claude/settings.json"
+check 'coder rules: her work branches (R25)' sh -c 'grep -qF "\"Bash(git push -u origin feat/:*)\"" "$1" && grep -qF "\"Bash(git push origin --delete feat/:*)\"" "$1"' _ "$claude/settings.json"
 check 'coder rules: she cannot push main (R25, D25)' test "$(occurrences 'origin main')" = 0
+check 'coder rules: she deletes her work branches (R25)' allows "$claude/settings.json" 'git push origin --delete fix/12-name'
+check 'coder rules: she cannot delete main (R25, D25)' sh -c '! "$@"' _ allows "$claude/settings.json" 'git push origin --delete main'
+check 'coder rules: she cannot push to main (R25, D25)' sh -c '! "$@"' _ allows "$claude/settings.json" 'git push origin main'
+check 'coder rules: no broad delete rule (D25)' test "$(occurrences '"Bash(git push origin --delete:*)"')" = 0
 check 'coder rules: no release or tag (R25)' sh -c '! grep -q -e "release create" -e "origin v:" "$1"' _ "$claude/settings.json"
-check 'coder rules: 24 rules (R25)' test "$(rule_count "$claude/settings.json")" = 24
+check 'coder rules: 30 rules (R25)' test "$(rule_count "$claude/settings.json")" = 30
 check 'coder rules: recorded (R25)' recorded "$cleo_rule"
 check 'coder rules: rerun changes nothing (R25)' unchanged kira --copy
 
@@ -1261,6 +1274,8 @@ kira_team --coder 'Cleo <cleo@example.com>' --coder-github cleo-bot --copy >/dev
 check "coder rules: the lead's pr edit with a coder (R27)" contains "$claude/settings.json" "$lead_edit_rule"
 check 'coder rules: the shared push rules once (R25)' test "$(occurrences '"Bash(git push origin feat/:*)"')" = 1
 check 'coder rules: the lead still pushes main (R25)' test "$(occurrences "$main_rule")" = 1
+check 'coder rules: the lead keeps the broad delete rule (R25)' test "$(occurrences '"Bash(git push origin --delete:*)"')" = 1
+check 'coder rules: the lead may delete any branch (R25)' allows "$claude/settings.json" 'git push origin --delete main'
 check 'coder rules: team, valid JSON (R25)' valid_json "$claude/settings.json"
 kira --copy --coder-github '' >/dev/null
 check 'coder rules: removed without her account (R25)' test "$(occurrences 'user cleo-bot')" = 0
@@ -1268,6 +1283,7 @@ check "coder rules: the lead's pr edit removed with her (R27)" test "$(occurrenc
 check 'coder rules: the shared push rules stay for the lead (R25)' test "$(occurrences '"Bash(git push origin feat/:*)"')" = 1
 check 'coder rules: back to the team without a coder (R25)' test "$(rule_count "$claude/settings.json")" = 33
 check 'coder rules: removal, valid JSON (R25)' valid_json "$claude/settings.json"
+check 'coder rules: her delete rules removed (R25)' test "$(occurrences 'delete feat/')" = 0
 check 'coder rules: removal, record updated (R25)' sh -c '! grep -q -e "user cleo-bot" -e "pr edit" "$1"' _ "$claude/.kirakit-permissions"
 
 claude=$tmp/coder-rules-none

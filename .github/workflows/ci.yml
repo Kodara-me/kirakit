@@ -173,6 +173,9 @@ jobs:
           grep -qF '"Bash(GH_TOKEN=$(gh auth token --user iris-bot) gh project item-list:*)"' "$RUNNER_TEMP/ps-analyst/settings.json"
           grep -qF '"Bash(GH_TOKEN=$(gh auth token --user cleo-bot) gh pr edit:*)"' "$RUNNER_TEMP/ps-coder/settings.json"
           if grep -qF 'git push origin main' "$RUNNER_TEMP/ps-coder/settings.json"; then exit 1; fi
+          # Her delete rules are narrowed to her work branches: none matches main (#79 D25).
+          grep -qF '"Bash(git push origin --delete feat/:*)"' "$RUNNER_TEMP/ps-coder/settings.json"
+          if grep -qF '"Bash(git push origin --delete:*)"' "$RUNNER_TEMP/ps-coder/settings.json"; then exit 1; fi
       - name: Permission rules in an existing settings.json
         # Both installers merge the rules into the same shapes, and leave the others unchanged.
         run: |
