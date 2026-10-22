@@ -637,7 +637,7 @@ check 'team rules: no section without an analyst' sh -c '! grep -q "The team\|Ir
 expected_model() {
 	case $1 in
 	iris | cleo | idea | spec) echo opus ;;
-	next-task | diffv) echo sonnet ;;
+	next-task | diffv | pull-request) echo sonnet ;;
 	board-status | test | pull | push | commit | assistant-commit) echo haiku ;;
 	esac
 }
@@ -662,7 +662,7 @@ in_readme() {
 	grep -q "^| \`$1\`.* | $(expected_model "$1") | $2 |\$" "$root/README.md"
 }
 full=$tmp/commit-coder
-check 'models: every skill built (#97 R7)' test "$(find "$full/skills" -name SKILL.md | wc -l)" -ge 10
+check 'models: every skill built (#97 R7)' test "$(find "$full/skills" -name SKILL.md | wc -l)" -ge 11
 for skill_file in "$full"/skills/*/SKILL.md; do
 	skill=$(basename "$(dirname "$skill_file")")
 	check "models: $skill declares $(expected_model "$skill") (#97 R2, R3, R4, R7)" has_model "$skill_file" "$skill"
@@ -696,6 +696,18 @@ check 'models: the lead passes its account in the team rules (#97 R3)' sh -c 'gr
 check 'models: spec moves as the analyst (#97 R3)' contains "$tmp/iris-build/skills/spec/SKILL.md" '`board-status <parent> Specified --as iris-bot`'
 check 'models: spec moves as the developer without an analyst account (#97 R3)' contains "$tmp/build3/skills/spec/SKILL.md" '`board-status <parent> Specified --as kira-bot`'
 check 'models: no --as without an account (#97 R3)' sh -c '! grep -rq -- "--as [a-z]" "$1/rules" "$1/skills"' _ "$tmp/build2"
+
+# The pull-request skill (#97 R5, D9).
+pr_skill=$full/skills/pull-request/SKILL.md
+check 'pull-request: built (#97 R5)' test -f "$pr_skill"
+check 'pull-request: closes its tasks (#97 R5)' contains "$pr_skill" 'one `Closes #<n>` line'
+check 'pull-request: no generation footer (#97 R5)' contains "$pr_skill" 'No generation footer'
+check 'pull-request: account, assignee and reviewers from the git rules (#97 R5, D9)' contains "$pr_skill" 'the `--assignee` and `--reviewer` the git rules give the member who opens it'
+check 'pull-request: board moves (#97 R5)' contains "$pr_skill" '`board-status <pr> In review --add-to-boards-of <task>`'
+check 'pull-request: no account hard-coded (#97 D9)' sh -c '! grep -qi "kira\|cleo\|iris" "$1"' _ "$pr_skill"
+check 'pull-request: the coder opens hers with it (#97 R5)' contains "$full/agents/cleo.md" 'She opens the pull request with the `pull-request` skill'
+check 'pull-request: CLAUDE.md points to it without a coder (#97 R5)' contains "$tmp/commit-assistant/CLAUDE.md" 'Pull requests are opened with the `pull-request` skill.'
+check 'pull-request: not in CLAUDE.md with a coder (#97 R5)' sh -c '! grep -q "pull-request" "$1"' _ "$full/CLAUDE.md"
 
 # Background agents (#97 R6, D10).
 for build in commit-coder iris-build commit-coder-solo; do

@@ -502,8 +502,8 @@ The launchers are not supported on Windows: `get-kira.ps1` prints a notice and i
 ## Skills
 
 `claude/skills/` holds Claude Code skills, one directory per skill with its `SKILL.md`:
-`assistant-commit`, `board-status`, `commit`, `diffv`, `idea`, `next-task`, `pull`, `push`,
-`spec` and `test`. They answer
+`assistant-commit`, `board-status`, `commit`, `diffv`, `idea`, `next-task`, `pull`,
+`pull-request`, `push`, `spec` and `test`. They answer
 in the profile's language; `commit` and `assistant-commit` follow the git rules in
 `claude/rules/git.md` (see [Who commits](#who-commits)). Other skills already in
 `$CLAUDE_CONFIG_DIR/skills/` are left untouched. Agents in `claude/agents/` are installed the
@@ -532,6 +532,7 @@ when a member invokes it herself, it runs on her model.
 | `assistant-commit` | Commits the coder's or the assistant's own work | haiku | inline |
 | `idea` | Captures an idea as an issue | opus | inline |
 | `spec` | Turns an idea into a specification and its tasks | opus | inline |
+| `pull-request` | Writes and opens the pull request of a task | sonnet | inline |
 
 The lead's and the analyst's own sessions (`assistant`, `analyst`) run on your model, from
 your Claude Code settings: kirakit does not pin it. `board-status` takes the account that

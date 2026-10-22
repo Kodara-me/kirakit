@@ -4,6 +4,9 @@
 
 Commits, attribution, identity and signing follow the git rules in `rules/git.md`, which
 Claude Code loads on its own from the rules folder.
+{{^coder}}
+Pull requests are opened with the `pull-request` skill.
+{{/coder}}
 
 ## Specifications
 
