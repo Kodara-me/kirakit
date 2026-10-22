@@ -312,6 +312,10 @@ analyst.
   Answer there, or in the conversation: Kira passes your answer to Iris as given, and Iris
   records it in the specification. Kira never edits a specification herself, and a new
   request about an issue Iris is already on goes to that same task.
+- **You start a specification, then development runs on its own.** When Iris finishes a
+  specification with no questions for you, Kira says in one line that it is in Specified.
+  Move it to Ready on the board, or tell Kira it can start: Kira then works through its
+  tasks without asking (see [Development](#development-from-a-ready-specification)).
 - **Long outputs stay out of the conversation too.** CI logs, full test runs and broad
   searches run in a background agent that returns only its conclusion.
 - On GitHub, Iris's work is still written as her account (see
@@ -402,6 +406,50 @@ A feature goes through one GitHub issue, from idea to specification:
 
 The formats are defined in `claude/skills/idea/SKILL.md` and `claude/skills/spec/SKILL.md`;
 `claude/CLAUDE.md` holds the rules for working from a specification.
+
+### Project board
+
+The workflow uses a board with these `Status` options, in this order:
+
+| Status | What it holds |
+| --- | --- |
+| Backlog | Ideas, and the tasks of every specification |
+| Specified | Specifications that are complete and wait for you |
+| Ready | Specifications you want the team to work on |
+| In progress | Specifications and tasks being worked on |
+| In review | Tasks and pull requests waiting for your review |
+| Done | Closed issues and merged pull requests |
+
+GitHub's default board has no Specified option. Add it in the board's settings (⋯ →
+Settings → Status → Add option), and drag it between Backlog and Ready. `gh` cannot add an
+option, and replacing the option list through the API can clear existing statuses. Without
+a Specified option, the analyst leaves the specification where it is and says so.
+
+The developer moves her tasks, their specification and her pull requests with the
+`board-status` skill. Done is left to the board's built-in workflows (item closed, pull
+request merged).
+
+### Development from a Ready specification
+
+Moving a specification to Ready is your go-ahead: all its tasks can be worked on. The
+developer runs `next-task` when she starts working and after each pull request she opens,
+and starts the task it gives without asking: specifications in board order, their tasks in
+sub-issue order, skipping a task that is taken, blocked by an open issue, waiting for an
+answer, or touching the same files as a pull request in review (a shared test file such as
+`scripts/test.sh` does not count).
+
+She stops for you only when:
+
+- she has a question, or solutions for you to choose from;
+- a pull request waits for your review;
+- she needs more information, asked on the issue;
+- a safety stop applies: no stacked pull requests, tags and releases only on request, merge
+  only after approval, asking before creating, editing or closing an issue;
+- nothing is workable.
+
+Moving a specification out of Ready and In progress stops it: no new task of it starts, and
+a task already started goes on to its pull request. On a repository with no board, the
+`status:ready` label on the specification takes the place of Ready.
 
 ## Placeholders
 
