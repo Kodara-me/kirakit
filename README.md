@@ -545,6 +545,8 @@ identity):
 | `{{coder}}` | The coder's git identity, "NAME <EMAIL>", or nothing |
 | `{{coder_name}}`, `{{coder_email}}` | The coder's name and email, or nothing |
 | `{{coder_signing_key}}`, `{{coder_github}}` | The coder's public SSH signing key and GitHub login, or nothing |
+| `{{committer}}` | Who commits with `assistant-commit`: "the coder" with a coder, "the assistant" otherwise |
+| `{{committer_name}}`, `{{committer_email}}`, `{{committer_signing_key}}` | That member's git identity and signing key: the coder's with a coder, the assistant's otherwise |
 | `{{assistant_style}}`, `{{analyst_style}}` | The name of the assistant's and the analyst's output style, e.g. "Kira (cozy)" and "Iris" |
 
 A line holding only a placeholder that expands to nothing is removed.
