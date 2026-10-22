@@ -24,17 +24,32 @@ Claude Code loads on its own from the rules folder.
   while its specification is in Ready or In progress, or, on a repository with no board,
   while the specification carries `status:ready`. An issue with no specification is
   workable when it is in Ready.
+{{^coder}}
 - When starting to work, and after opening each pull request, run the `next-task` skill
   and start the task it gives without asking, saying so in one line. When nothing is
   workable, say so in one line and wait.
+{{/coder}}
+{{#coder}}
+- When starting to work, and each time the coder's task ends with a pull request, run the
+  `next-task` skill and hand the task it gives to the coder without asking, saying so in one
+  line (`rules/team.md`). When nothing is workable, say so in one line and wait.
+{{/coder}}
 - Stop and wait for the user only when:
   - there is a question for the user, or solutions for the user to choose from;
   - a pull request waits for the user's review;
   - more information is needed to go on, asked on the issue;
+{{^coder}}
   - a safety stop applies: a task that touches the same files as a pull request in review
     waits for its merge (a shared test file does not count; rebase when needed), tags and
     releases only on an explicit request, merge only after approval, and asking before
     creating, editing or closing an issue;
+{{/coder}}
+{{#coder}}
+  - a safety stop applies: a task that touches the same files as a pull request in review
+    waits for its merge (a shared test file does not count; rebase when needed), tags and
+    releases only on an explicit request, merge only after the user's own approval, and
+    asking before creating, editing or closing an issue;
+{{/coder}}
   - no task is workable.
 - When the user moves a specification out of Ready and In progress, start no further task
   of it. A task already started goes on until its pull request is opened.

@@ -434,6 +434,38 @@ kira_profile --copy >"$tmp/coder-new.log"
 check 'coder: none by default (R23)' profile_has 'coder='
 check 'coder: listed as not asked (R23)' grep -q 'no terminal to ask for:.* coder' "$tmp/coder-new.log"
 
+# --- the lead hands code to the coder (#79 R15, R16, R18, R19, R21, R22, R24) -------------
+
+$shell "$root/scripts/build.sh" -o "$tmp/lead-coder" --coder 'Cleo <cleo@example.com>' >/dev/null
+$shell "$root/scripts/build.sh" -o "$tmp/lead-both" --analyst --coder 'Cleo <cleo@example.com>' >/dev/null
+$shell "$root/scripts/build.sh" -o "$tmp/lead-analyst" --analyst >/dev/null
+for dir in "$tmp/lead-coder" "$tmp/lead-both"; do
+	what=$(basename "$dir")
+	team=$dir/rules/team.md
+	check "$what: team rules with a coder (R24)" grep -qx '# Team rules' "$team"
+	check "$what: code goes to the coder (R15)" contains "$team" 'Code goes to the coder, the `cleo` agent, run in the background'
+	check "$what: the lead never codes (R15)" contains "$team" 'The assistant never writes'
+	check "$what: one coder task at a time (R16)" contains "$team" 'One coder task at a time.'
+	check "$what: the lead reviews first (R18)" contains "$team" 'the assistant reviews it on GitHub as its'
+	check "$what: the user reviews after the lead (R18)" contains "$team" 'on approval, it requests the user'"'"'s review'
+	check "$what: changes go back to the coder (R19)" contains "$team" 'it hands the pull request back to'
+	check "$what: report in a few lines (R21)" contains "$team" 'the tasks it closes, its own review result, and any question for the user'
+	check "$what: merge on the user's own approval (R22)" contains "$team" 'only when the user'"'"'s own latest review is an approval'
+	check "$what: not on reviewDecision (R22)" contains "$team" 'never on `reviewDecision`'
+	check "$what: focused conversation kept" contains "$team" '## Keeping the conversation focused'
+	check "$what: next task to the coder (R15)" contains "$dir/CLAUDE.md" 'hand the task it gives to the coder without asking'
+	check "$what: merge after the user's own approval (R22)" contains "$dir/CLAUDE.md" 'merge only after the user'"'"'s own approval'
+	check "$what: no placeholder" no_placeholder "$dir"
+done
+check 'lead-both: both members named' contains "$tmp/lead-both/rules/team.md" 'the analyst and the coder follow their own personas.'
+check 'lead-both: analyst rules kept' contains "$tmp/lead-both/rules/team.md" '## Delegating to the analyst'
+check 'lead-coder: no analyst rules' sh -c '! grep -q "Delegating to the analyst" "$1"' _ "$tmp/lead-coder/rules/team.md"
+check 'lead-analyst: no coder rules (R24)' sh -c '! grep -qi "coder" "$1" "$2"' _ "$tmp/lead-analyst/rules/team.md" "$tmp/lead-analyst/CLAUDE.md"
+check 'lead-analyst: header as before (R24)' contains "$tmp/lead-analyst/rules/team.md" 'apply in the assistant'"'"'s session; the analyst follows her own persona.'
+check 'lead-analyst: next task started as before (R24)' contains "$tmp/lead-analyst/CLAUDE.md" 'and start the task it gives without asking'
+check 'lead-analyst: merge after approval as before (R24)' contains "$tmp/lead-analyst/CLAUDE.md" 'merge only after approval, and asking before'
+check 'lead: no team rules without a member' test ! -e "$tmp/build/rules/team.md"
+
 # --- Iris, a team member (#15 R1, R2, R11, R4, R9) -----------------------------------------
 
 $shell "$root/scripts/build.sh" -o "$tmp/iris-build" --name Alex --gender female --analyst \
