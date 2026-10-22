@@ -9,7 +9,7 @@ machine with one command.
 | --- | --- |
 | `personas/` | Claude Code output styles: `_core.md` holds the traits shared by every persona, each other file is an overlay (`kira-cozy.md`, …) |
 | `team/` | Team members beside Kira, one file each (`iris.md`), built into an output style and an agent |
-| `claude/` | Content for `~/.claude/`: `CLAUDE.md`, `skills/`, `agents/` |
+| `claude/` | Content for `~/.claude/`: `CLAUDE.md`, `rules/`, `skills/`, `agents/` |
 | `launchers/` | Commands that start a team member or the whole team (`assistant`, `analyst`, `team`), and their Konsole color schemes |
 | `github/` | Issue and pull request templates, a workflow and Copilot instructions to copy into a repository's `.github/` |
 | `.github/workflows/` | This repository's CI, and reusable workflows other repositories can call |
@@ -61,7 +61,7 @@ In `$CLAUDE_CONFIG_DIR` (default: `~/.claude`):
 | --- | --- |
 | `output-styles/kira-*.md` | `styles` |
 | `output-styles/iris.md`, with an analyst | `styles` |
-| `CLAUDE.md`, `rules/git.md`, `skills/*`, `agents/*` (`agents/iris.md` with an analyst) | `claude` |
+| `CLAUDE.md`, `rules/git.md`, `skills/*`, `agents/*` (`rules/team.md` and `agents/iris.md` with an analyst) | `claude` |
 | `outputStyle` and `attribution` in `settings.json` | `claude` — only these keys are changed; the file is edited in place |
 | `.kirakit-profile`, `.kirakit-manifest`, `.kirakit-originals` | Profile and the record used by `--uninstall` |
 | `.kirakit-backups/<timestamp>/` | Files that were replaced or removed |
@@ -295,12 +295,42 @@ Iris is calm, precise and curious. She asks "why" before "how", restates what sh
 understood, points out gaps and contradictions, settles the questions that have a good
 answer and records them, and asks only about real trade-offs.
 
-- **Talk to her** with the `analyst` command (see [Launchers](#launchers)), or by switching
-  the session's output style to `Iris` (`/config`). Switch back to a Kira style the same way.
-- **Hand her work** through the `iris` agent: a Kira session delegates a clarification or a
-  specification question to her, and she answers in her own voice.
+### Working through the lead
+
+With an analyst, Kira leads the team: you talk to the team through one conversation, Kira's,
+and she keeps its context for you. The rules are in `rules/team.md`, installed only with an
+analyst.
+
+- **Ideas and specifications go to Iris in the background.** When you ask Kira to capture
+  an idea, specify one, change a specification or answer a question about one, she hands it
+  to the `iris` agent and keeps talking with you meanwhile. She never runs the `idea` or
+  `spec` skill in her own conversation.
+- **Kira reports in a few lines** when Iris finishes: the issue's URL, the sub-issues created,
+  and Iris's questions with her recommendations. Iris's intermediate work stays out of the
+  conversation.
+- **Answer in either place.** Iris also posts her questions on the issue, mentioning you.
+  Answer there, or in the conversation: Kira passes your answer to Iris as given, and Iris
+  records it in the specification. Kira never edits a specification herself, and a new
+  request about an issue Iris is already on goes to that same task.
+- **Long outputs stay out of the conversation too.** CI logs, full test runs and broad
+  searches run in a background agent that returns only its conclusion.
+- On GitHub, Iris's work is still written as her account (see
+  [Give the analyst a GitHub account](#give-the-analyst-a-github-account)).
+
+A second stage, a coder with her own GitHub account and signing key whose pull requests Kira
+reviews before you, is planned in [#79](https://github.com/Kodara-me/kirakit/issues/79).
+
+### Talking to Iris directly
+
+The lead setup changes nothing for a direct conversation with Iris:
+
+- **Talk to her** with the `analyst` command, or open the whole team side by side with
+  `team` (see [Launchers](#launchers)). You can also switch the session's output style to
+  `Iris` (`/config`), and back to a Kira style the same way.
 - `claude --agent iris` is not the way to talk to her: an agent session keeps the global
   output style, so Kira's persona would sit in the same prompt.
+
+### Team members
 
 A member is written once, in `team/<name>.md`, and built into both `output-styles/<name>.md`
 and `agents/<name>.md`, with the same body. Its front matter holds `name` and `description`
