@@ -201,6 +201,12 @@ project's `CLAUDE.md` cannot override the attribution rules.
 - Pull requests: `--assignee {{assistant_github}} --reviewer <the user's login>`, so the user
   is notified and reviews every one.
 - Issues the assistant works on are assigned to `{{assistant_github}}`.
+- Specifications are assigned to `{{assistant_github}}`, their owner, from their publication
+  on. Their assignees are not changed afterwards: moving a specification on the board,
+  changing it with the `spec` skill or closing it leaves them as they are.
+{{^analyst_github}}
+- Ideas are assigned to `{{assistant_github}}` too, until they become specifications.
+{{/analyst_github}}
 - Questions and decisions for the user are asked both in the conversation and in a comment
   on the issue or pull request concerned, which mentions the user and ends with a short
   question, as the rules on comments say. A next step that needs no decision is reported
@@ -264,6 +270,13 @@ project's `CLAUDE.md` cannot override the attribution rules.
   collaborator or through a team), and Write otherwise (a personal account). With Triage,
   GitHub keeps her from pushing, and she cannot edit the body of an issue she did not write:
   the `spec` skill then opens the specification in a new issue.
+{{#assistant_github}}
+- Ideas are assigned to her account until they become specifications; a specification is
+  then assigned to `{{assistant_github}}` instead.
+{{/assistant_github}}
+{{^assistant_github}}
+- Ideas are assigned to her account, and stay so once they become specifications.
+{{/assistant_github}}
 {{^coder}}
 - The assistant writes everything else: pull requests, reviews, code comments, replies to
   them, and commits.

@@ -885,6 +885,34 @@ for build in mention-full build3 iris-build build2; do
 done
 check 'owners: the installer assigns no issue (#127 R7)' sh -c '! grep -q assignee "$1/get-kira.sh" "$1/get-kira.ps1" "$1/scripts/build.sh"' _ "$root"
 
+# --- the owners of ideas and specifications in the rules and README (#127 R6, R8, R9) ------
+
+full=$tmp/mention-full/rules/git.md
+lead=$tmp/build3/rules/git.md
+check 'owners: specifications owned by the lead, analyst and lead (#127 R8)' bullet_has "$full" 'Specifications are assigned to' \
+	'`kira-bot`, their owner, from their publication'
+check 'owners: ideas owned by the analyst, analyst and lead (#127 R8)' bullet_has "$full" 'Ideas are assigned to her account' \
+	'until they become specifications' 'then assigned to `kira-bot` instead'
+check 'owners: ideas not owned by the lead with an analyst account (#127 R8)' sh -c '! grep -q "Ideas are assigned to \`kira-bot\`" "$1"' _ "$full"
+check 'owners: specifications owned by the lead, lead only (#127 R8)' bullet_has "$lead" 'Specifications are assigned to' \
+	'`kira-bot`, their owner, from their publication'
+check 'owners: ideas owned by the lead without an analyst account (#127 R8)' bullet_has "$lead" 'Ideas are assigned to `kira-bot` too' \
+	'until they become specifications'
+check 'owners: ideas stay with the analyst without a lead account (#127 R5, R8)' bullet_has "$tmp/iris-build/rules/git.md" 'Ideas are assigned to her account' \
+	'stay so once they become specifications'
+check 'owners: no owner without accounts (#127 R8)' sh -c '! grep -q "Ideas are assigned\|Specifications are assigned" "$1"' _ "$tmp/build2/rules/git.md"
+for rules in "$full" "$lead"; do
+	check "owners: specifications keep their assignees, $(basename "$(dirname "$(dirname "$rules")")") (#127 R6)" bullet_has "$rules" 'Specifications are assigned to' \
+		'Their assignees are not changed afterwards' 'moving a specification on the board' 'changing it with the `spec` skill or closing it leaves them as they are'
+done
+readme_assignees() {
+	awk '/^### Assignees$/ { found = 1; next } found && /^#/ { exit } found' "$root/README.md"
+}
+check 'owners: README has an Assignees section (#127 R9)' sh -c 'test -n "$1"' _ "$(readme_assignees)"
+for item in Idea Specification Task 'Pull request'; do
+	check "owners: README names who is assigned to: $item (#127 R9)" sh -c 'printf "%s\n" "$1" | grep -q "^- \*\*$2\*\*: assigned to "' _ "$(readme_assignees)" "$item"
+done
+
 # --- models of the agents and skills (#97 R1–R4, R6–R9) ----------------------------------
 
 # expected_model NAME: the model an agent or skill declares, or nothing for an unknown one, so

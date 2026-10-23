@@ -699,6 +699,26 @@ A feature goes through one GitHub issue, from idea to specification:
 The formats are defined in `claude/skills/idea/SKILL.md` and `claude/skills/spec/SKILL.md`;
 `claude/CLAUDE.md` holds the rules for working from a specification.
 
+### Assignees
+
+Each issue and pull request shows its owner as its assignee, on GitHub and on the board:
+
+- **Idea**: assigned to the analyst's account, or to the assistant's account when there is
+  no analyst account, and to nobody without either. An idea written from the issue form is
+  assigned when the `spec` skill starts from it.
+- **Specification**: assigned to the assistant's account, the lead, from its publication
+  on; the analyst's account is removed from it. Without an assistant account, it keeps the
+  idea's assignees. Its assignees are not changed afterwards, whatever its status on the
+  board, and other assignees (such as you, if you assign yourself) are kept.
+- **Task**: assigned to the assistant's account when it is created, then to the member who
+  works on it (the coder's account when she implements it).
+- **Pull request**: assigned to the member who opens it, with the assistant's account as
+  reviewer for the coder's pull requests, and yours for the others and after the
+  assistant's approval.
+
+The rules are in `claude/rules/git.md`; existing ideas and specifications are not assigned
+after the fact.
+
 ### Project board
 
 The workflow uses a board with these `Status` options, in this order:
