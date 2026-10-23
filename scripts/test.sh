@@ -1033,6 +1033,56 @@ env -u XDG_DATA_HOME HOME="$tmp/home" CLAUDE_CONFIG_DIR="$tmp/launchers-home" $s
 	--name Alex --gender female --language auto --no-co-author --only launchers </dev/null >/dev/null
 check 'launchers: ~/.local/share/konsole by default (#36 R6)' test -f "$tmp/home/.local/share/konsole/kirakit-assistant.colorscheme"
 
+# --- completing approved pull requests (#122 R1, R2, R11) ----------------------------------
+
+printf '%s\n' '{{#complete_approved_prs}}' 'complete {{complete_approved_prs}}' '{{/complete_approved_prs}}' \
+	'{{^complete_approved_prs}}' 'wait' '{{/complete_approved_prs}}' >"$blocks/claude/skills/blocks/SKILL.md"
+build_blocks "$tmp/blocks-complete" --complete-approved-prs
+check 'complete build: placeholder and block with the option (R1)' \
+	same_lines "$tmp/blocks-complete/skills/blocks/SKILL.md" 'complete yes'
+build_blocks "$tmp/blocks-wait"
+check 'complete build: inverted block without the option (R2)' \
+	same_lines "$tmp/blocks-wait/skills/blocks/SKILL.md" 'wait'
+
+# complete_team ARGS: kira with a full team and a coder, as the build of R2 below.
+complete_team() {
+	kira_profile --assistant 'Kira <kira@example.com>' --coder 'Cleo <cleo@example.com>' --copy "$@"
+}
+
+claude=$tmp/complete
+complete_team >"$tmp/complete.log"
+check 'complete: off by default (R1)' profile_has 'complete_approved_prs=no'
+check 'complete: never asked (R1)' sh -c '! grep -q "no terminal to ask for:.*complete" "$1"' _ "$tmp/complete.log"
+complete_team --complete-approved-prs >/dev/null
+check 'complete: turned on and saved by the option (R1)' profile_has 'complete_approved_prs=yes'
+check 'complete: kept by a later run without the option (R1)' unchanged complete_team
+check 'complete: still on after the later run (R1)' profile_has 'complete_approved_prs=yes'
+complete_team --no-complete-approved-prs >/dev/null
+check 'complete: turned off by the no option (R1)' profile_has 'complete_approved_prs=no'
+
+# R2: with the setting off, the installed files are the build without the option.
+$shell "$root/scripts/build.sh" -o "$tmp/complete-build" --name Alex --gender female --language auto \
+	--co-author 'Kira <kira@example.com>' --assistant 'Kira <kira@example.com>' \
+	--coder 'Cleo <cleo@example.com>' >/dev/null
+for path in rules CLAUDE.md skills agents; do
+	check "complete: off, $path as the build without the option (R2)" \
+		diff -r "$tmp/complete-build/$path" "$claude/$path"
+done
+
+# A profile saved before the setting reads as off, and nothing is asked.
+claude=$tmp/complete-earlier
+mkdir -p "$claude"
+printf 'name=Alex\ngender=female\nlanguage=auto\nassistant_name=Kira\nassistant_email=kira@example.com\nassistant_signing_key=\nassistant_github=\nco_author_trailer=yes\nanalyst=no\nanalyst_github=\ncoder=Cleo <cleo@example.com>\ncoder_signing_key=\ncoder_github=\nallow_releases=no\nstyle=kira-cozy\n' \
+	>"$claude/.kirakit-profile"
+kira --copy >"$tmp/complete-earlier.log"
+check 'complete: earlier profile reads as off (R1)' profile_has 'complete_approved_prs=no'
+check 'complete: earlier profile not asked (R1)' sh -c '! grep -q "no terminal to ask for" "$1"' _ "$tmp/complete-earlier.log"
+
+# R11: the README documents both options and the profile key.
+check 'complete: README lists the option (R11)' contains "$root/README.md" '| `--complete-approved-prs` |'
+check 'complete: README lists the no option (R11)' contains "$root/README.md" '| `--no-complete-approved-prs` |'
+check 'complete: README lists the profile key (R11)' contains "$root/README.md" '`complete_approved_prs` (`yes` or `no`, default `no`)'
+
 # --- dry run -------------------------------------------------------------------------------
 
 claude=$tmp/dry

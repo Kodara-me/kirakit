@@ -58,6 +58,10 @@ The coder's own GitHub account (empty: none).
 Let the assistant create releases and push tags without a prompt.
 .PARAMETER NoAllowReleases
 Releases and tags stay behind a prompt (default).
+.PARAMETER CompleteApprovedPrs
+With a coder, let the assistant complete the coder's pull requests it approved without the user's review.
+.PARAMETER NoCompleteApprovedPrs
+Every pull request waits for the user's review (default).
 .PARAMETER DefaultStyle
 Output style selected in settings.json (default: kira-cozy).
 .PARAMETER Reconfigure
@@ -97,6 +101,8 @@ param(
     [string]$CoderGithub,
     [switch]$AllowReleases,
     [switch]$NoAllowReleases,
+    [switch]$CompleteApprovedPrs,
+    [switch]$NoCompleteApprovedPrs,
     [string]$DefaultStyle,
     [switch]$Reconfigure,
     [string[]]$Persona = @(),
@@ -129,7 +135,8 @@ $OriginalsPath = Join-Path $ClaudeDir '.kirakit-originals'
 $PermissionsPath = Join-Path $ClaudeDir '.kirakit-permissions'
 $PlaceholderKeys = @('user', 'they', 'them', 'their', 'language', 'co_author', 'assistant_name', 'assistant_email',
     'assistant_signing_key', 'assistant_github', 'analyst', 'analyst_github', 'coder', 'coder_name', 'coder_email',
-    'coder_signing_key', 'coder_github', 'committer', 'committer_name', 'committer_email', 'committer_signing_key')
+    'coder_signing_key', 'coder_github', 'committer', 'committer_name', 'committer_email', 'committer_signing_key',
+    'complete_approved_prs')
 
 $script:Work = $null
 $script:BackupDir = $null
@@ -457,6 +464,8 @@ function Get-KiraProfile {
     }
     # R3: releases stay behind a prompt unless asked; not a question, an option.
     $result.allow_releases = if ($AllowReleases) { 'yes' } elseif ($NoAllowReleases) { 'no' } elseif ($saved.ContainsKey('allow_releases') -and $saved.allow_releases -eq 'yes') { 'yes' } else { 'no' }
+    # Pull requests wait for the user unless asked; not a question, an option.
+    $result.complete_approved_prs = if ($CompleteApprovedPrs) { 'yes' } elseif ($NoCompleteApprovedPrs) { 'no' } elseif ($saved.ContainsKey('complete_approved_prs') -and $saved.complete_approved_prs -eq 'yes') { 'yes' } else { 'no' }
     $defaultTrailer = if ($result.assistant) { 'yes' } else { 'no' }
     $result.co_author_trailer = if ($NoCoAuthor) { 'no' } elseif ($Bound.ContainsKey('CoAuthor')) { 'yes' } elseif ($saved.ContainsKey('co_author_trailer')) { $saved.co_author_trailer } else { $defaultTrailer }
 
@@ -541,7 +550,7 @@ function Get-KiraProfile {
         "co_author_trailer=$($result.co_author_trailer)${Nl}analyst=$($result.analyst)${Nl}" +
         "analyst_github=$($result.analyst_github)${Nl}coder=$($result.coder)${Nl}" +
         "coder_signing_key=$($result.coder_signing_key)${Nl}coder_github=$($result.coder_github)${Nl}" +
-        "allow_releases=$($result.allow_releases)${Nl}style=$($result.style)${Nl}" +
+        "allow_releases=$($result.allow_releases)${Nl}complete_approved_prs=$($result.complete_approved_prs)${Nl}style=$($result.style)${Nl}" +
         "assistant_style=$assistantStyle${Nl}bin_dir=$binDir$Nl"
     $current = if (Test-Path -LiteralPath $ProfilePath) { Read-KiraText $ProfilePath } else { $null }
     if ($current -ne $text) {
@@ -627,6 +636,7 @@ function Get-KiraValue($UserProfile) {
         committer_name = if ($coderValue) { $coderName } else { $assistantName }
         committer_email = if ($coderValue) { $coderEmail } else { $assistantEmail }
         committer_signing_key = if ($coderValue) { $coderSigningKey } else { $signingKey }
+        complete_approved_prs = if ($UserProfile['complete_approved_prs'] -eq 'yes') { 'yes' } else { '' }
     }
 }
 

@@ -83,7 +83,8 @@ a pull request template, Copilot instructions, and a workflow that checks pull r
 ### Options
 
 `get-kira.ps1` takes the same options in PowerShell form (`-DryRun`, `-Name`, `-CoAuthor`,
-`-Coder`, `-CoderSigningKey`, `-CoderGithub`, `-AllowReleases`, `-NoAllowReleases`, …; see
+`-Coder`, `-CoderSigningKey`, `-CoderGithub`, `-AllowReleases`, `-NoAllowReleases`,
+`-CompleteApprovedPrs`, `-NoCompleteApprovedPrs`, …; see
 `Get-Help .\get-kira.ps1 -Detailed`).
 
 | Option | Effect |
@@ -105,6 +106,8 @@ a pull request template, Copilot instructions, and a workflow that checks pull r
 | `--coder-github LOGIN` | The coder's own GitHub account (empty: none) |
 | `--allow-releases` | Let the assistant's GitHub account create releases and push tags without a prompt (saved in the profile) |
 | `--no-allow-releases` | Releases and tags stay behind a prompt (default; saved in the profile) |
+| `--complete-approved-prs` | With a coder, let the assistant merge the coder's pull requests it approved without your review (saved in the profile) |
+| `--no-complete-approved-prs` | Every pull request waits for your review (default; saved in the profile) |
 | `--default-style PERSONA` | Style selected in `settings.json` (default: `kira-cozy`) |
 | `--assistant-style PERSONA` | Style of the `assistant` launcher (default: the default style) |
 | `--bin-dir DIR` | Where the launchers go, an absolute path (default: `~/.local/bin`) |
@@ -143,7 +146,10 @@ and the question is not asked again: pass `--analyst` or `--analyst-github` to a
 profile saved before the coder reads as no coder in the same way: pass `--coder` to add her.
 The coder's values are saved as `coder`, `coder_signing_key` and `coder_github`.
 `--allow-releases` is not asked: it is saved as `allow_releases` (`yes` or `no`, default `no`)
-and kept until `--no-allow-releases`.
+and kept until `--no-allow-releases`. `--complete-approved-prs` is not asked either: it is
+saved as `complete_approved_prs` (`yes` or `no`, default `no`) and kept until
+`--no-complete-approved-prs`. It applies only with a coder, and a profile saved before it
+reads as `no`.
 
 The answers are saved in `$CLAUDE_CONFIG_DIR/.kirakit-profile` and reused by later runs; only
 questions that are not answered yet are asked. Options override the saved values, and

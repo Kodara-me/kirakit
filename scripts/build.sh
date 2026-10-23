@@ -33,6 +33,8 @@
 #                             and signing key: the coder's with a coder, the assistant's otherwise
 #   {{assistant_style}}       the name of the assistant's output style, e.g. "Kira (cozy)"
 #   {{analyst_style}}         the name of the analyst's output style, "Iris"
+#   {{complete_approved_prs}} "yes" when the lead may complete the coder's pull requests she
+#                             approved without the user's review, or nothing
 # In the launchers, {{assistant_name}} is "Kira" when the assistant has no git identity.
 # A line holding only a placeholder that expands to nothing is removed.
 #
@@ -46,7 +48,7 @@
 #                 [--assistant-signing-key PATH] [--assistant-github LOGIN]
 #                 [--analyst] [--analyst-github LOGIN] [--assistant-style PERSONA]
 #                 [--coder "NAME <EMAIL>"] [--coder-signing-key PATH] [--coder-github LOGIN]
-#                 [PERSONA...]
+#                 [--complete-approved-prs] [PERSONA...]
 set -eu
 
 root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
@@ -66,6 +68,7 @@ analyst_github=
 coder=
 coder_signing_key=
 coder_github=
+complete_approved_prs=
 assistant_style=kira-cozy
 nl='
 '
@@ -82,7 +85,7 @@ Usage: build.sh [-o DIR] [--name NAME] [--gender GENDER] [--language LANGUAGE]
                 [--assistant-signing-key PATH] [--assistant-github LOGIN]
                 [--analyst] [--analyst-github LOGIN] [--assistant-style PERSONA]
                 [--coder "NAME <EMAIL>"] [--coder-signing-key PATH] [--coder-github LOGIN]
-                [PERSONA...]
+                [--complete-approved-prs] [PERSONA...]
 
 Build output styles, skills, agents, rules, CLAUDE.md and the launchers into DIR
 (default: dist).
@@ -102,6 +105,8 @@ With no PERSONA, build every overlay in personas/. Skills are always all built.
   --coder "NAME <EMAIL>"     The coder's git identity (default: none)
   --coder-signing-key PATH   The coder's public SSH signing key, with --coder (default: none)
   --coder-github LOGIN       The coder's GitHub account, with --coder (default: none)
+  --complete-approved-prs    The lead may complete the coder's pull requests she approved
+                             without the user's review (default: no)
 EOF
 }
 
@@ -130,6 +135,10 @@ while [ $# -gt 0 ]; do
 		;;
 	--analyst)
 		analyst=yes
+		shift
+		;;
+	--complete-approved-prs)
+		complete_approved_prs=yes
 		shift
 		;;
 	-h | --help)
@@ -233,7 +242,7 @@ export KIRA_USER="$user" KIRA_THEY="$they" KIRA_THEM="$them" KIRA_THEIR="$their"
 	KIRA_CODER="$coder" KIRA_CODER_NAME="$coder_name" KIRA_CODER_EMAIL="$coder_email" \
 	KIRA_CODER_SIGNING_KEY="$coder_signing_key" KIRA_CODER_GITHUB="$coder_github" \
 	KIRA_COMMITTER="$committer" KIRA_COMMITTER_NAME="$committer_name" KIRA_COMMITTER_EMAIL="$committer_email" \
-	KIRA_COMMITTER_SIGNING_KEY="$committer_signing_key"
+	KIRA_COMMITTER_SIGNING_KEY="$committer_signing_key" KIRA_COMPLETE_APPROVED_PRS="$complete_approved_prs"
 
 # render FILE [ORIGIN]: print FILE with its placeholders filled and its blocks resolved;
 # errors name ORIGIN (default: FILE).
@@ -254,7 +263,7 @@ render() {
 			exit 1
 		}
 		BEGIN {
-			n = split("user they them their language co_author assistant_name assistant_email assistant_signing_key assistant_github analyst analyst_github assistant_style analyst_style coder coder_name coder_email coder_signing_key coder_github committer committer_name committer_email committer_signing_key", keys, " ")
+			n = split("user they them their language co_author assistant_name assistant_email assistant_signing_key assistant_github analyst analyst_github assistant_style analyst_style coder coder_name coder_email coder_signing_key coder_github committer committer_name committer_email committer_signing_key complete_approved_prs", keys, " ")
 			for (k = 1; k <= n; k++) known[keys[k]] = 1
 			depth = 0
 			hidden = 0

@@ -130,6 +130,26 @@ Test-Check 'fetch: an unknown ref shows could not fetch (#86 R3, R5)' `
     $output.Contains("could not fetch $remoteUrl") $output
 Test-Check 'fetch: an unknown ref installs nothing (#86 R3, R5)' (-not (Test-Path -LiteralPath $unknown))
 
+# #122 R1: completing approved pull requests is off by default, saved by its option, kept by
+# a later run without it, and turned off by its no option.
+function Test-ProfileLine([string]$ConfigDir, [string]$Line) {
+    $path = Join-Path $ConfigDir '.kirakit-profile'
+    if (-not (Test-Path -LiteralPath $path)) { return $false }
+    return @(Get-Content -LiteralPath $path) -ccontains $Line
+}
+$complete = Join-Path $tmp 'complete'
+$steps = @(
+    @{ Name = 'off by default'; Arguments = @(); Expected = 'complete_approved_prs=no' },
+    @{ Name = 'turned on and saved by -CompleteApprovedPrs'; Arguments = @('-CompleteApprovedPrs'); Expected = 'complete_approved_prs=yes' },
+    @{ Name = 'kept by a later run without the option'; Arguments = @(); Expected = 'complete_approved_prs=yes' },
+    @{ Name = 'turned off by -NoCompleteApprovedPrs'; Arguments = @('-NoCompleteApprovedPrs'); Expected = 'complete_approved_prs=no' }
+)
+foreach ($step in $steps) {
+    $run = Invoke-Installer $complete 'main' 'C' (@('-Copy', '-Assistant', 'Kira <kira@example.com>', '-Coder', 'Cleo <cleo@example.com>') + $step.Arguments)
+    Test-Check "complete: $($step.Name) (#122 R1)" ($run.Status -eq 0 -and (Test-ProfileLine $complete $step.Expected)) `
+        (($run.Lines | ForEach-Object { "$_" }) -join "`n")
+}
+
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 if ($failures) {
     Write-Host "$failures check(s) failed"

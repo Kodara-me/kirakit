@@ -74,6 +74,9 @@ Options:
   --coder-github LOGIN       The coder's own GitHub account (empty: none)
   --allow-releases           Let the assistant create releases and push tags without a prompt
   --no-allow-releases        Releases and tags stay behind a prompt (default)
+  --complete-approved-prs    With a coder, let the assistant complete the coder's pull
+                             requests it approved without your review
+  --no-complete-approved-prs Every pull request waits for your review (default)
   --default-style PERSONA    Output style selected in settings.json (default: kira-cozy)
   --assistant-style PERSONA  Style of the assistant launcher (default: the default style)
   --bin-dir DIR              Where the launchers go (default: ~/.local/bin)
@@ -372,6 +375,7 @@ load_profile() {
 		coder_signing_key) saved_coder_signing_key=$value ;;
 		coder_github) saved_coder_github=$value ;;
 		allow_releases) saved_allow_releases=$value ;;
+		complete_approved_prs) saved_complete_approved_prs=$value ;;
 		style) saved_style=$value ;;
 		assistant_style) saved_assistant_style=$value ;;
 		bin_dir) saved_bin_dir=$value ;;
@@ -430,6 +434,9 @@ setup_profile() {
 	# R3: releases stay behind a prompt unless asked; not a question, an option.
 	allow_releases=${opt_allow_releases-${saved_allow_releases:-no}}
 	[ "$allow_releases" = yes ] || allow_releases=no
+	# Pull requests wait for the user unless asked; not a question, an option.
+	complete_approved_prs=${opt_complete_approved_prs-${saved_complete_approved_prs:-no}}
+	[ "$complete_approved_prs" = yes ] || complete_approved_prs=no
 	if [ -n "$assistant" ]; then default_trailer=yes; else default_trailer=no; fi
 	co_author_trailer=${opt_co_author_trailer-${saved_co_author_trailer-$default_trailer}}
 	default_style=${opt_style-${saved_style:-kira-cozy}}
@@ -510,7 +517,7 @@ setup_profile() {
 	fi
 
 	[ -z "${no_save-}" ] || return 0
-	profile_text="name=$user_name${nl}gender=$user_gender${nl}language=$user_language${nl}assistant_name=$assistant_name${nl}assistant_email=$assistant_email${nl}assistant_signing_key=$assistant_signing_key${nl}assistant_github=$assistant_github${nl}co_author_trailer=$co_author_trailer${nl}analyst=$analyst${nl}analyst_github=$analyst_github${nl}coder=$coder${nl}coder_signing_key=$coder_signing_key${nl}coder_github=$coder_github${nl}allow_releases=$allow_releases${nl}style=$default_style${nl}assistant_style=$assistant_style${nl}bin_dir=$bin_dir"
+	profile_text="name=$user_name${nl}gender=$user_gender${nl}language=$user_language${nl}assistant_name=$assistant_name${nl}assistant_email=$assistant_email${nl}assistant_signing_key=$assistant_signing_key${nl}assistant_github=$assistant_github${nl}co_author_trailer=$co_author_trailer${nl}analyst=$analyst${nl}analyst_github=$analyst_github${nl}coder=$coder${nl}coder_signing_key=$coder_signing_key${nl}coder_github=$coder_github${nl}allow_releases=$allow_releases${nl}complete_approved_prs=$complete_approved_prs${nl}style=$default_style${nl}assistant_style=$assistant_style${nl}bin_dir=$bin_dir"
 	if [ -f "$profile" ] && [ "$(cat "$profile")" = "$profile_text" ]; then
 		return
 	fi
@@ -545,13 +552,14 @@ build() {
 	fi
 	if [ "$co_author_trailer" = yes ]; then co_author=$assistant; else co_author=; fi
 	if [ "$analyst" = yes ]; then analyst_flag=--analyst; else analyst_flag=; fi
-	# shellcheck disable=SC2086 # analyst_flag is empty or one word
+	if [ "$complete_approved_prs" = yes ]; then complete_flag=--complete-approved-prs; else complete_flag=; fi
+	# shellcheck disable=SC2086 # analyst_flag and complete_flag are empty or one word
 	sh "$src/scripts/build.sh" -o "$build_dir" --name "$user_name" --gender "$user_gender" \
 		--language "$user_language" --co-author "$co_author" --assistant "$assistant" \
 		--assistant-signing-key "$assistant_signing_key" --assistant-github "$assistant_github" \
 		$analyst_flag --analyst-github "$analyst_github" --assistant-style "${assistant_style:-$default_style}" \
 		--coder "$coder" --coder-signing-key "$coder_signing_key" --coder-github "$coder_github" \
-		>/dev/null || exit 1
+		$complete_flag >/dev/null || exit 1
 }
 
 # built PATH: where an installed file comes from; symlinks always point into the clone.
@@ -1168,6 +1176,8 @@ while [ $# -gt 0 ]; do
 	--no-co-author) opt_co_author_trailer=no ;;
 	--allow-releases) opt_allow_releases=yes ;;
 	--no-allow-releases) opt_allow_releases=no ;;
+	--complete-approved-prs) opt_complete_approved_prs=yes ;;
+	--no-complete-approved-prs) opt_complete_approved_prs=no ;;
 	--analyst) opt_analyst=yes ;;
 	--no-analyst) opt_analyst=no ;;
 	--reconfigure) reconfigure=1 ;;
