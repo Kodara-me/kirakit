@@ -4,7 +4,7 @@ name: assistant-commit
 description: Commits the code {{committer}} wrote, under {{committer}}'s own identity and signing key, with the user as co-author, in Conventional Commits format after checks (tests, build, lint, sensitive files). Use when {{committer}} commits its own work; the commit skill is for the user's commits.
 {{/coder}}
 {{#coder}}
-description: Commits the code the coder wrote, under the coder's own identity and signing key, or the code the assistant wrote itself at the user's explicit request, under the assistant's own identity and key, with the user as co-author, in Conventional Commits format after checks (tests, build, lint, sensitive files). Use when the coder or the assistant commits its own work; the commit skill is for the user's commits.
+description: Commits the code the coder or the assistant wrote, under the identity and signing key of the member who runs it, with the writer as author and the user as co-author, in Conventional Commits format after checks (tests, build, lint, sensitive files). Use when the coder or the assistant commits her own work, or the other member's work when its writer has no signing key; the commit skill is for the user's commits.
 {{/coder}}
 model: haiku
 ---
@@ -18,59 +18,93 @@ model: haiku
 
 Answer in {{language}}.
 
-{{^committer_signing_key}}
+{{^any_committer_key}}
+{{^coder}}
 No signing key is configured for {{committer}}, so it never commits as itself. Do not commit:
 say so, and suggest the `commit` skill, or setting a key with the installer
-{{^coder}}
 (`--assistant-signing-key`).
 {{/coder}}
 {{#coder}}
-(`--coder-signing-key`).
-
-The assistant does not commit through this skill either, not even the code it wrote itself
-at the user's explicit request: leave its changes uncommitted, say so, and suggest the
-`commit` skill under the user's identity.
+No signing key is configured for the coder nor for the assistant, so neither commits through
+this skill. Do not commit: leave the changes uncommitted, say so, and suggest the `commit`
+skill under the user's identity, or setting a key with the installer (`--coder-signing-key`,
+`--assistant-signing-key`).
 {{/coder}}
-{{/committer_signing_key}}
-{{#committer_signing_key}}
+{{/any_committer_key}}
+{{#any_committer_key}}
+{{^coder}}
 This skill commits as {{committer_name}} <{{committer_email}}>, signed with
 `{{committer_signing_key}}`. The repository and global git configuration stay the user's: the
 identity and key are passed on the command line only.
+{{/coder}}
 {{#coder}}
+## Who commits
 
-It commits as the assistant only when the assistant commits code it wrote itself because the
-user explicitly asked it to write that code (`rules/team.md`); the coder's work is always
-committed as the coder, and the assistant's never is.
+This skill commits as the member who runs it, the coder or the assistant, and only when that
+member has a signing key. The repository and global git configuration stay the user's: the
+identity and key are passed on the command line only.
+
+{{#committer_signing_key}}
+- The coder commits as {{committer_name}} <{{committer_email}}>, signed with
+  `{{committer_signing_key}}`.
+{{/committer_signing_key}}
+{{^committer_signing_key}}
+- No signing key is configured for the coder, so the coder never commits. She leaves her
+  changes uncommitted on the branch and hands the commit to the assistant, then pushes the
+  branch and opens its pull request as usual.
+{{/committer_signing_key}}
 {{#assistant_signing_key}}
-The assistant commits as {{assistant_name}} <{{assistant_email}}>, signed with
-`{{assistant_signing_key}}`, with the same checks and the assistant's command in step 6.
+- The assistant commits as {{assistant_name}} <{{assistant_email}}>, signed with
+  `{{assistant_signing_key}}`.
 {{/assistant_signing_key}}
 {{^assistant_signing_key}}
-No signing key is configured for the assistant, so it never commits as itself. When the
-assistant commits its own work, do not commit: leave its changes uncommitted, say so, and
-suggest the `commit` skill under the user's identity, or setting a key with the installer
-(`--assistant-signing-key`).
+- No signing key is configured for the assistant, so the assistant never commits. It leaves
+  its changes uncommitted on the branch and hands the commit to the coder, then pushes the
+  branch and opens its pull request as usual.
 {{/assistant_signing_key}}
+
+What the member who runs it may commit:
+
+- Her own work: the coder, the code she wrote for her task; the assistant, the code it wrote
+  itself because the user explicitly asked it to (`rules/team.md`).
+- The other member's work only when its writer has no signing key, for a task or a change of
+  the team, on that work's branch, with the writer as the commit's author (step 6). The
+  commit does not make the work hers: the writer still pushes the branch and opens its pull
+  request.
+- Never the user's own changes (they go through the `commit` skill), and never the other
+  member's work when its writer has a key.
 {{/coder}}
 
 ## 1. Check the key
 
+{{^coder}}
 - `{{committer_signing_key}}` and the private key next to it (the same path without `.pub`)
   must exist. If one is missing, do not commit: report it.
+{{/coder}}
 {{#coder}}
+- The public key of the member who commits and the private key next to it (the same path
+  without `.pub`) must exist:
+{{#committer_signing_key}}
+  - the coder: `{{committer_signing_key}}`;
+{{/committer_signing_key}}
 {{#assistant_signing_key}}
-- As the assistant, the same goes for `{{assistant_signing_key}}` and its private key.
+  - the assistant: `{{assistant_signing_key}}`.
 {{/assistant_signing_key}}
+- If one is missing, do not commit: report it. Never use the other member's key instead.
 {{/coder}}
 
 ## 2. Review the changes
 
 - `git status` and `git diff` (plus `git diff --staged` if files are already staged).
 - `git log --oneline -10` to follow the repository's message style (language, scopes in use).
+{{^coder}}
 - Commit only changes {{committer}} wrote in this session. If other changes are mixed in,
   stage only {{committer}}'s, or ask the user.
+{{/coder}}
 {{#coder}}
-- As the assistant, the same goes for the changes the assistant wrote itself.
+- Commit only the changes this member may commit (see "Who commits"): her own, or the other
+  member's when its writer has no key. Never the user's own changes. If other changes are
+  mixed in, stage only those, or ask the user.
 {{/coder}}
 - If there is nothing to commit, say so and stop.
 
@@ -125,6 +159,7 @@ everything passes), "Edit the message" and "Cancel".
 ## 6. Commit
 
 - Stage the relevant files explicitly (`git add <files>`); avoid a blind `git add -A`.
+{{^coder}}
 - Commit with exactly this command, the message passed through a heredoc:
 
   ```sh
@@ -133,9 +168,35 @@ everything passes), "Edit the message" and "Cancel".
   MESSAGE
   ```
 
+{{/coder}}
 {{#coder}}
+- Commit with exactly the command below for the member who commits and the work's writer,
+  the message passed through a heredoc.
+{{#committer_signing_key}}
+- The coder, for her own work:
+
+  ```sh
+  git -c user.name="{{committer_name}}" -c user.email="{{committer_email}}" -c user.signingkey="{{committer_signing_key}}" -c gpg.format=ssh -c commit.gpgsign=true commit -F - <<'MESSAGE'
+  <message>
+  MESSAGE
+  ```
+
+{{^assistant_signing_key}}
+{{#assistant_name}}
+- The coder, for the assistant's work (the assistant has no key), with the assistant as
+  author:
+
+  ```sh
+  git -c user.name="{{committer_name}}" -c user.email="{{committer_email}}" -c user.signingkey="{{committer_signing_key}}" -c gpg.format=ssh -c commit.gpgsign=true commit --author="{{assistant_name}} <{{assistant_email}}>" -F - <<'MESSAGE'
+  <message>
+  MESSAGE
+  ```
+
+{{/assistant_name}}
+{{/assistant_signing_key}}
+{{/committer_signing_key}}
 {{#assistant_signing_key}}
-  As the assistant, commit with exactly this command instead:
+- The assistant, for its own work:
 
   ```sh
   git -c user.name="{{assistant_name}}" -c user.email="{{assistant_email}}" -c user.signingkey="{{assistant_signing_key}}" -c gpg.format=ssh -c commit.gpgsign=true commit -F - <<'MESSAGE'
@@ -143,19 +204,36 @@ everything passes), "Edit the message" and "Cancel".
   MESSAGE
   ```
 
+{{^committer_signing_key}}
+- The assistant, for the coder's work (the coder has no key), with the coder as author:
+
+  ```sh
+  git -c user.name="{{assistant_name}}" -c user.email="{{assistant_email}}" -c user.signingkey="{{assistant_signing_key}}" -c gpg.format=ssh -c commit.gpgsign=true commit --author="{{committer_name}} <{{committer_email}}>" -F - <<'MESSAGE'
+  <message>
+  MESSAGE
+  ```
+
+{{/committer_signing_key}}
 {{/assistant_signing_key}}
+- Commit only when the permission system allows it. If the commit is refused or signing
+  fails, stop and report it: never fall back to another identity, an unsigned commit or the
+  other member's key.
 {{/coder}}
 - Never use `--no-verify`, `--amend` or `--no-gpg-sign` without an explicit request. If a
   pre-commit hook fails, fix the issue and create a new commit.
+{{^coder}}
 - Check the result: `git log -1 --format='%an <%ae>'` must show
   {{committer_name}} <{{committer_email}}>, and `git cat-file commit HEAD` must hold a
   `gpgsig` header (`%G?` is not enough: it shows `N` for an SSH signature when no
   `gpg.ssh.allowedSignersFile` is configured). If the commit is not signed, stop and report
   it.
+{{/coder}}
 {{#coder}}
-{{#assistant_signing_key}}
-- As the assistant, the author shown must be {{assistant_name}} <{{assistant_email}}>.
-{{/assistant_signing_key}}
+- Check the result: `git log -1 --format='%an <%ae> | %cn <%ce>'` must show the writer as
+  author and the member who commits as committer, and `git cat-file commit HEAD` must hold a
+  `gpgsig` header (`%G?` is not enough: it shows `N` for an SSH signature when no
+  `gpg.ssh.allowedSignersFile` is configured). If the commit is not signed, stop and report
+  it.
 {{/coder}}
 - Show `git log --oneline -1` and the final `git status`. Do not push.
-{{/committer_signing_key}}
+{{/any_committer_key}}

@@ -136,7 +136,7 @@ $PermissionsPath = Join-Path $ClaudeDir '.kirakit-permissions'
 $PlaceholderKeys = @('user', 'they', 'them', 'their', 'language', 'co_author', 'assistant_name', 'assistant_email',
     'assistant_signing_key', 'assistant_github', 'analyst', 'analyst_github', 'coder', 'coder_name', 'coder_email',
     'coder_signing_key', 'coder_github', 'committer', 'committer_name', 'committer_email', 'committer_signing_key',
-    'complete_approved_prs')
+    'complete_approved_prs', 'any_committer_key')
 
 $script:Work = $null
 $script:BackupDir = $null
@@ -636,6 +636,9 @@ function Get-KiraValue($UserProfile) {
         committer_name = if ($coderValue) { $coderName } else { $assistantName }
         committer_email = if ($coderValue) { $coderEmail } else { $assistantEmail }
         committer_signing_key = if ($coderValue) { $coderSigningKey } else { $signingKey }
+        # With a coder, the assistant commits the code she wrote at the user's explicit request
+        # with her own key, whatever the coder's key.
+        any_committer_key = if (($coderValue -and ($coderSigningKey -or $signingKey)) -or (-not $coderValue -and $signingKey)) { 'yes' } else { '' }
         complete_approved_prs = if ($UserProfile['complete_approved_prs'] -eq 'yes') { 'yes' } else { '' }
     }
 }

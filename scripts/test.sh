@@ -493,63 +493,109 @@ check 'coder commits: the lead reviews her pull requests (R17)' contains "$git_r
 check 'coder commits: tasks assigned to her (R17)' contains "$git_rules" 'The tasks she works on are assigned to `cleo-bot`.'
 check 'coder commits: gaps go to the analyst (R20)' contains "$git_rules" 'she asks the analyst in a comment on that issue'
 check 'coder commits: the coder implements the tasks' contains "$git_rules" 'splits them into tasks; the coder implements the tasks.'
-check 'coder commits: skill commits as the coder (R17)' contains "$commit_skill" 'This skill commits as Cleo <cleo@example.com>, signed with'
+check 'coder commits: skill commits as the coder (R17)' contains "$commit_skill" 'The coder commits as Cleo <cleo@example.com>, signed with'
 check 'coder commits: skill uses her key (R17)' contains "$commit_skill" 'git -c user.name="Cleo" -c user.email="cleo@example.com" -c user.signingkey="/keys/cleo.pub"'
 check 'coder commits: skill credits the user (R17)' contains "$commit_skill" 'Co-Authored-By: <user name> <<user email>>'
 check 'coder commits: board moves as her account (R17, #97 R3)' contains "$git_rules" '(`board-status NUMBER STATUS --as cleo-bot`)'
 check 'coder commits: no placeholder' no_placeholder "$tmp/commit-coder"
 
-# --- the lead commits her own code with a coder on the team (#163 R5, R6, R11) -------------
+# --- the coder and the lead commit with a coder on the team (#163 R5, R6, R11, R14–R17) ----
 
-check 'lead commits: only her code at the explicit request (#163 R5)' contains "$commit_skill" 'It commits as the assistant only when the assistant commits code it wrote itself because the'
-check 'lead commits: her identity and key (#163 R5)' contains "$commit_skill" 'The assistant commits as Kira <kira@example.com>, signed with'
-check 'lead commits: her command beside the coder'"'"'s (#163 R5)' sh -c 'grep -qF "git -c user.name=\"Kira\" -c user.email=\"kira@example.com\" -c user.signingkey=\"/keys/kira.pub\" -c gpg.format=ssh -c commit.gpgsign=true commit" "$1" && grep -qF "git -c user.name=\"Cleo\"" "$1"' _ "$commit_skill"
-check 'lead commits: two commands with a lead key (#163 R5)' test "$(grep -c '^ *git -c user.name=' "$commit_skill")" -eq 2
-check 'lead commits: user as co-author for both (#163 R5)' contains "$commit_skill" 'Co-Authored-By: <user name> <<user email>>'
-check 'lead commits: description names her (#163 R5)' contains "$commit_skill" 'or the code the assistant wrote itself at the user'"'"'s explicit request'
+both=$commit_skill
+check 'team commits: each commits as herself (#163 R5)' sh -c 'grep -q "The coder commits as Cleo <cleo@example.com>, signed with" "$1" && grep -q "The assistant commits as Kira <kira@example.com>, signed with" "$1"' _ "$both"
+check 'team commits: both keys, two commands for own work (#163 R5)' sh -c 'test "$(grep -c "^ *git -c user.name=" "$1")" -eq 2 && grep -q "^- The coder, for her own work:$" "$1" && grep -q "^- The assistant, for its own work:$" "$1" && ! grep -q -- "--author=" "$1"' _ "$both"
+check 'team commits: lead command line (#163 R5)' contains "$both" 'git -c user.name="Kira" -c user.email="kira@example.com" -c user.signingkey="/keys/kira.pub" -c gpg.format=ssh -c commit.gpgsign=true commit -F -'
+check 'team commits: lead only at the explicit request (#163 R5)' contains "$both" 'itself because the user explicitly asked it to (`rules/team.md`).'
+check 'team commits: user as co-author (#163 R5)' contains "$both" 'Co-Authored-By: <user name> <<user email>>'
+check 'team commits: never the user'"'"'s changes (#163 R15)' sh -c 'grep -q "Never the user.s own changes (they go through the .commit. skill), and never the other" "$1" && grep -q "member.s work when its writer has a key." "$1"' _ "$both"
+check 'team commits: the other'"'"'s work only without her key (#163 R15)' contains "$both" "The other member's work only when its writer has no signing key, for a task or a change of"
+check 'team commits: the writer opens the pull request (#163 R16)' contains "$both" 'commit does not make the work hers: the writer still pushes the branch and opens its pull'
+check 'team commits: stop on refusal, no fallback (#163 R17)' sh -c 'grep -q "Commit only when the permission system allows it. If the commit is refused or signing" "$1" && grep -q "fails, stop and report it: never fall back to another identity, an unsigned commit or the" "$1" && grep -q "Never use the other member.s key instead." "$1"' _ "$both"
+check 'team commits: writer as author, member as committer (#163 R14)' contains "$both" "must show the writer as"
+
+$shell "$root/scripts/build.sh" -o "$tmp/lead-only-key" --assistant 'Kira <kira@example.com>' \
+	--assistant-signing-key /keys/kira.pub --co-author 'Kira <kira@example.com>' \
+	--coder 'Cleo <cleo@example.com>' >/dev/null
+lead_only=$tmp/lead-only-key/skills/assistant-commit/SKILL.md
+check 'team commits: lead key only, coder hands over (#163 R14, R16)' contains "$lead_only" 'No signing key is configured for the coder, so the coder never commits. She leaves her'
+check 'team commits: lead key only, her commands only (#163 R14)' sh -c 'test "$(grep -c "^ *git -c user.name=" "$1")" -eq 2 && test "$(grep -c "^ *git -c user.name=\"Kira\" -c user.email=\"kira@example.com\" -c user.signingkey=\"/keys/kira.pub\"" "$1")" -eq 2' _ "$lead_only"
+check 'team commits: lead commits the coder'"'"'s work as author (#163 R14)' sh -c 'grep -q "^- The assistant, for the coder.s work (the coder has no key), with the coder as author:$" "$1" && grep -qF "commit --author=\"Cleo <cleo@example.com>\" -F -" "$1"' _ "$lead_only"
+check 'team commits: lead key only, no placeholder' no_placeholder "$tmp/lead-only-key"
+
+$shell "$root/scripts/build.sh" -o "$tmp/coder-only-key" --assistant 'Kira <kira@example.com>' \
+	--co-author 'Kira <kira@example.com>' --coder 'Cleo <cleo@example.com>' \
+	--coder-signing-key /keys/cleo.pub >/dev/null
+coder_only=$tmp/coder-only-key/skills/assistant-commit/SKILL.md
+check 'team commits: coder key only, lead hands over (#163 R14, R16)' contains "$coder_only" 'No signing key is configured for the assistant, so the assistant never commits. It leaves'
+check 'team commits: coder key only, her commands only (#163 R14)' sh -c 'test "$(grep -c "^ *git -c user.name=" "$1")" -eq 2 && test "$(grep -c "^ *git -c user.name=\"Cleo\" -c user.email=\"cleo@example.com\" -c user.signingkey=\"/keys/cleo.pub\"" "$1")" -eq 2' _ "$coder_only"
+check 'team commits: coder commits the lead'"'"'s work as author (#163 R14)' sh -c 'grep -q "^- The coder, for the assistant.s work (the assistant has no key), with the assistant as$" "$1" && grep -qF "commit --author=\"Kira <kira@example.com>\" -F -" "$1"' _ "$coder_only"
+check 'team commits: coder key only, no placeholder' no_placeholder "$tmp/coder-only-key"
+
+$shell "$root/scripts/build.sh" -o "$tmp/no-keys" --assistant 'Kira <kira@example.com>' \
+	--co-author 'Kira <kira@example.com>' --coder 'Cleo <cleo@example.com>' >/dev/null
+no_keys=$tmp/no-keys/skills/assistant-commit/SKILL.md
+check 'team commits: neither key, nobody commits (#163 R6)' sh -c 'grep -q "No signing key is configured for the coder nor for the assistant, so neither commits through" "$1" && grep -q "skill under the user.s identity, or setting a key with the installer" "$1"' _ "$no_keys"
+check 'team commits: neither key, no steps (#163 R6)' sh -c '! grep -q "^## " "$1" && ! grep -q "git -c user.name" "$1"' _ "$no_keys"
+
+# R5, R14: run the skill's commands in scratch repositories with throwaway keys, isolated from
+# the user's git configuration.
 if command -v ssh-keygen >/dev/null 2>&1; then
-	keys=$tmp/lead-keys
+	keys=$tmp/team-keys
 	mkdir -p "$keys"
 	ssh-keygen -q -t ed25519 -N '' -C test -f "$keys/kira"
 	ssh-keygen -q -t ed25519 -N '' -C test -f "$keys/cleo"
-	$shell "$root/scripts/build.sh" -o "$tmp/lead-ac" --co-author 'Kira <kira@example.com>' \
-		--assistant 'Kira <kira@example.com>' --assistant-signing-key "$keys/kira.pub" \
-		--coder 'Cleo <cleo@example.com>' --coder-signing-key "$keys/cleo.pub" >/dev/null
-	command=$(sed -n 's/^ *\(git -c user.name="Kira".*\)$/\1/p' "$tmp/lead-ac/skills/assistant-commit/SKILL.md")
+	printf 'kira@example.com namespaces="git" %s\ncleo@example.com namespaces="git" %s\n' \
+		"$(cut -d' ' -f1,2 "$keys/kira.pub")" "$(cut -d' ' -f1,2 "$keys/cleo.pub")" >"$keys/allowed"
 	nl='
 '
-	repo=$tmp/lead-repo
-	git init -q "$repo"
-	# The variables are passed per command: an export in a second subshell trips SC2031.
-	(
-		isolated='env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1'
-		cd "$repo"
-		$isolated git config user.name Alex
-		$isolated git config user.email alex@example.com
-		printf 'a\n' >file
-		$isolated git add file
-		eval "$isolated $command${nl}feat: add a file${nl}${nl}Co-Authored-By: Alex <alex@example.com>${nl}MESSAGE"
-	) >/dev/null 2>&1 || true
-	printf 'kira@example.com namespaces="git" %s\n' "$(cut -d' ' -f1,2 "$keys/kira.pub")" >"$keys/allowed"
-	check 'lead commits: authored by the lead (#163 R5)' test \
-		"$(GIT_CONFIG_GLOBAL=/dev/null git -C "$repo" log -1 --format='%an <%ae>|%cn <%ce>')" = \
-		'Kira <kira@example.com>|Kira <kira@example.com>'
-	check 'lead commits: signed with her key (#163 R5)' env GIT_CONFIG_GLOBAL=/dev/null \
-		git -C "$repo" -c gpg.ssh.allowedSignersFile="$keys/allowed" verify-commit HEAD
-	check "lead commits: the user's trailer (#163 R5)" test \
-		"$(GIT_CONFIG_GLOBAL=/dev/null git -C "$repo" log -1 --format=%B | sed '/^$/d' | tail -n 1)" = \
-		'Co-Authored-By: Alex <alex@example.com>'
+	# team_commit NAME SKILL PATTERN: run the command of SKILL matching PATTERN in a new
+	# repository NAME. The variables are passed per command: an export in a second subshell
+	# trips SC2031.
+	team_commit() {
+		command=$(grep -m 1 -F -- "$3" "$2" | sed 's/^ *//')
+		git init -q "$tmp/$1"
+		(
+			isolated='env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1'
+			cd "$tmp/$1"
+			$isolated git config user.name Alex
+			$isolated git config user.email alex@example.com
+			printf 'a\n' >file
+			$isolated git add file
+			eval "$isolated $command${nl}feat: add a file${nl}${nl}Co-Authored-By: Alex <alex@example.com>${nl}MESSAGE"
+		) >/dev/null 2>&1 || true
+	}
+	# team_result NAME: author|committer|last line of the message of NAME's commit.
+	team_result() {
+		GIT_CONFIG_GLOBAL=/dev/null git -C "$tmp/$1" log -1 --format='%an <%ae>|%cn <%ce>' &&
+			GIT_CONFIG_GLOBAL=/dev/null git -C "$tmp/$1" log -1 --format=%B | sed '/^$/d' | tail -n 1
+	}
+	$shell "$root/scripts/build.sh" -o "$tmp/team-both" --co-author 'Kira <kira@example.com>' \
+		--assistant 'Kira <kira@example.com>' --assistant-signing-key "$keys/kira.pub" \
+		--coder 'Cleo <cleo@example.com>' --coder-signing-key "$keys/cleo.pub" >/dev/null
+	$shell "$root/scripts/build.sh" -o "$tmp/team-lead" --co-author 'Kira <kira@example.com>' \
+		--assistant 'Kira <kira@example.com>' --assistant-signing-key "$keys/kira.pub" \
+		--coder 'Cleo <cleo@example.com>' >/dev/null
+	$shell "$root/scripts/build.sh" -o "$tmp/team-coder" --co-author 'Kira <kira@example.com>' \
+		--assistant 'Kira <kira@example.com>' --coder 'Cleo <cleo@example.com>' \
+		--coder-signing-key "$keys/cleo.pub" >/dev/null
+	team_commit repo-lead-own "$tmp/team-both/skills/assistant-commit/SKILL.md" 'git -c user.name="Kira"'
+	team_commit repo-lead-for-coder "$tmp/team-lead/skills/assistant-commit/SKILL.md" '--author="Cleo'
+	team_commit repo-coder-for-lead "$tmp/team-coder/skills/assistant-commit/SKILL.md" '--author="Kira'
+	check 'team commits: lead'"'"'s own work (#163 R5)' test "$(team_result repo-lead-own)" = \
+		"Kira <kira@example.com>|Kira <kira@example.com>${nl}Co-Authored-By: Alex <alex@example.com>"
+	check 'team commits: lead signs her own work (#163 R5)' env GIT_CONFIG_GLOBAL=/dev/null \
+		git -C "$tmp/repo-lead-own" -c gpg.ssh.allowedSignersFile="$keys/allowed" verify-commit HEAD
+	check 'team commits: lead commits the coder'"'"'s work, coder as author (#163 R14)' test \
+		"$(team_result repo-lead-for-coder)" = \
+		"Cleo <cleo@example.com>|Kira <kira@example.com>${nl}Co-Authored-By: Alex <alex@example.com>"
+	check 'team commits: signed by the lead (#163 R14)' sh -c 'env GIT_CONFIG_GLOBAL=/dev/null git -C "$1" -c gpg.ssh.allowedSignersFile="$2" verify-commit HEAD 2>&1 | grep -q "Good \"git\" signature for kira@example.com"' _ "$tmp/repo-lead-for-coder" "$keys/allowed"
+	check 'team commits: coder commits the lead'"'"'s work, lead as author (#163 R14)' test \
+		"$(team_result repo-coder-for-lead)" = \
+		"Kira <kira@example.com>|Cleo <cleo@example.com>${nl}Co-Authored-By: Alex <alex@example.com>"
+	check 'team commits: signed by the coder (#163 R14)' sh -c 'env GIT_CONFIG_GLOBAL=/dev/null git -C "$1" -c gpg.ssh.allowedSignersFile="$2" verify-commit HEAD 2>&1 | grep -q "Good \"git\" signature for cleo@example.com"' _ "$tmp/repo-coder-for-lead" "$keys/allowed"
 else
-	printf 'skip  lead commits: ssh-keygen not found\n'
+	printf 'skip  team commits: ssh-keygen not found\n'
 fi
-$shell "$root/scripts/build.sh" -o "$tmp/lead-no-key" --assistant 'Kira <kira@example.com>' \
-	--co-author 'Kira <kira@example.com>' --coder 'Cleo <cleo@example.com>' \
-	--coder-signing-key /keys/cleo.pub >/dev/null
-lead_no_key=$tmp/lead-no-key/skills/assistant-commit/SKILL.md
-check 'lead commits: no key, no commit (#163 R6)' contains "$lead_no_key" 'assistant commits its own work, do not commit: leave its changes uncommitted, say so, and'
-check 'lead commits: no key, the commit skill proposed (#163 R6)' contains "$lead_no_key" 'suggest the `commit` skill under the user'"'"'s identity, or setting a key with the installer'
-check 'lead commits: no key, only the coder'"'"'s command (#163 R6)' sh -c 'test "$(grep -c "^ *git -c user.name=" "$1")" -eq 1 && grep -q "^ *git -c user.name=\"Cleo\"" "$1"' _ "$lead_no_key"
-check 'lead commits: no placeholder' no_placeholder "$tmp/lead-no-key"
 # --- the members' roles, through a collaborator role or an organization team (#39) ----------
 
 check 'roles: the assistant has Write, as a collaborator or a team (#39 R6)' contains "$git_rules" 'The assistant must have Write on the'
@@ -570,12 +616,12 @@ $shell "$root/scripts/build.sh" -o "$tmp/commit-coder-solo" --coder 'Cleo <cleo@
 	--coder-github cleo-bot >/dev/null
 check 'coder commits: gaps go to the user without an analyst (R20)' contains "$tmp/commit-coder-solo/rules/git.md" 'she asks the user in a comment on that issue'
 check 'coder commits: the user reviews without a lead account' contains "$tmp/commit-coder-solo/rules/git.md" '--assignee cleo-bot --reviewer <the user'"'"'s login>'
-check 'coder commits: no key, no commit' contains "$tmp/commit-coder-solo/skills/assistant-commit/SKILL.md" '(`--coder-signing-key`).'
+check 'coder commits: no key, no commit' contains "$tmp/commit-coder-solo/skills/assistant-commit/SKILL.md" 'or setting a key with the installer (`--coder-signing-key`,'
 check 'coder commits: no key said in the rules' contains "$tmp/commit-coder-solo/rules/git.md" 'No signing key is configured for the coder'
 $shell "$root/scripts/build.sh" -o "$tmp/commit-assistant" --analyst --assistant 'Kira <kira@example.com>' \
 	--assistant-signing-key /keys/kira.pub --assistant-github kira-bot --co-author 'Kira <kira@example.com>' >/dev/null
 check 'no coder: the assistant commits as before (R24)' contains "$tmp/commit-assistant/skills/assistant-commit/SKILL.md" 'This skill commits as Kira <kira@example.com>, signed with'
-check 'no coder: no lead exception in the skill (#163 R11)' sh -c '! grep -q "commits as the assistant only" "$1" && test "$(grep -c "^ *git -c user.name=" "$1")" -eq 1' _ "$tmp/commit-assistant/skills/assistant-commit/SKILL.md"
+check 'no coder: no lead exception in the skill (#163 R11)' sh -c '! grep -q "Who commits" "$1" && ! grep -q -- "--author" "$1" && test "$(grep -c "^ *git -c user.name=" "$1")" -eq 1' _ "$tmp/commit-assistant/skills/assistant-commit/SKILL.md"
 check 'no coder: skill title as before (R24)' grep -qx '# Commit as the assistant' "$tmp/commit-assistant/skills/assistant-commit/SKILL.md"
 check 'no coder: rules as before (R24)' contains "$tmp/commit-assistant/rules/git.md" 'the code it wrote with the `assistant-commit` skill, under its own identity.'
 check 'no coder: no coder text (R24)' sh -c '! grep -qi "coder" "$1" "$2" "$3"' _ "$tmp/commit-assistant/rules/git.md" \
