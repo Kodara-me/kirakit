@@ -520,14 +520,15 @@ if command -v ssh-keygen >/dev/null 2>&1; then
 '
 	repo=$tmp/lead-repo
 	git init -q "$repo"
+	# The variables are passed per command: an export in a second subshell trips SC2031.
 	(
-		export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+		isolated='env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1'
 		cd "$repo"
-		git config user.name Alex
-		git config user.email alex@example.com
+		$isolated git config user.name Alex
+		$isolated git config user.email alex@example.com
 		printf 'a\n' >file
-		git add file
-		eval "$command${nl}feat: add a file${nl}${nl}Co-Authored-By: Alex <alex@example.com>${nl}MESSAGE"
+		$isolated git add file
+		eval "$isolated $command${nl}feat: add a file${nl}${nl}Co-Authored-By: Alex <alex@example.com>${nl}MESSAGE"
 	) >/dev/null 2>&1 || true
 	printf 'kira@example.com namespaces="git" %s\n' "$(cut -d' ' -f1,2 "$keys/kira.pub")" >"$keys/allowed"
 	check 'lead commits: authored by the lead (#163 R5)' test \
