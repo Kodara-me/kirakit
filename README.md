@@ -663,6 +663,8 @@ when a member invokes it herself, it runs on her model.
 | `spec` | Turns an idea into a specification and its tasks | opus | inline |
 | `pull-request` | Writes and opens the pull request of a task | sonnet | inline |
 | `review-pr` | Reviews a pull request of the coder and returns a verdict | opus | forked |
+| `iris` (skill) | Lets you talk to Iris directly (`/iris`) | opus | forked |
+| `cleo` (skill) | Lets you talk to Cleo directly (`/cleo`) | sonnet | forked |
 
 The lead's and the analyst's own sessions (`assistant`, `analyst`) run on your model, from
 your Claude Code settings: kirakit does not pin it. `board-status` takes the account that

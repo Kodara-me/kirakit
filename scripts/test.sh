@@ -423,6 +423,8 @@ check 'coder: signing key saved (R23)' profile_has "coder_signing_key=$tmp/coder
 check 'coder: GitHub login saved (R23)' profile_has 'coder_github=cleo-bot'
 check 'coder: passed to the build (R23)' contains "$claude/agents/analyst.md" 'For Cleo <cleo@example.com>, cleo-bot.'
 check 'coder: in the summary' grep -q 'coder Cleo <cleo@example.com>' "$tmp/coder.log"
+check 'coder: /cleo installed (#120 R10)' contains "$claude/skills/cleo/SKILL.md" 'agent: cleo'
+check 'coder: /cleo recorded (#120 R10)' grep -qxF "$claude/skills/cleo" "$claude/.kirakit-manifest"
 CLAUDE_CONFIG_DIR=$claude $shell "$optional/get-kira.sh" --copy </dev/null >"$tmp/coder-rerun.log"
 check 'coder: reloaded on the next run (R23)' contains "$claude/agents/analyst.md" 'For Cleo <cleo@example.com>, cleo-bot.'
 check 'coder: rerun asks nothing (R23)' sh -c '! grep -q "no terminal to ask for" "$1"' _ "$tmp/coder-rerun.log"
@@ -717,6 +719,44 @@ check 'lead rules: no placeholder' sh -c '! grep -q "{{" "$1"' _ "$tmp/iris-buil
 check 'lead rules: not built without an analyst (#79 R8)' test ! -e "$tmp/iris-none/rules/team.md"
 check 'lead rules: git rules point to them' contains "$tmp/iris-build/rules/git.md" 'follows `rules/team.md`'
 
+# --- a command per team member (#120 R1 to R5, R8, R9) -------------------------------------
+
+commands=$tmp/commands
+$shell "$root/scripts/build.sh" -o "$commands" --name Alex --gender female --analyst \
+	--coder 'Cleo <cleo@example.com>' >/dev/null
+for member in iris cleo; do
+	command=$commands/skills/$member/SKILL.md
+	model=$(sed -n 's/^model: //p' "$commands/agents/$member.md")
+	check "commands: /$member built (#120 R1)" test -f "$command"
+	awk 'NR == 1 || !done { print } NR > 1 && $0 == "---" { done = 1 }' "$command" >"$tmp/$member-front"
+	check "commands: /$member front matter (#120 R1, R4, R5)" same_lines "$tmp/$member-front" \
+		--- "name: $member" "description: $(sed -n 's/^description: //p' "$command")" "model: $model" \
+		'context: fork' "agent: $member" 'disable-model-invocation: true' ---
+	check "commands: /$member described for the user (#120 R1)" grep -q '^description: Talk to [A-Z][a-z]* directly' "$command"
+	check "commands: /$member passes the request (#120 R4)" sh -c 'grep -qx "\$ARGUMENTS" "$1" && grep -qF "addresses you directly with the \`/$2\` command" "$1"' _ "$command" "$member"
+	check "commands: /$member is one exchange ending with her answer (#120 R4)" sh -c 'grep -qF "Handle it as one exchange, in your own persona and under your own rules, and end with your" "$1" && grep -qF "answer to the user, written for the user, your questions included." "$1"' _ "$command"
+	check "commands: /$member asks in one line without a request (#120 R8)" contains "$command" 'When the request above is empty, answer in one line asking what the user wants from you.'
+done
+check 'commands: /iris on her agent'"'"'s model (#120 R4)' grep -qx 'model: opus' "$commands/skills/iris/SKILL.md"
+check 'commands: /cleo on her agent'"'"'s model (#120 R4)' grep -qx 'model: sonnet' "$commands/skills/cleo/SKILL.md"
+check 'commands: none for the lead (#120 R3)' sh -c 'test "$(grep -l "^agent: " "$1"/skills/*/SKILL.md | wc -l)" = 2 && test ! -e "$1/skills/kira" -a ! -e "$1/skills/lead" -a ! -e "$1/skills/assistant"' _ "$commands"
+$shell "$root/scripts/build.sh" -o "$commands" --name Alex --gender female >/dev/null
+check 'commands: /iris removed without an analyst (#120 R2)' test ! -e "$commands/skills/iris"
+check 'commands: /cleo removed without a coder (#120 R2)' test ! -e "$commands/skills/cleo"
+check 'commands: none without an analyst (#120 R2)' test ! -e "$tmp/iris-none/skills/iris"
+check 'commands: none without a coder (#120 R2)' test ! -e "$tmp/cleo-none/skills/cleo" -a -e "$tmp/cleo-none/skills/iris"
+
+# A new member gets her command, and a member named like a skill stops the build.
+printf 'first\n' >"$blocks/claude/skills/blocks/SKILL.md"
+mkdir -p "$blocks/team"
+printf '%s\n' --- 'name: Nova' 'description: Nova, a new member' 'delegate: Use Nova.' 'model: haiku' --- '' 'Body.' >"$blocks/team/nova.md"
+build_blocks "$tmp/commands-new"
+check 'commands: a new member gets hers (#120 R2)' sh -c 'grep -qx "agent: nova" "$1" && grep -qx "model: haiku" "$1" && grep -qx "name: nova" "$1"' _ "$tmp/commands-new/skills/nova/SKILL.md"
+cp "$blocks/team/nova.md" "$blocks/team/blocks.md"
+check 'commands: a clash with a skill fails, naming the member (#120 R9)' sh -c '! $1 "$2/scripts/build.sh" -o "$3" 2>"$4" >/dev/null && grep -q "team member blocks has the same name as the skill" "$4"' _ "$shell" "$blocks" "$tmp/x" "$tmp/x.err"
+rm -r "$blocks/team"
+printf '{{#nothing}}\n{{/nothing}}\n' >"$blocks/claude/skills/blocks/SKILL.md"
+
 mkdir -p "$blocks/team"
 printf '%s\n' --- 'name: Bad' 'description: no delegate' --- '' 'Body.' >"$blocks/team/bad.md"
 check 'iris build: rejects a member without delegate' sh -c '! $1 "$2/scripts/build.sh" -o "$3" >/dev/null 2>&1' _ "$shell" "$blocks" "$tmp/x"
@@ -731,14 +771,20 @@ for mode in copy link; do
 	kira_profile $flag --analyst-github iris-bot >/dev/null
 	check "iris $mode: style installed" contains "$claude/output-styles/iris.md" 'You are Iris'
 	check "iris $mode: agent installed" contains "$claude/agents/iris.md" 'name: iris'
+	check "iris $mode: command installed (#120 R10)" contains "$claude/skills/iris/SKILL.md" 'agent: iris'
+	check "iris $mode: command recorded (#120 R10)" grep -qxF "$claude/skills/iris" "$claude/.kirakit-manifest"
 	check "iris $mode: lead rules installed" contains "$claude/rules/team.md" '# Team rules'
 	check "iris $mode: rerun changes nothing" unchanged kira $flag
 	kira $flag --no-analyst >/dev/null
 	check "iris $mode: style removed without an analyst" sh -c '! test -e "$1" && ! test -L "$1"' _ "$claude/output-styles/iris.md"
 	check "iris $mode: agent removed without an analyst" sh -c '! test -e "$1" && ! test -L "$1"' _ "$claude/agents/iris.md"
+	check "iris $mode: command removed without an analyst (#120 R2, R10)" sh -c '! test -e "$1" && ! test -L "$1"' _ "$claude/skills/iris"
+	check "iris $mode: command no longer recorded (#120 R10)" sh -c '! grep -qxF "$1" "$2"' _ "$claude/skills/iris" "$claude/.kirakit-manifest"
 	check "iris $mode: lead rules removed without an analyst (#79 R8)" sh -c '! test -e "$1" && ! test -L "$1"' _ "$claude/rules/team.md"
 	kira $flag --analyst >/dev/null
+	check "iris $mode: command back on reinstall (#120 R10)" contains "$claude/skills/iris/SKILL.md" 'agent: iris'
 	kira --uninstall >/dev/null
+	check "iris $mode: uninstall removes the command (#120 R10)" sh -c '! test -e "$1" && ! test -L "$1"' _ "$claude/skills/iris"
 	check "iris $mode: uninstall removes the style" sh -c '! test -e "$1" && ! test -L "$1"' _ "$claude/output-styles/iris.md"
 	check "iris $mode: uninstall removes the agent" sh -c '! test -e "$1" && ! test -L "$1"' _ "$claude/agents/iris.md"
 done
@@ -927,7 +973,7 @@ expected_model() {
 # forked NAME: whether the skill runs in a forked context.
 forked() {
 	case $1 in
-	next-task | board-status | test | pull | push | diffv | review-pr) return 0 ;;
+	next-task | board-status | test | pull | push | diffv | review-pr | iris | cleo) return 0 ;;
 	*) return 1 ;;
 	esac
 }

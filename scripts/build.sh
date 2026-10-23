@@ -5,7 +5,8 @@
 #   DIR/agents/<agent>.md            from claude/agents/<agent>.md
 #   DIR/rules/<rules>.md             from claude/rules/<rules>.md
 #   DIR/CLAUDE.md                    from claude/CLAUDE.md
-#   DIR/output-styles/<member>.md    and DIR/agents/<member>.md from team/<member>.md
+#   DIR/output-styles/<member>.md, DIR/agents/<member>.md and DIR/skills/<member>/SKILL.md
+#                                    from team/<member>.md
 #   DIR/konsole/<scheme>.colorscheme from launchers/konsole/<scheme>.colorscheme
 #   DIR/bin/<launcher>               from launchers/<launcher>, executable
 #
@@ -401,21 +402,28 @@ front_matter() {
 }
 
 # build_member FILE: render a team member's persona (team/NAME.md), written once, into both an
-# output style and an agent with the same body. Its front matter holds the style's name and
-# description, "delegate", the agent's description: when to hand work to this member, and
-# "model", the agent's model (haiku, sonnet or opus), which every member declares.
+# output style and an agent with the same body, and a command (skills/NAME/SKILL.md) that lets
+# the user talk to the member directly: a skill forked into her agent, which only the user can
+# run. Its front matter holds the style's name and description, "delegate", the agent's
+# description: when to hand work to this member, and "model", the agent's model (haiku, sonnet
+# or opus), which every member declares.
 build_member() {
 	member=$(basename "$1" .md)
+	# The member's command is named after her: it must not replace a skill of claude/skills/.
+	[ ! -d "$skills_dir/$member" ] ||
+		die "$1: the command of team member $member has the same name as the skill claude/skills/$member"
 	rendered=$out_dir/.$member.member.tmp
 	body=$out_dir/.$member.body.tmp
 	style=$out_dir/output-styles/$member.md
 	agent=$out_dir/agents/$member.md
+	command=$out_dir/skills/$member
 	render "$1" >"$rendered" || {
 		rm -f "$rendered"
 		exit 1
 	}
 	if blank "$rendered"; then
 		rm -f "$rendered" "$style" "$agent"
+		rm -rf "$command"
 		return
 	fi
 	check "$rendered" "$1" || {
@@ -448,9 +456,30 @@ build_member() {
 		cat "$body"
 	} >"$agent.tmp"
 	rm -f "$rendered" "$body"
+	# $ARGUMENTS is filled by Claude Code with what the user typed after the command.
+	rm -rf "$command.tmp"
+	mkdir -p "$command.tmp"
+	# shellcheck disable=SC2016
+	{
+		printf '%s\n' --- "name: $member" \
+			"description: Talk to $title directly: she handles your request in her own persona and answers you." \
+			"model: $model" 'context: fork' "agent: $member" 'disable-model-invocation: true' --- ''
+		printf '%s\n' \
+			"The user addresses you directly with the \`/$member\` command, from the lead's conversation." \
+			'Their request:' \
+			'' \
+			'$ARGUMENTS' \
+			'' \
+			'Handle it as one exchange, in your own persona and under your own rules, and end with your' \
+			'answer to the user, written for the user, your questions included.' \
+			'' \
+			'When the request above is empty, answer in one line asking what the user wants from you.'
+	} >"$command.tmp/SKILL.md"
 	mv -f "$style.tmp" "$style"
 	mv -f "$agent.tmp" "$agent"
-	printf '%s\n%s\n' "$style" "$agent"
+	rm -rf "$command"
+	mv "$command.tmp" "$command"
+	printf '%s\n%s\n%s\n' "$style" "$agent" "$command"
 }
 
 # Skills are copied whole, with their Markdown files rendered.

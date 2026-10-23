@@ -1004,6 +1004,12 @@ install_claude() {
 		skill=$(basename "$dir")
 		install_built "skills/$skill" "$CLAUDE_DIR/skills/$skill"
 	done
+	# Each team member's command, a skill built from team/NAME.md.
+	for file in "$src"/team/*.md; do
+		[ -f "$file" ] || continue
+		member=$(basename "$file" .md)
+		install_built "skills/$member" "$CLAUDE_DIR/skills/$member"
+	done
 	set_output_style
 	set_attribution
 	sync_permissions
