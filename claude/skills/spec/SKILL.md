@@ -232,14 +232,15 @@ confirmation:
 {{/assistant_github}}
 {{/analyst_github}}
 
-Once the tasks are published, post a summary comment on the parent that mentions the user
-(`@<login>`): the tasks (number, title, requirements covered), the decisions made alone
-(number and one line each) and the development order. Then:
+Once the tasks are published, post a summary comment on the parent: the tasks (number,
+title, requirements covered), the decisions made alone (number and one line each) and the
+development order. Then:
 
-- With no questions for the user, end with "Ready for you: move it to Ready when you want
-  the team to start.", and ask nothing.
-- With questions for the user, list them with their options and your recommendation, and
-  end with a short question, as in step 2.
+- With no questions for the user, post it without mentioning the user and ask nothing:
+  moving it to Ready is the user's choice of timing, and the board already shows it in
+  Specified. End with "Ready for you: move it to Ready when you want the team to start."
+- With questions for the user, mention the user (`@<login>`), list them with their options
+  and your recommendation, and end with a short question, as in step 2.
 
 End with the parent's URL, the list of sub-issues (number and title) if any, "Questions for
 the user: none." or the list of questions, and the next phase to write if the specification

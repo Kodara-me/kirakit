@@ -124,7 +124,7 @@ check 'spec: no question without questions (#89 R10)' contains "$spec_skill" 'Re
 check 'spec: questions still end with a question (#89 R2)' contains "$spec_skill" 'end with a short question, as in step 2'
 check 'spec: closing lines on questions (#89 R3)' contains "$spec_skill" 'Questions for'
 check 'spec: no assignee without an assistant account (#51 R8)' sh -c '! grep -q -- "--assignee" "$1"' _ "$spec_skill"
-check 'spec: summary comment (#51 R9)' contains "$spec_skill" 'post a summary comment on the parent that mentions the user'
+check 'spec: summary comment (#51 R9)' contains "$spec_skill" 'Once the tasks are published, post a summary comment on the parent:'
 check 'spec: each task lands on its own (#126 R1)' sh -c 'grep -q "Each task lands on its own: once merged alone on" "$1" && ! grep -q "A task is small enough for one pull request" "$1"' _ "$spec_skill"
 check 'spec: changes held by a check stay together (#126 R2)' contains "$spec_skill" "Changes that only pass the repository's checks together"
 check 'spec: no split by platform, installer, file or layer (#126 R3)' sh -c 'grep -q "The tests and the documentation of a behavior stay in the task" "$1" && grep -q "Never split by platform, by installer, by file or" "$1"' _ "$spec_skill"
@@ -655,7 +655,7 @@ check 'roles: the analyst has Triage or Write (#39 R6)' contains "$rules" 'Her r
 check 'roles: no analyst role without her account (#39 R6)' sh -c '! grep -q "Triage" "$1"' _ "$tmp/analyst-no-login/rules/git.md"
 check 'team rules: no section without an analyst' sh -c '! grep -q "The team\|Iris" "$1"' _ "$tmp/iris-none/rules/git.md"
 
-# --- mentioning the user only when he must answer or act (#137 R1–R7, R9) ----------------
+# --- mentioning the user only when he must answer or act (#137 R1–R9) -------------------
 
 # bullet FILE START: the bullet of FILE whose first line contains START, on one line.
 bullet() {
@@ -729,6 +729,12 @@ check 'mention: the review request notifies the user, in the lead rules (R2)' co
 check 'mention: a "For the user" question makes the review mention him (R1, R2)' contains "$team" 'user" item is a question for him, and then ends with a short question'
 check 'mention: a security-sensitive change alone calls for no mention (R2)' contains "$team" 'security-sensitive change alone calls for no mention'
 check 'mention: README says when the user is mentioned (R9)' sh -c 'grep -q "^You are mentioned on GitHub only when you must answer or act" "$1" && grep -q "^- \*\*Not mentioned\*\*: a request for your review" "$1" && grep -q "^- \*\*Between members\*\*" "$1"' _ "$root/README.md"
+check 'mention: spec summary mentions the user only with questions (R8)' sh -c '! grep -q "summary comment on the parent that mentions the user" "$1"' _ "$tmp/mention-full/skills/spec/SKILL.md"
+check 'mention: spec summary without questions is not a mention (R4, R8)' bullet_has "$tmp/mention-full/skills/spec/SKILL.md" 'With no questions for the user, post it' \
+	'without mentioning the user' '"Ready for you: move it to Ready when you want the team to start."' 'and ask nothing'
+check 'mention: spec summary with questions mentions the user (R4, R8)' bullet_has "$tmp/mention-full/skills/spec/SKILL.md" 'With questions for the user, mention the user' \
+	'(`@<login>`)' 'end with a short question, as in step 2'
+check 'mention: spec questions comment unchanged (R8)' contains "$tmp/mention-full/skills/spec/SKILL.md" '--body-file <file>`) that mentions the user (`@<login>`, from `gh api user --jq .login`):'
 
 # --- models of the agents and skills (#97 R1–R4, R6–R9) ----------------------------------
 
