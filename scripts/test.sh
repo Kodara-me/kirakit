@@ -739,7 +739,7 @@ for member in iris cleo; do
 done
 check 'commands: /iris on her agent'"'"'s model (#120 R4)' grep -qx 'model: opus' "$commands/skills/iris/SKILL.md"
 check 'commands: /cleo on her agent'"'"'s model (#120 R4)' grep -qx 'model: sonnet' "$commands/skills/cleo/SKILL.md"
-check 'commands: none for the lead (#120 R3)' sh -c 'test "$(grep -l "^agent: " "$1"/skills/*/SKILL.md | wc -l)" = 2 && test ! -e "$1/skills/kira" -a ! -e "$1/skills/lead" -a ! -e "$1/skills/assistant"' _ "$commands"
+check 'commands: none for the lead (#120 R3)' sh -c 'test "$(grep -l "^agent: " "$1"/skills/*/SKILL.md | grep -c .)" = 2 && test ! -e "$1/skills/kira" -a ! -e "$1/skills/lead" -a ! -e "$1/skills/assistant"' _ "$commands"
 $shell "$root/scripts/build.sh" -o "$commands" --name Alex --gender female >/dev/null
 check 'commands: /iris removed without an analyst (#120 R2)' test ! -e "$commands/skills/iris"
 check 'commands: /cleo removed without a coder (#120 R2)' test ! -e "$commands/skills/cleo"
