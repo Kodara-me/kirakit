@@ -459,7 +459,7 @@ for dir in "$tmp/lead-coder" "$tmp/lead-both"; do
 	check "$what: the lead reviews first (R18)" contains "$team" 'the assistant posts that verdict on GitHub as its own'
 	check "$what: the user reviews after the lead (R18)" contains "$team" 'on approval, it requests the user'"'"'s review'
 	check "$what: changes go back to the coder (R19)" contains "$team" 'it hands the pull request back to'
-	check "$what: report in a few lines (R21)" contains "$team" 'the tasks it closes, its own review result, the review'"'"'s "For the user" items, and any'
+	check "$what: report in a few lines (R21)" contains "$team" 'the tasks it closes, its own review result, the review'"'"'s "For the user" items, the model'
 	check "$what: merge on the user's own approval (R22)" contains "$team" 'only when the user'"'"'s own latest review is an approval'
 	check "$what: not on reviewDecision (R22)" contains "$team" 'never on `reviewDecision`'
 	check "$what: focused conversation kept" contains "$team" '## Keeping the conversation focused'
@@ -566,7 +566,7 @@ check 'cleo build: style named Cleo (R14)' grep -qx 'name: Cleo' "$cleo_style"
 check 'cleo build: agent named cleo (R14)' grep -qx 'name: cleo' "$cleo_agent"
 check 'cleo build: agent says when to delegate (R14)' grep -q '^description: Use Cleo to implement a task' "$cleo_agent"
 check 'cleo build: agent says what it returns (R14)' grep -q "^description: .*returns the pull request's URL, the tasks it closes and her questions" "$cleo_agent"
-check 'cleo build: agent on Opus (#97 D7)' grep -qx 'model: opus' "$cleo_agent"
+check 'cleo build: agent on Sonnet (#131 R1)' grep -qx 'model: sonnet' "$cleo_agent"
 check 'cleo build: style without a model (R14)' sh -c '! grep -q "^model:" "$1"' _ "$cleo_style"
 check 'cleo build: style keeps its own description (R14)' grep -q '^description: Cleo, the team' "$cleo_style"
 check 'cleo build: no delegate key left' sh -c '! grep -q "^delegate:" "$1" "$2"' _ "$cleo_style" "$cleo_agent"
@@ -661,8 +661,8 @@ check 'team rules: no section without an analyst' sh -c '! grep -q "The team\|Ir
 # that a new agent or skill fails until it is listed here and in the README.
 expected_model() {
 	case $1 in
-	iris | cleo | idea | spec | review-pr) echo opus ;;
-	next-task | diffv | pull-request) echo sonnet ;;
+	iris | idea | spec | review-pr) echo opus ;;
+	cleo | next-task | diffv | pull-request) echo sonnet ;;
 	board-status | test | pull | push | commit | assistant-commit) echo haiku ;;
 	esac
 }
@@ -702,10 +702,10 @@ done
 check 'models: both members built (#97 R7)' test -f "$full/agents/iris.md" -a -f "$full/agents/cleo.md"
 for agent_file in "$full"/agents/*.md; do
 	agent=$(basename "$agent_file" .md)
-	check "models: agent $agent declares $(expected_model "$agent") (#97 R1, R7, R9)" has_model "$agent_file" "$agent"
-	check "models: agent $agent in the README (#97 R8)" in_readme "$agent" agent
+	check "models: agent $agent declares $(expected_model "$agent") (#97 R1, R7, #131 R1, R7)" has_model "$agent_file" "$agent"
+	check "models: agent $agent in the README (#97 R8, #131 R7)" in_readme "$agent" agent
 	style=$full/output-styles/$agent.md
-	[ ! -f "$style" ] || check "models: style $agent without a model (#97 R1, R9)" test -z "$(front "$style" model)"
+	[ ! -f "$style" ] || check "models: style $agent without a model (#97 R1, #131 R1)" test -z "$(front "$style" model)"
 done
 check 'models: the README says the members'"'"' sessions use your model (#97 R8)' contains "$root/README.md" 'The lead'"'"'s and the analyst'"'"'s own sessions'
 mkdir -p "$blocks/team"
@@ -777,9 +777,38 @@ check 'review-pr: the README describes the review (#130 R12)' contains "$root/RE
 for build in commit-coder iris-build commit-coder-solo; do
 	check "models: background agents' models, $build (#97 R6)" sh -c 'grep -qF "\`model: haiku\` for an agent that reads CI logs or runs the tests" "$1" && grep -qF "\`model: sonnet\` for" "$1"' _ "$tmp/$build/rules/team.md"
 done
-check 'models: no model for iris and cleo (#97 D10)' contains "$full/rules/team.md" 'No `model` is passed when starting `iris` or `cleo`'
-check 'models: no model for iris (#97 D10)' contains "$tmp/iris-build/rules/team.md" 'No `model` is passed when starting `iris`:'
-check 'models: no model for cleo (#97 D10)' contains "$tmp/commit-coder-solo/rules/team.md" 'No `model` is passed when starting `cleo`:'
+check 'models: no model for iris (#97 D10, #131 R2)' contains "$full/rules/team.md" 'No `model` is passed when starting `iris`:'
+check 'models: opus for cleo only when needed (#131 R2)' contains "$full/rules/team.md" 'When starting `cleo`, `model: opus` is passed only in the cases of "Delegating'
+check 'models: no model for iris without a coder (#97 D10)' contains "$tmp/iris-build/rules/team.md" 'No `model` is passed when starting `iris`:'
+check 'models: opus for cleo only when needed, coder only (#131 R2)' contains "$tmp/commit-coder-solo/rules/team.md" 'When starting `cleo`, `model: opus` is passed only in the cases of "Delegating to the'
+check 'models: no cleo model rule without a coder (#131 R6)' sh -c '! grep -q "starting \`cleo\`" "$1"' _ "$tmp/iris-build/rules/team.md"
+
+# The coder on Sonnet, with Opus for hard tasks and later rounds (#131 R2 to R7).
+for build in commit-coder commit-coder-solo; do
+	team=$tmp/$build/rules/team.md
+	check "coder model, $build: the task's labels read (#131 R2)" contains "$team" 'labels (`gh issue view <n> --json labels`): when the task carries the label `model:opus`,'
+	check "coder model, $build: the user's request (#131 R2)" contains "$team" 'or when the user asked in the conversation for that task or change to run on Opus, the'
+	check "coder model, $build: opus passed (#131 R2)" contains "$team" 'assistant starts the `cleo` agent with the Agent tool'"'"'s `model` set to `opus`; in every'
+	check "coder model, $build: otherwise none (#131 R2)" contains "$team" 'other case it passes no `model`.'
+	check "coder model, $build: rounds counted on GitHub (#131 R3)" contains "$team" '`CHANGES_REQUESTED` (`gh pr view <n> --json reviews`): from two on, it starts a new'
+	check "coder model, $build: a new agent on Opus (#131 R3)" contains "$team" '`cleo` agent with `model` set to `opus`, giving it the pull request, the task and the'
+	check "coder model, $build: not by message (#131 R3)" contains "$team" 'review comments, instead of sending a message to the earlier coder agent, whose model'
+	check "coder model, $build: no label added (#131 R3)" contains "$team" 'cannot change. It adds no label to the task.'
+	check "coder model, $build: model in the report (#131 R5)" contains "$team" 'the coder ran on (Sonnet or Opus), the number of reviews in the state "changes requested"'
+	check "coder model, $build: count in the report (#131 R5)" contains "$team" 'the pull request has had so far, and any question for the user.'
+done
+for team in "$tmp/iris-build/rules/team.md" "$tmp/lead-analyst/rules/team.md"; do
+	check "coder model: no R2, R3, R5 without a coder, $(basename "$(dirname "$(dirname "$team")")") (#131 R6)" sh -c '! grep -q "model:opus\|CHANGES_REQUESTED\|Sonnet or Opus\|the coder ran on" "$1"' _ "$team"
+done
+check 'coder model: hard tasks in spec (#131 R4)' contains "$full/skills/spec/SKILL.md" '- Hard tasks run on the coder with Opus, the others on Sonnet. A task is hard when it'
+check 'coder model: hard-task criteria in spec (#131 R4)' sh -c 'grep -qF "changes concurrent or asynchronous behavior; security-sensitive files (credentials, tokens" "$1" && grep -qF "workflows); a data format or a migration; or an interface other repositories use; or when" "$1" && grep -qF "its design leaves the coder a choice between approaches." "$1"' _ "$full/skills/spec/SKILL.md"
+check 'coder model: label and reason in spec (#131 R4)' contains "$full/skills/spec/SKILL.md" 'each hard task, and give the reason in one line of its body: `Model: Opus — <reason>.`'
+check 'coder model: label created when missing (#131 R4)' contains "$full/skills/spec/SKILL.md" 'create a missing one without'
+check 'coder model: spec with a coder only (#131 R4)' contains "$tmp/commit-coder-solo/skills/spec/SKILL.md" 'Add the label `model:opus` to'
+for build in iris-build build3; do
+	check "coder model: no R4 without a coder, $build (#131 R6)" sh -c '! grep -q "model:opus\|Hard tasks" "$1"' _ "$tmp/$build/skills/spec/SKILL.md"
+done
+check 'coder model: the README says when a task runs on Opus (#131 R7)' contains "$root/README.md" 'A task runs on Opus when'
 
 # --- launchers: Konsole color schemes (#36 R4, R6, R7, R8, R16, R17) -----------------------
 

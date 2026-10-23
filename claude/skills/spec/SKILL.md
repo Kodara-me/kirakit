@@ -199,6 +199,15 @@ confirmation:
   with `gh issue edit <parent> --add-sub-issue <n>`, and gets the same label. Tasks stay in
   Backlog, without `status:ready`: the user starts a specification by moving it to Ready,
   and then all its tasks can be worked on.
+{{#coder}}
+- Hard tasks run on the coder with Opus, the others on Sonnet. A task is hard when it
+  changes concurrent or asynchronous behavior; security-sensitive files (credentials, tokens
+  and signing keys; permission rules and `allowed-tools`; Git identity and signing; network
+  downloads and executed remote scripts; files written or deleted outside the project; CI
+  workflows); a data format or a migration; or an interface other repositories use; or when
+  its design leaves the coder a choice between approaches. Add the label `model:opus` to
+  each hard task, and give the reason in one line of its body: `Model: Opus — <reason>.`
+{{/coder}}
 {{#assistant_github}}
 - Assign every sub-issue to the developer's account: `--assignee {{assistant_github}}`.
 {{/assistant_github}}

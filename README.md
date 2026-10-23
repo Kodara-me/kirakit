@@ -515,8 +515,17 @@ With a coder, code goes through Cleo the same way:
   requests your review and tells you what the review flagged for you (security-sensitive
   changes, questions); changes requested, by her or by you, go back to Cleo, who makes them,
   replies to the comments and asks Kira again.
+- **Cleo runs on Sonnet, and on Opus for hard tasks.** A task runs on Opus when it carries
+  the label `model:opus`, which Iris adds at specification time to the tasks the `spec`
+  skill calls hard (concurrency, security-sensitive files, data formats and migrations,
+  interfaces other repositories use, designs that leave a choice between approaches), with
+  the reason in one line of the task; when you ask Kira for Opus for a task or a change; or
+  once the pull request has two reviews requesting changes, by Kira or by you, when Kira
+  hands the next round to a new `cleo` agent on Opus. The design is made on Opus and every
+  pull request is reviewed on Opus, which is what keeps Sonnet's work in check.
 - **Kira reports in a few lines:** the pull request's URL, the tasks it closes, her review
-  result and any question for you. Cleo's intermediate work stays out of the conversation.
+  result, the model Cleo ran on, the number of reviews requesting changes so far and any
+  question for you. Cleo's intermediate work stays out of the conversation.
 - **Kira merges after your own approval.** Her approval also counts in GitHub's
   `reviewDecision`, so she merges only when your latest review approves the last commit,
   then picks the next task.
@@ -540,8 +549,8 @@ and `agents/<name>.md`, with the same body. Its front matter holds `name` and `d
 for the output style, and `delegate`, the agent's description: when to hand work to this
 member, and `model`, the agent's model, which every member declares: the build fails without
 it. Iris's file sits in a `{{#analyst}}` block and Cleo's in a `{{#coder}}` block, so without
-them nothing is built or installed. Both agents run on Opus; their output styles keep the
-session's model.
+them nothing is built or installed. Iris's agent runs on Opus and Cleo's on Sonnet; their
+output styles keep the session's model.
 
 ## Launchers
 
@@ -595,7 +604,7 @@ when a member invokes it herself, it runs on her model.
 | Agent or skill | What it is for | Model | Runs |
 | --- | --- | --- | --- |
 | `iris` (agent) | Clarifies ideas, writes specifications and their tasks | opus | agent |
-| `cleo` (agent) | Implements tasks and opens pull requests | opus | agent |
+| `cleo` (agent) | Implements tasks and opens pull requests | sonnet | agent |
 | `next-task` | Finds the next workable task on the board | sonnet | forked |
 | `board-status` | Moves a task, a specification or a pull request on its boards | haiku | forked |
 | `test` | Runs the unit tests and shows a results table | haiku | forked |
@@ -613,8 +622,9 @@ The lead's and the analyst's own sessions (`assistant`, `analyst`) run on your m
 your Claude Code settings: kirakit does not pin it. `board-status` takes the account that
 writes as an argument (`--as LOGIN`), since a forked skill cannot tell who called it. The lead
 gives its background agents a model suited to the step (`haiku` to read CI logs or run the
-tests, `sonnet` to search across many files), and none when it starts `iris` or `cleo`, so
-that their own model applies.
+tests, `sonnet` to search across many files), and none when it starts `iris`, so that her
+own model applies. It starts `cleo` with no model, so that her Sonnet applies, except for
+the tasks that run on Opus (see the team section).
 
 ## Specifications
 

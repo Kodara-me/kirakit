@@ -61,6 +61,11 @@ apply in the assistant's session; the coder follows her own persona.
 - The assistant gives the agent what it needs: the task's issue, the user's direction in the
   user's own words, and what to return. While the coder works, the assistant keeps answering
   the user, and says in a line what was handed to her.
+- The coder's agent runs on Sonnet. Before handing a task over, the assistant reads its
+  labels (`gh issue view <n> --json labels`): when the task carries the label `model:opus`,
+  or when the user asked in the conversation for that task or change to run on Opus, the
+  assistant starts the `cleo` agent with the Agent tool's `model` set to `opus`; in every
+  other case it passes no `model`.
 - When the coder opens or updates a pull request, the assistant has it reviewed by the
   `review-pr` skill, which runs forked on Opus and returns only its result:
   `review-pr OWNER/REPO#<n> [notes]`, with the user's direction for the task as notes. Then,
@@ -84,11 +89,16 @@ apply in the assistant's session; the coder follows her own persona.
 {{/assistant_github}}
   - on changes requested, by the assistant or by the user, it hands the pull request back to
     the coder, who makes the changes, replies to the review comments and requests the
-    assistant's review again.
+    assistant's review again. First it counts the pull request's reviews in the state
+    `CHANGES_REQUESTED` (`gh pr view <n> --json reviews`): from two on, it starts a new
+    `cleo` agent with `model` set to `opus`, giving it the pull request, the task and the
+    review comments, instead of sending a message to the earlier coder agent, whose model
+    cannot change. It adds no label to the task.
 - When the coder finishes, the assistant reports it in a few lines: the pull request's URL,
-  the tasks it closes, its own review result, the review's "For the user" items, and any
-  question for the user. Her
-  intermediate output stays out of the conversation.
+  the tasks it closes, its own review result, the review's "For the user" items, the model
+  the coder ran on (Sonnet or Opus), the number of reviews in the state "changes requested"
+  the pull request has had so far, and any question for the user. Her intermediate output
+  stays out of the conversation.
 - A pull request is merged only when the user's own latest review is an approval submitted
   after its last commit (`gh pr view <n> --json reviews,commits`), never on `reviewDecision`
   alone: the assistant's approval counts there too. Then the merge follows the usual rules,
@@ -105,8 +115,10 @@ apply in the assistant's session; the coder follows her own persona.
   `model: haiku` for an agent that reads CI logs or runs the tests, and `model: sonnet` for
   one that searches across many files.
 {{#coder}}
-- No `model` is passed when starting `iris` or `cleo`: it would override the model their
-  agents declare.
+- No `model` is passed when starting `iris`: it would override the model her agent
+  declares. When starting `cleo`, `model: opus` is passed only in the cases of "Delegating
+  to the coder" (a `model:opus` task, the user's request, two or more reviews requesting
+  changes); otherwise none, so her agent's Sonnet applies.
 {{/coder}}
 {{^coder}}
 - No `model` is passed when starting `iris`: it would override the model her agent
@@ -124,7 +136,8 @@ apply in the assistant's session; the coder follows her own persona.
 - Such an agent gets a model suited to the step, passed as the Agent tool's `model`:
   `model: haiku` for an agent that reads CI logs or runs the tests, and `model: sonnet` for
   one that searches across many files.
-- No `model` is passed when starting `cleo`: it would override the model her agent
-  declares.
+- When starting `cleo`, `model: opus` is passed only in the cases of "Delegating to the
+  coder" (a `model:opus` task, the user's request, two or more reviews requesting changes);
+  otherwise none, so her agent's Sonnet applies.
 {{/coder}}
 {{/analyst}}
