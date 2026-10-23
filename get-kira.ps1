@@ -728,12 +728,18 @@ function Build-KiraStyle([string]$Out, [string]$PersonaName, [string[]]$CoreLine
 # an agent with the same body (mirrors build_member in scripts/build.sh).
 function Build-KiraMember([string]$Out, [string]$Path, $Values) {
     $member = [IO.Path]::GetFileNameWithoutExtension($Path)
+    # The member's command is named after her: it must not replace a skill of claude/skills/.
+    if (Test-Path -LiteralPath (Join-Path (Join-Path (Join-Path $script:Src 'claude') 'skills') $member) -PathType Container) {
+        throw "${Path}: the command of team member $member has the same name as the skill claude/skills/$member"
+    }
     $style = Join-Path (Join-Path $Out 'output-styles') "$member.md"
     $agent = Join-Path (Join-Path $Out 'agents') "$member.md"
+    $command = Join-Path (Join-Path $Out 'skills') $member
     $lines = @(Format-KiraLine @(Split-KiraLine (Read-KiraText $Path)) $Values $Path)
     $text = Join-KiraLine $lines
     if ($text -notmatch '\S') {
         foreach ($file in @($style, $agent)) { if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file -Force } }
+        if (Test-Path -LiteralPath $command) { Remove-Item -LiteralPath $command -Recurse -Force }
         return
     }
     if ($text -match '\{\{[^}]*\}\}') { throw "${Path}: unknown placeholder $($Matches[0])" }
@@ -759,6 +765,23 @@ function Build-KiraMember([string]$Out, [string]$Path, $Values) {
     foreach ($file in @($style, $agent)) { New-Item -ItemType Directory -Force -Path (Split-Path -Parent $file) | Out-Null }
     Write-KiraText $style (Join-KiraLine (@('---', "name: $($fields.name)", "description: $($fields.description)", 'keep-coding-instructions: true', '---', '') + $body.ToArray()))
     Write-KiraText $agent (Join-KiraLine (@('---', "name: $member", "description: $($fields.delegate)", "model: $($fields.model)", '---', '') + $body.ToArray()))
+    # A command that lets the user talk to the member directly: a skill forked into her agent,
+    # which only the user can run. $ARGUMENTS is filled by Claude Code with the user's request.
+    if (Test-Path -LiteralPath $command) { Remove-Item -LiteralPath $command -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path $command | Out-Null
+    Write-KiraText (Join-Path $command 'SKILL.md') (Join-KiraLine @(
+            '---', "name: $member",
+            "description: Talk to $($fields.name) directly: she handles your request in her own persona and answers you.",
+            "model: $($fields.model)", 'context: fork', "agent: $member", 'disable-model-invocation: true', '---', '',
+            "The user addresses you directly with the ``/$member`` command, from the lead's conversation.",
+            'Their request:',
+            '',
+            '$ARGUMENTS',
+            '',
+            'Handle it as one exchange, in your own persona and under your own rules, and end with your',
+            'answer to the user, written for the user, your questions included.',
+            '',
+            'When the request above is empty, answer in one line asking what the user wants from you.'))
 }
 
 function Build-KiraOutput($UserProfile) {
@@ -1224,6 +1247,12 @@ function Install-KiraClaude([string]$Style, $UserProfile) {
         foreach ($dir in Get-ChildItem -LiteralPath $skills -Directory | Sort-Object Name) {
             if (-not (Test-Path -LiteralPath (Join-Path $dir.FullName 'SKILL.md'))) { continue }
             Install-KiraBuilt "skills/$($dir.Name)" (Join-Path (Join-Path $ClaudeDir 'skills') $dir.Name)
+        }
+    }
+    # Each team member's command, a skill built from team\NAME.md.
+    if (Test-Path -LiteralPath $team) {
+        foreach ($file in Get-ChildItem -LiteralPath $team -Filter '*.md' -File | Sort-Object Name) {
+            Install-KiraBuilt "skills/$($file.BaseName)" (Join-Path (Join-Path $ClaudeDir 'skills') $file.BaseName)
         }
     }
     Install-KiraOutputStyle $Style

@@ -175,6 +175,71 @@ foreach ($path in @('CLAUDE.md', (Join-Path 'rules' 'git.md'))) {
 }
 Test-Check 'complete: on without a coder, the files without the setting (#122 R2)' $same
 
+# #120: a command per team member, the same as scripts/build.sh builds it.
+function Get-RunText($Run) { return (($Run.Lines | ForEach-Object { "$_" }) -join "`n") }
+function Get-MemberCommand([string]$Member, [string]$Title, [string]$Model) {
+    return ((@('---', "name: $Member",
+                "description: Talk to $Title directly: she handles your request in her own persona and answers you.",
+                "model: $Model", 'context: fork', "agent: $Member", 'disable-model-invocation: true', '---', '',
+                "The user addresses you directly with the ``/$Member`` command, from the lead's conversation.",
+                'Their request:', '', '$ARGUMENTS', '',
+                'Handle it as one exchange, in your own persona and under your own rules, and end with your',
+                'answer to the user, written for the user, your questions included.', '',
+                'When the request above is empty, answer in one line asking what the user wants from you.') -join "`n") + "`n")
+}
+function Get-Installed([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path)) { return $null }
+    return [IO.File]::ReadAllText($Path)
+}
+$members = Join-Path $tmp 'members'
+$run = Invoke-Installer $members 'main' 'C' @('-Copy', '-Analyst', '-Coder', 'Cleo <cleo@example.com>')
+$manifestText = Get-Installed (Join-Path $members '.kirakit-manifest')
+foreach ($member in @(@{ Name = 'iris'; Title = 'Iris'; Model = 'opus' }, @{ Name = 'cleo'; Title = 'Cleo'; Model = 'sonnet' })) {
+    $dir = Join-Path (Join-Path $members 'skills') $member.Name
+    $text = Get-Installed (Join-Path $dir 'SKILL.md')
+    Test-Check "commands: /$($member.Name) built and installed (#120 R1, R10)" ($run.Status -eq 0 -and $null -ne $text) (Get-RunText $run)
+    Test-Check "commands: /$($member.Name) front matter and body, as build.sh writes them (#120 R1, R4, R5, R8)" `
+        ($text -ceq (Get-MemberCommand $member.Name $member.Title $member.Model)) "$text"
+    Test-Check "commands: /$($member.Name) recorded (#120 R10)" ($null -ne $manifestText -and $manifestText.Contains($dir))
+}
+$commandCount = @(Get-ChildItem -LiteralPath (Join-Path $members 'skills') -Recurse -Filter 'SKILL.md' |
+        Where-Object { (Get-Content -LiteralPath $_.FullName) -match '^agent: ' }).Count
+Test-Check 'commands: none for the lead (#120 R3)' ($commandCount -eq 2 -and -not (Test-Path -LiteralPath (Join-Path (Join-Path $members 'skills') 'kira')))
+$irisCommand = Join-Path (Join-Path $members 'skills') 'iris'
+$run = Invoke-Installer $members 'main' 'C' @('-Copy', '-NoAnalyst')
+Test-Check 'commands: /iris removed without an analyst (#120 R2, R10)' ($run.Status -eq 0 -and -not (Test-Path -LiteralPath $irisCommand)) (Get-RunText $run)
+Test-Check 'commands: /iris no longer recorded (#120 R10)' (-not (Get-Installed (Join-Path $members '.kirakit-manifest')).Contains($irisCommand))
+$run = Invoke-Installer $members 'main' 'C' @('-Copy', '-Analyst')
+Test-Check 'commands: /iris back on reinstall (#120 R10)' ($run.Status -eq 0 -and (Test-Path -LiteralPath (Join-Path $irisCommand 'SKILL.md'))) (Get-RunText $run)
+$run = Invoke-Installer $members 'main' 'C' @('-Uninstall')
+Test-Check 'commands: uninstall removes them (#120 R10)' ($run.Status -eq 0 -and -not (Test-Path -LiteralPath $irisCommand) -and
+    -not (Test-Path -LiteralPath (Join-Path (Join-Path $members 'skills') 'cleo'))) (Get-RunText $run)
+$none = Join-Path $tmp 'members-none'
+$run = Invoke-Installer $none 'main' 'C' @('-Copy', '-NoAnalyst')
+Test-Check 'commands: none without an analyst or a coder (#120 R2)' ($run.Status -eq 0 -and
+    -not (Test-Path -LiteralPath (Join-Path (Join-Path $none 'skills') 'iris')) -and
+    -not (Test-Path -LiteralPath (Join-Path (Join-Path $none 'skills') 'cleo'))) (Get-RunText $run)
+
+# A new member gets her command, and a member named like a skill stops the build: each on a
+# branch of the scratch remote.
+$nova = @('---', 'name: Nova', 'description: Nova, a new member', 'delegate: Use Nova.', 'model: haiku', '---', '', 'Body.')
+Invoke-Git -C $remote checkout -q -b new-member main
+[IO.File]::WriteAllText((Join-Path (Join-Path $remote 'team') 'nova.md'), (($nova -join "`n") + "`n"))
+Invoke-Git -C $remote add -A
+Invoke-Git -C $remote @who -c commit.gpgsign=false commit -q -m 'new member'
+Invoke-Git -C $remote checkout -q -b member-clash main
+[IO.File]::WriteAllText((Join-Path (Join-Path $remote 'team') 'test.md'), (($nova -join "`n") + "`n"))
+Invoke-Git -C $remote add -A
+Invoke-Git -C $remote @who -c commit.gpgsign=false commit -q -m 'member clash'
+Invoke-Git -C $remote checkout -q main
+$newMember = Join-Path $tmp 'members-new'
+$run = Invoke-Installer $newMember 'new-member' 'C' @('-Copy')
+Test-Check 'commands: a new member gets hers (#120 R2)' ($run.Status -eq 0 -and
+    (Get-Installed (Join-Path (Join-Path (Join-Path $newMember 'skills') 'nova') 'SKILL.md')) -ceq (Get-MemberCommand 'nova' 'Nova' 'haiku')) (Get-RunText $run)
+$run = Invoke-Installer (Join-Path $tmp 'members-clash') 'member-clash' 'C' @('-Copy')
+Test-Check 'commands: a clash with a skill fails, naming the member (#120 R9)' ($run.Status -ne 0 -and
+    (Get-RunText $run).Contains('team member test has the same name as the skill')) (Get-RunText $run)
+
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 if ($failures) {
     Write-Host "$failures check(s) failed"
