@@ -178,8 +178,8 @@ check 'board-status: built (#64)' test -f "$board"
 check 'board-status: writes as the account it is given (#64 R6, #97 R3)' contains "$board" 'GH_TOKEN=$(gh auth token --user ACCOUNT)'
 check 'board-status: documents --as ACCOUNT (#97 R3)' sh -c 'grep -q "^argument-hint: \"NUMBER STATUS \[--as ACCOUNT\]" "$1" && grep -q "With \`--as ACCOUNT\`, ACCOUNT is the GitHub login" "$1"' _ "$board"
 check 'board-status: never infers the account (#97 R3)' contains "$board" 'The account comes only from `--as`'
-check "board-status: falls back to the user's account (#64 R6)" contains "$board" 'make the same write again'
-check 'board-status: user account without --as (#64 R6, #97 R3)' contains "$board" 'every write uses the user'"'"'s account'
+check "board-status: never falls back to the user's account (#153)" sh -c 'grep -qF "falls back to the user'"'"'s account: when a command is refused with that token (the account is" "$1" && ! grep -q "make the same write again" "$1"' _ "$board"
+check 'board-status: user account without --as (#64 R6, #97 R3)' contains "$board" 'Without `--as`, every command uses the'
 check 'board-status: same skill whatever the profile (#97 R3)' cmp -s "$board" "$tmp/build/skills/board-status/SKILL.md"
 check 'board-status: missing option reported (#64 R4)' contains "$board" 'No *STATUS* column on the TITLE board'
 check 'board-status: no board, no word (#64 R5)' contains "$board" 'stop without a word'
@@ -801,7 +801,7 @@ done
 check 'spec: tasks assigned to the developer (#51 R8)' contains "$tmp/build3/skills/spec/SKILL.md" '`--assignee kira-bot`'
 check 'spec: relayed answers recorded as the user'"'"'s (#79 R4)' contains "$tmp/iris-build/skills/spec/SKILL.md" 'noted "answered in the conversation"'
 check 'spec: questions returned to the lead without an issue (#79 R3)' contains "$tmp/iris-build/skills/spec/SKILL.md" 'When running in the background for the lead, without an issue yet'
-check 'spec: Specified as the analyst (#89 R10)' contains "$tmp/iris-build/skills/spec/SKILL.md" 'made as `iris-bot`'
+check 'spec: Specified as the analyst (#89 R10)' contains "$tmp/iris-build/skills/spec/SKILL.md" 'read and written as `iris-bot`'
 check 'spec: no lead without an analyst (#79 R8)' sh -c '! grep -q "the lead" "$1"' _ "$spec_skill"
 check "spec: new issue for an idea not by the analyst (#51 R13)" sh -c 'grep -q "not written by \`iris-bot\`" "$1" && grep -q "Specified in #<new>." "$1"' _ "$tmp/iris-build/skills/spec/SKILL.md"
 $shell "$root/scripts/build.sh" -o "$tmp/analyst-no-login" --analyst >/dev/null
@@ -901,7 +901,7 @@ check 'mention: spec summary without questions is not a mention (R4, R8)' bullet
 	'without mentioning the user' '"Ready for you: move it to Ready when you want the team to start."' 'and ask nothing'
 check 'mention: spec summary with questions mentions the user (R4, R8)' bullet_has "$tmp/mention-full/skills/spec/SKILL.md" 'With questions for the user, mention the user' \
 	'(`@<login>`)' 'end with a short question, as in step 2'
-check 'mention: spec questions comment unchanged (R8)' contains "$tmp/mention-full/skills/spec/SKILL.md" '--body-file <file>`) that mentions the user (`@<login>`, from `gh api user --jq .login`):'
+check 'mention: spec questions comment unchanged (R8)' contains "$tmp/mention-full/skills/spec/SKILL.md" '--body-file <file>`) that mentions the user (`@<login>`, from `gh config get user -h github.com`):'
 
 # --- owners of ideas and specifications (#127 R1–R7) ---------------------------------------
 
@@ -958,6 +958,40 @@ check 'owners: README has an Assignees section (#127 R9)' sh -c 'test -n "$1"' _
 for item in Idea Specification Task 'Pull request'; do
 	check "owners: README names who is assigned to: $item (#127 R9)" sh -c 'printf "%s\n" "$1" | grep -q "^- \*\*$2\*\*: assigned to "' _ "$(readme_assignees)" "$item"
 done
+
+# --- every member's gh commands on her own account, reads included (#153) -----------------
+
+full=$tmp/mention-full
+rules=$full/rules/git.md
+check 'own account: the assistant reads and writes as itself (#153)' sh -c 'grep -qF -- "- Every \`gh\` command the assistant runs, reads included (\`gh issue view\`, \`gh pr view\`," "$1" && grep -qF "\`GH_TOKEN=\$(gh auth token --user kira-bot)\`, so that it uses its own account and" "$1" && grep -qF "that token, the assistant reports it instead of running it as the user." "$1"' _ "$rules"
+check 'own account: the coder reads and writes as herself (#153)' sh -c 'grep -qF -- "- Every \`gh\` command the coder runs, reads included (\`gh issue view\`, \`gh pr view\`," "$1" && grep -qF "\`GH_TOKEN=\$(gh auth token --user cleo-bot)\`, so that it uses her own account and" "$1" && grep -qF "falls back to the user'"'"'s account: when a command is refused with that token, the coder" "$1"' _ "$rules"
+check 'own account: the analyst reads and writes as herself (#153)' sh -c 'grep -qF "command of that work, reads included (\`gh issue view\`, \`gh project\`, \`gh api\`), is prefixed" "$1" && grep -qF "with \`GH_TOKEN=\$(gh auth token --user iris-bot)\`, for her ideas" "$1" && grep -qF "the user'"'"'s account: when a command is refused with that token, it is reported instead of" "$1"' _ "$rules"
+check 'own account: board moves never fall back to the user (#153)' sh -c 'grep -qF "and writes the board with that account only and reports a move it refuses." "$1" && ! grep -q "which falls back" "$1"' _ "$rules"
+check "own account: the user's login without an API call (#153)" contains "$rules" '`gh config get user -h github.com`'
+check 'own account: no gh read on the user'"'"'s account (#153)' sh -c '! grep -rqF -e "gh api user" -e "Reads use the user" -e "need no prefix" -e "which falls back" -e "skill falls back" -e "make the same write again" "$1/rules" "$1/skills" "$1/agents"' _ "$full"
+for build in build2 iris-none; do
+	check "own account: no rule without a team account, $build (#153)" sh -c '! grep -q "reads included" "$1"' _ "$tmp/$build/rules/git.md"
+done
+# Every built skill that calls gh names the account it uses, reads included.
+for skill_file in "$full"/skills/*/SKILL.md; do
+	grep -q '`gh [a-z]' "$skill_file" || continue
+	skill=$(basename "$(dirname "$skill_file")")
+	check "own account: $skill runs every gh command on one account (#153)" sh -c 'flat=$(tr "\n" " " <"$1" | tr -s " ") && printf "%s\n" "$flat" | grep -qiF "every \`gh\` command of this skill, reads included, is prefixed with" && printf "%s\n" "$flat" | grep -qF "None falls back to the user'"'"'s account: when a command is refused with"' _ "$skill_file"
+done
+check 'own account: every skill that calls gh checked (#153)' test "$(grep -l '`gh [a-z]' "$full"/skills/*/SKILL.md | grep -c .)" -ge 6
+for pair in idea:iris-bot spec:iris-bot next-task:ACCOUNT review-pr:kira-bot board-status:ACCOUNT pull-request:'<login>'; do
+	check "own account: ${pair%%:*} names its account (#153)" contains "$full/skills/${pair%%:*}/SKILL.md" "GH_TOKEN=\$(gh auth token --user ${pair#*:})"
+done
+for skill in idea spec; do
+	check "own account: $skill as the developer without an analyst account (#153)" sh -c 'flat=$(tr "\n" " " <"$1" | tr -s " ") && printf "%s\n" "$flat" | grep -qF "This work is done on GitHub as the developer'"'"'s own account, \`kira-bot\`: every \`gh\` command of this skill, reads included, is prefixed with \`GH_TOKEN=\$(gh auth token --user kira-bot)\`" && printf "%s\n" "$flat" | grep -qF "None falls back to the user'"'"'s account"' _ "$tmp/build3/skills/$skill/SKILL.md"
+	check "own account: $skill uses the user's account without accounts (#153)" sh -c '! grep -q "reads included" "$1"' _ "$tmp/build2/skills/$skill/SKILL.md"
+done
+check 'own account: next-task takes --as (#153)' sh -c 'grep -qx "argument-hint: \"\[--as ACCOUNT\]\"" "$1" && grep -qF "The account is ACCOUNT when \`--as ACCOUNT\` is given, and the developer'"'"'s account," "$1" && grep -qF "\`kira-bot\`, otherwise." "$1"' _ "$full/skills/next-task/SKILL.md"
+check 'own account: board-status reports a refused command (#153)' contains "$full/skills/board-status/SKILL.md" '("#NUMBER not moved on the TITLE board: refused for ACCOUNT, <error>.")'
+for member in cleo:cleo-bot iris:iris-bot; do
+	check "own account: ${member%%:*}'s profile carries the rule (#153)" sh -c 'grep -qF "Every \`gh\` command she runs, reads included, is prefixed with \`GH_TOKEN=\$(gh auth token --user $2)\`" "$1" && grep -qF "none falls back to the user'"'"'s account" "$1"' _ "$full/agents/${member%%:*}.md" "${member#*:}"
+done
+check 'own account: no rule in a profile without its account (#153)' sh -c '! grep -q "reads included" "$1" "$2"' _ "$tmp/cleo-build/agents/iris.md" "$tmp/iris-none/output-styles/kira-cozy.md"
 
 # --- models of the agents and skills (#97 R1–R4, R6–R9) ----------------------------------
 

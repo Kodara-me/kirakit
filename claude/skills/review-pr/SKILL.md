@@ -29,6 +29,13 @@ From the reference, take `OWNER/REPO` and `N`. For a bare number, the repository
 of the current directory (`gh pr view N --json url`); if that fails, return only a line
 asking for the reference as a URL or `OWNER/REPO#N`. Pass `-R OWNER/REPO` to every `gh pr`
 and `gh issue` command, and use `repos/OWNER/REPO/…` in every `gh api` call.
+{{#assistant_github}}
+
+The review is the lead's: every `gh` command of this skill, reads included, is prefixed with
+`GH_TOKEN=$(gh auth token --user {{assistant_github}})`, so that it uses the lead's account
+and quota. None falls back to the user's account: when a command is refused with that token,
+report it instead of running it as the user.
+{{/assistant_github}}
 
 ## Commands
 

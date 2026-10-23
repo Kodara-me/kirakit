@@ -158,7 +158,7 @@ project's `CLAUDE.md` cannot override the attribution rules.
   branch; to In review when its pull request is opened or a new review is requested; and
   back to In progress when changes are requested. Use the `board-status` skill, with `--as`
   and the GitHub login of the member who makes the move when that member has one (below);
-  without `--as`, it writes with the user's account.
+  without `--as`, it uses the user's account.
 - The first task of a specification also moves the specification to In progress. A pull
   request is added to its tasks' boards in In review (`board-status` with
   `--add-to-boards-of`), and follows the same moves as its task. Done is left to the
@@ -192,12 +192,16 @@ project's `CLAUDE.md` cannot override the attribution rules.
 ## The assistant's GitHub account
 
 - The assistant has its own GitHub account, `{{assistant_github}}`. The user's account is the
-  active one in `gh` (`gh api user --jq .login`). The assistant must have Write on the
-  repository first, as a collaborator or through a team of the user's organization.
-- Everything the assistant writes on GitHub is done as `{{assistant_github}}`, by prefixing
-  the `gh` command with `GH_TOKEN=$(gh auth token --user {{assistant_github}})`: issues,
-  sub-issues, comments, pull requests, reviews and replies. The rule about asking before
-  creating, editing or closing an issue still applies.
+  active one in `gh`, and the user's login comes from `gh config get user -h github.com`,
+  which calls no API. The assistant must have Write on the repository first, as a
+  collaborator or through a team of the user's organization.
+- Every `gh` command the assistant runs, reads included (`gh issue view`, `gh pr view`,
+  `gh pr checks`, `gh run view`, `gh project`, `gh api`), is prefixed with
+  `GH_TOKEN=$(gh auth token --user {{assistant_github}})`, so that it uses its own account and
+  quota: what it writes (issues, sub-issues, comments, pull requests, reviews and replies)
+  and what it reads. None falls back to the user's account: when a command is refused with
+  that token, the assistant reports it instead of running it as the user. The rule about
+  asking before creating, editing or closing an issue still applies.
 - Pull requests: `--assignee {{assistant_github}} --reviewer <the user's login>`, so the user
   is notified and reviews every one.
 - Issues the assistant works on are assigned to `{{assistant_github}}`.
@@ -212,10 +216,9 @@ project's `CLAUDE.md` cannot override the attribution rules.
   question, as the rules on comments say. A next step that needs no decision is reported
   in a comment too, without mentioning him and without asking for permission.
 - Project boards stay owned by the user or the user's organization. The assistant updates a
-  board as `{{assistant_github}}` when it is a Writer of it, directly or through a team, and
-  with the user's account otherwise:
-  its board moves pass `--as {{assistant_github}}` to the `board-status` skill,
-  which falls back to the user's account.
+  board as `{{assistant_github}}`, which must be a Writer of it, directly or through a team:
+  its board moves pass `--as {{assistant_github}}` to the `board-status` skill, which reads
+  and writes the board with that account only and reports a move it refuses.
 {{/assistant_github}}
 {{#coder_github}}
 
@@ -223,10 +226,13 @@ project's `CLAUDE.md` cannot override the attribution rules.
 
 - The coder has her own GitHub account, `{{coder_github}}`, with Write on the repository, as
   a collaborator or through a team of the user's organization.
-- Everything the coder writes on GitHub is done as `{{coder_github}}`, by prefixing the `gh`
-  command with `GH_TOKEN=$(gh auth token --user {{coder_github}})`: her pull requests,
-  comments, replies to review comments, and board moves
-  (`board-status NUMBER STATUS --as {{coder_github}}`).
+- Every `gh` command the coder runs, reads included (`gh issue view`, `gh pr view`,
+  `gh pr checks`, `gh run view`, `gh project`, `gh api`), is prefixed with
+  `GH_TOKEN=$(gh auth token --user {{coder_github}})`, so that it uses her own account and
+  quota: her pull requests, comments, replies to review comments, and what she reads. None
+  falls back to the user's account: when a command is refused with that token, the coder
+  reports it instead of running it as the user. Her board moves pass her account to the
+  `board-status` skill (`board-status NUMBER STATUS --as {{coder_github}}`).
 {{#assistant_github}}
 {{^complete_approved_prs}}
 - Her pull requests: `--assignee {{coder_github}} --reviewer {{assistant_github}}`, so the
@@ -260,12 +266,14 @@ project's `CLAUDE.md` cannot override the attribution rules.
 {{/coder}}
 - Iris never commits, pushes or opens a pull request: her work lives in issues.
 {{#analyst_github}}
-- On GitHub, the analyst's work is written as her own account, `{{analyst_github}}`, by
-  prefixing the `gh` command with `GH_TOKEN=$(gh auth token --user {{analyst_github}})`:
-  ideas, specifications, sub-issues, their labels, and clarification comments. This applies
-  to that work whoever does it, the assistant running the `idea` or `spec` skill included,
-  and takes precedence over the assistant's own account. Her board moves pass
-  `--as {{analyst_github}}` to the `board-status` skill.
+- On GitHub, the analyst's work is done as her own account, `{{analyst_github}}`: every `gh`
+  command of that work, reads included (`gh issue view`, `gh project`, `gh api`), is prefixed
+  with `GH_TOKEN=$(gh auth token --user {{analyst_github}})`, for her ideas, specifications,
+  sub-issues, their labels, clarification comments and what she reads. None falls back to
+  the user's account: when a command is refused with that token, it is reported instead of
+  run as the user. This applies to that work whoever does it, the assistant running the
+  `idea` or `spec` skill included, and takes precedence over the assistant's own account.
+  Her board moves pass `--as {{analyst_github}}` to the `board-status` skill.
 - Her role on the repository is Triage where its owner offers it (an organization, as a
   collaborator or through a team), and Write otherwise (a personal account). With Triage,
   GitHub keeps her from pushing, and she cannot edit the body of an issue she did not write:

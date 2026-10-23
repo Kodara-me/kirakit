@@ -13,11 +13,23 @@ repository already uses another language. The comments posted on the issue
 follow the member's own voice, in the repository's language.
 {{#analyst_github}}
 
-The analyst's work is written on GitHub as the analyst's own account, `{{analyst_github}}`,
-whoever runs this skill: prefix every `gh` command that creates, edits, labels or comments
-with `GH_TOKEN=$(gh auth token --user {{analyst_github}})`, for example
-`GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh issue create …`. Commands that only
-read need no prefix.
+The analyst's work is done on GitHub as the analyst's own account, `{{analyst_github}}`,
+whoever runs this skill: every `gh` command of this skill, reads included, is prefixed with
+`GH_TOKEN=$(gh auth token --user {{analyst_github}})`, for example
+`GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh issue create …`. None falls back to
+the user's account: when a command is refused with that token, report it instead of running
+it as the user.
+{{/analyst_github}}
+{{^analyst_github}}
+{{#assistant_github}}
+
+This work is done on GitHub as the developer's own account, `{{assistant_github}}`: every
+`gh` command of this skill, reads included, is prefixed with
+`GH_TOKEN=$(gh auth token --user {{assistant_github}})`, for example
+`GH_TOKEN=$(gh auth token --user {{assistant_github}}) gh issue create …`. None falls back
+to the user's account: when a command is refused with that token, report it instead of
+running it as the user.
+{{/assistant_github}}
 {{/analyst_github}}
 
 ## Format
@@ -157,7 +169,7 @@ raised, and sort each one:
   permissions, security, release), or when it goes beyond the idea.
 
 Ask those questions all at once, in a single comment on the issue (`gh issue comment <n>
---body-file <file>`) that mentions the user (`@<login>`, from `gh api user --jq .login`):
+--body-file <file>`) that mentions the user (`@<login>`, from `gh config get user -h github.com`):
 each question with its options and your recommendation, most important first, ending with
 a short question such as "Can I go on?". In the conversation, show only one line with the
 comment's link. Without an issue yet, ask them in the conversation instead.
@@ -244,16 +256,16 @@ confirmation:
   `status:specified` label marks it. When the board has no Specified option, say so in one
   line in the summary comment and in the closing lines.
 {{#analyst_github}}
-- Pass the analyst's account, so that the board's writes are made as `{{analyst_github}}`:
-  `board-status <parent> Specified --as {{analyst_github}}`. The skill falls back to the
-  user's account when `{{analyst_github}}` cannot write to the board.
+- Pass the analyst's account, so that the board is read and written as `{{analyst_github}}`:
+  `board-status <parent> Specified --as {{analyst_github}}`. The skill reports a move that
+  `{{analyst_github}}` cannot make, without using the user's account.
 {{/analyst_github}}
 {{^analyst_github}}
 {{#assistant_github}}
-- Pass the developer's account, so that the board's writes are made as
+- Pass the developer's account, so that the board is read and written as
   `{{assistant_github}}`: `board-status <parent> Specified --as {{assistant_github}}`. The
-  skill falls back to the user's account when `{{assistant_github}}` cannot write to the
-  board.
+  skill reports a move that `{{assistant_github}}` cannot make, without using the user's
+  account.
 {{/assistant_github}}
 {{/analyst_github}}
 

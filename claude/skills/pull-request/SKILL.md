@@ -11,8 +11,12 @@ Answer in {{language}}.
 This skill opens the pull request of the current branch for the member who opens it: the
 coder when the team has one, otherwise the developer. It names no account itself: the
 account that writes, the assignee, the reviewers and the board moves are the ones the git
-rules (`rules/git.md`) give that member. When the rules give her no GitHub account, she
-writes with the user's account (no `GH_TOKEN` prefix) and the board moves take no `--as`.
+rules (`rules/git.md`) give that member. When the rules give her a GitHub account, every
+`gh` command of this skill, reads included, is prefixed with
+`GH_TOKEN=$(gh auth token --user <login>)`, so that it uses her account and quota. None falls
+back to the user's account: when a command is refused with that token, report it instead of
+running it as the user. When the rules give her no GitHub account, she uses the user's
+account (no `GH_TOKEN` prefix) and the board moves take no `--as`.
 
 ## 1. Check the branch
 

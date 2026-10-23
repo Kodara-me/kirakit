@@ -3,7 +3,8 @@ name: next-task
 description: Finds the developer's next workable task from the project board, following the specifications the user moved to Ready, in order, and skipping tasks that are taken, blocked, waiting for an answer or overlapping a pull request in review. Use when the developer starts working and after each pull request she opens.
 model: sonnet
 context: fork
-allowed-tools: Bash(gh repo view:*), Bash(gh project list:*), Bash(gh project item-list:*), Bash(gh issue view:*), Bash(gh issue list:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh api user:*)
+argument-hint: "[--as ACCOUNT]"
+allowed-tools: Bash(gh repo view:*), Bash(gh project list:*), Bash(gh project item-list:*), Bash(gh issue view:*), Bash(gh issue list:*), Bash(gh pr list:*), Bash(gh pr view:*)
 ---
 
 # Next task
@@ -12,6 +13,23 @@ Answer in {{language}}.
 
 Only read commands: `gh project`, `gh issue` and `gh pr`. This skill changes nothing; the
 developer starts the task it gives.
+
+## Account
+
+{{#assistant_github}}
+The account is ACCOUNT when `--as ACCOUNT` is given, and the developer's account,
+`{{assistant_github}}`, otherwise. Every `gh` command of this skill, reads included, is
+prefixed with `GH_TOKEN=$(gh auth token --user ACCOUNT)`, so that it uses that account and
+its quota. None falls back to the user's account: when a command is refused with that
+token, report it in one line with GitHub's error instead of running it as the user.
+{{/assistant_github}}
+{{^assistant_github}}
+With `--as ACCOUNT`, every `gh` command of this skill, reads included, is prefixed with
+`GH_TOKEN=$(gh auth token --user ACCOUNT)`, so that it uses that account and its quota. None
+falls back to the user's account: when a command is refused with that token, report it in
+one line with GitHub's error instead of running it as the user. Without `--as`, the
+commands use the user's account.
+{{/assistant_github}}
 
 ## 1. Specifications that can be worked on
 

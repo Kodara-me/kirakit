@@ -13,11 +13,23 @@ repository already uses another language. The comments posted on the issue
 follow the member's own voice, in the repository's language.
 {{#analyst_github}}
 
-The analyst's work is written on GitHub as the analyst's own account, `{{analyst_github}}`,
-whoever runs this skill: prefix every `gh` command that creates, edits, labels or comments
-with `GH_TOKEN=$(gh auth token --user {{analyst_github}})`, for example
-`GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh issue create …`. Commands that only
-read need no prefix.
+The analyst's work is done on GitHub as the analyst's own account, `{{analyst_github}}`,
+whoever runs this skill: every `gh` command of this skill, reads included, is prefixed with
+`GH_TOKEN=$(gh auth token --user {{analyst_github}})`, for example
+`GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh issue create …`. None falls back to
+the user's account: when a command is refused with that token, report it instead of running
+it as the user.
+{{/analyst_github}}
+{{^analyst_github}}
+{{#assistant_github}}
+
+This work is done on GitHub as the developer's own account, `{{assistant_github}}`: every
+`gh` command of this skill, reads included, is prefixed with
+`GH_TOKEN=$(gh auth token --user {{assistant_github}})`, for example
+`GH_TOKEN=$(gh auth token --user {{assistant_github}}) gh issue create …`. None falls back
+to the user's account: when a command is refused with that token, report it instead of
+running it as the user.
+{{/assistant_github}}
 {{/analyst_github}}
 
 An idea records intent only: the problem or opportunity and the outcome wanted. Do not read
