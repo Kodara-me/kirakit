@@ -125,6 +125,13 @@ check 'spec: questions still end with a question (#89 R2)' contains "$spec_skill
 check 'spec: closing lines on questions (#89 R3)' contains "$spec_skill" 'Questions for'
 check 'spec: no assignee without an assistant account (#51 R8)' sh -c '! grep -q -- "--assignee" "$1"' _ "$spec_skill"
 check 'spec: summary comment (#51 R9)' contains "$spec_skill" 'post a summary comment on the parent that mentions the user'
+check 'spec: each task lands on its own (#126 R1)' sh -c 'grep -q "Each task lands on its own: once merged alone on" "$1" && ! grep -q "A task is small enough for one pull request" "$1"' _ "$spec_skill"
+check 'spec: changes held by a check stay together (#126 R2)' contains "$spec_skill" "Changes that only pass the repository's checks together"
+check 'spec: no split by platform, installer, file or layer (#126 R3)' sh -c 'grep -q "The tests and the documentation of a behavior stay in the task" "$1" && grep -q "Never split by platform, by installer, by file or" "$1"' _ "$spec_skill"
+check 'spec: start from one task (#126 R4)' sh -c 'grep -q "Start from one task covering the whole specification" "$1" && grep -q "about 400 changed lines outside tests" "$1"' _ "$spec_skill"
+check 'spec: 1 to 3 tasks by default (#126 R5)' contains "$spec_skill" 'A specification has 1 to 3 tasks by default. Beyond 3, its Decisions record why'
+check 'spec: tasks checked before publishing (#126 R6)' contains "$spec_skill" 'merge any task that cannot land without another'
+check 'spec: existing tasks not regrouped (#126 R7)' contains "$spec_skill" 'a change does not regroup'
 check 'spec: a reversal applied (#51 R10)' contains "$spec_skill" 'or reverses a decision on the'
 check 'spec: affected tasks keep their labels (#89)' sh -c '! grep -q "loses \`status:ready\`" "$1"' _ "$spec_skill"
 check 'spec: no new issue without an analyst account (#51 R13)' sh -c '! grep -q "Specified in #" "$1"' _ "$spec_skill"

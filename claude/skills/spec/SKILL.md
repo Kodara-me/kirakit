@@ -81,8 +81,27 @@ Each task is a sub-issue of the parent:
   - <Observable result, usually the test that proves it.>
   ```
 
-- A task is small enough for one pull request, and lists the requirements it covers. Every
-  requirement is covered by at least one task.
+- Each task lists the requirements it covers. Every requirement is covered by at least one
+  task.
+
+### Splitting into tasks
+
+- Each task lands on its own: once merged alone on `main`, every check of the repository
+  passes, and no task waits for another to make its change usable or consistent.
+- Changes that only pass the repository's checks together (such as the sh and PowerShell
+  sides of an installer change held by a parity check) stay in the same task.
+- The tests and the documentation of a behavior stay in the task that changes that
+  behavior, never in a task of their own. Never split by platform, by installer, by file or
+  by layer (code, tests, documentation).
+- Start from one task covering the whole specification. Split off a part only when it lands
+  on its own and either the single pull request would be too large to review in one pass,
+  or the user gains from using that part before the rest (a stage to try out). As a
+  guideline, not a limit, a pull request of more than about 400 changed lines outside tests,
+  or one that mixes unrelated areas a reviewer must load separately, is too large for one
+  pass.
+- A specification has 1 to 3 tasks by default. Beyond 3, its Decisions record why, naming
+  for each extra task the reason that keeps it separate (review size or a stage to try
+  out).
 
 Labels: the parent has `type:feature`, plus `status:specified` once its tasks are
 published; sub-issues have `type:task`.
@@ -148,7 +167,8 @@ Write the three phases in one pass, without stopping for approval:
 1. **Context and requirements.**
 2. **Design and decisions.**
 3. **Tasks**: the list of sub-issues, with their titles, the requirements each one covers
-   and their "Done when". Check that every requirement is covered.
+   and their "Done when". Check that every requirement is covered. Before publishing, check
+   each task against the splitting rules: merge any task that cannot land without another.
 
 When the user asks to work phase by phase, show each phase in the conversation and wait for
 their approval before the next one.
@@ -225,3 +245,5 @@ confirmation:
 - A reversed decision stays, struck through (`~~**D2** — …~~`), and a new one records the
   user's choice.
 - A change to the requirements updates the "Covers" line of every task concerned.
+- The splitting rules apply to specifications written after them: a change does not regroup
+  the existing tasks of a published specification, unless the user asks for it.
