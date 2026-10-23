@@ -70,6 +70,15 @@ What becomes possible or better, without prescribing the solution.
    create a missing one without asking (`gh label create`).
 4. Create the issue without asking for confirmation: `gh issue create --title "<title>"
    --body-file <file> --label …`, with the body in a temporary file outside the repository.
+{{#analyst_github}}
+   Assign it to `{{analyst_github}}`, the owner of ideas until they become specifications:
+   `--assignee {{analyst_github}}`.
+{{/analyst_github}}
+{{^analyst_github}}
+{{#assistant_github}}
+   Assign it to `{{assistant_github}}`, the owner of ideas: `--assignee {{assistant_github}}`.
+{{/assistant_github}}
+{{/analyst_github}}
 
 End with the issue's URL and one line saying that `/spec #<n>` turns it into a
 specification.

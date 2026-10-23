@@ -857,6 +857,34 @@ check 'mention: spec summary with questions mentions the user (R4, R8)' bullet_h
 	'(`@<login>`)' 'end with a short question, as in step 2'
 check 'mention: spec questions comment unchanged (R8)' contains "$tmp/mention-full/skills/spec/SKILL.md" '--body-file <file>`) that mentions the user (`@<login>`, from `gh api user --jq .login`):'
 
+# --- owners of ideas and specifications (#127 R1–R7) ---------------------------------------
+
+# Profiles: analyst and lead (mention-full), lead only (build3), analyst only (iris-build),
+# neither (build2).
+check 'owners: idea assigned to the analyst (#127 R1)' sh -c 'grep -qF "\`--assignee iris-bot\`." "$1" && ! grep -q "assignee kira-bot" "$1"' _ "$tmp/mention-full/skills/idea/SKILL.md"
+check 'owners: idea assigned to the analyst without a lead (#127 R1)' contains "$tmp/iris-build/skills/idea/SKILL.md" '`--assignee iris-bot`.'
+check 'owners: idea assigned to the lead without an analyst (#127 R1)' contains "$tmp/build3/skills/idea/SKILL.md" '`--assignee kira-bot`.'
+check 'owners: idea without an owner account (#127 R1)' sh -c '! grep -q assignee "$1"' _ "$tmp/build2/skills/idea/SKILL.md"
+check 'owners: spec reads the assignees (#127 R2)' contains "$tmp/build2/skills/spec/SKILL.md" '--json number,title,body,labels,assignees,parent,subIssues'
+check 'owners: spec adds the analyst to the idea (#127 R2)' sh -c 'grep -qF "When the idea is not assigned to \`iris-bot\`" "$1" && grep -qF "posting questions or publishing, and leave the other assignees in place:" "$1" && grep -qF "\`gh issue edit <n> --add-assignee iris-bot\`." "$1"' _ "$tmp/mention-full/skills/spec/SKILL.md"
+check 'owners: spec adds the lead to the idea without an analyst (#127 R2)' sh -c 'grep -qF "When the idea is not assigned to \`kira-bot\`" "$1" && grep -qF "\`gh issue edit <n> --add-assignee kira-bot\`." "$1"' _ "$tmp/build3/skills/spec/SKILL.md"
+check 'owners: spec in place assigns the lead instead of the analyst (#127 R3)' \
+	contains "$tmp/mention-full/skills/spec/SKILL.md" '`gh issue edit <n> --add-assignee kira-bot --remove-assignee iris-bot`.'
+check 'owners: spec in place assigns the lead without an analyst (#127 R3)' sh -c 'grep -qF "\`gh issue edit <n> --add-assignee kira-bot\`." "$1" && ! grep -q "remove-assignee" "$1"' _ "$tmp/build3/skills/spec/SKILL.md"
+for build in mention-full build3; do
+	check "owners: spec in a new issue assigns the lead, $build (#127 R4)" sh -c 'grep -qF "place: \`--assignee kira-bot\` on \`gh issue create\` for a new issue" "$1" && grep -qF "An idea closed for a specification in a new issue keeps its assignees." "$1"' _ "$tmp/$build/skills/spec/SKILL.md"
+done
+for build in iris-build build2; do
+	check "owners: spec assigns no lead without a lead account, $build (#127 R5)" sh -c '! grep -q "owner of specifications\|remove-assignee\|--assignee" "$1"' _ "$tmp/$build/skills/spec/SKILL.md"
+done
+check 'owners: spec without an owner account adds no one to the idea (#127 R2, R5)' sh -c '! grep -q "add-assignee" "$1"' _ "$tmp/build2/skills/spec/SKILL.md"
+for build in mention-full build3 iris-build build2; do
+	check "owners: changing a specification leaves the assignees, $build (#127 R6)" bullet_has "$tmp/$build/skills/spec/SKILL.md" 'Assignees are left as they are' \
+		'changing a specification, moving it on the board or' 'closing it adds or removes none.'
+	check "owners: no other skill assigns issues, $build (#127 R7)" sh -c 'cd "$1/skills" && ! grep -rlE "add-assignee|remove-assignee|gh issue (create|edit)[^\`]*--assignee" . | grep -vE "^\./(idea|spec)/SKILL\.md$"' _ "$tmp/$build"
+done
+check 'owners: the installer assigns no issue (#127 R7)' sh -c '! grep -q assignee "$1/get-kira.sh" "$1/get-kira.ps1" "$1/scripts/build.sh"' _ "$root"
+
 # --- models of the agents and skills (#97 R1–R4, R6–R9) ----------------------------------
 
 # expected_model NAME: the model an agent or skill declares, or nothing for an unknown one, so

@@ -110,9 +110,21 @@ published; sub-issues have `type:task`.
 
 Read `$ARGUMENTS`:
 
-- **An issue** (`#12` or a URL): `gh issue view <n> --json number,title,body,labels,parent,subIssues`.
+- **An issue** (`#12` or a URL): `gh issue view <n> --json number,title,body,labels,assignees,parent,subIssues`.
   - An **idea** (label `type:idea`, a `[IDEA] ` title, or the headings of the "Idea" form:
     Problem or opportunity, Desired outcome, …): start with step 2.
+{{#analyst_github}}
+    When the idea is not assigned to `{{analyst_github}}`, the owner of ideas, add it before
+    posting questions or publishing, and leave the other assignees in place:
+    `gh issue edit <n> --add-assignee {{analyst_github}}`.
+{{/analyst_github}}
+{{^analyst_github}}
+{{#assistant_github}}
+    When the idea is not assigned to `{{assistant_github}}`, the owner of ideas, add it before
+    posting questions or publishing, and leave the other assignees in place:
+    `gh issue edit <n> --add-assignee {{assistant_github}}`.
+{{/assistant_github}}
+{{/analyst_github}}
   - A **specification**: resume at the first phase whose section is missing, empty, or
     `_To be written._`. Show what is already there in two or three lines first.
   - Read its comments too (`gh issue view <n> --comments`). When the user answered a
@@ -190,6 +202,19 @@ confirmation:
   Then close the idea with a comment pointing to it: `gh issue close <idea> --comment
   "Specified in #<new>."`.
 {{/analyst_github}}
+{{#assistant_github}}
+- Assign the parent to `{{assistant_github}}`, the owner of specifications, when it is first
+  published (when `type:idea` becomes `type:feature`), and leave the other assignees in
+  place: `--assignee {{assistant_github}}` on `gh issue create` for a new issue, and for an
+  idea that becomes the specification in place:
+{{#analyst_github}}
+  `gh issue edit <n> --add-assignee {{assistant_github}} --remove-assignee {{analyst_github}}`.
+{{/analyst_github}}
+{{^analyst_github}}
+  `gh issue edit <n> --add-assignee {{assistant_github}}`.
+{{/analyst_github}}
+  An idea closed for a specification in a new issue keeps its assignees.
+{{/assistant_github}}
 - Labels on the parent, with `gh issue edit --add-label / --remove-label`:
   - add `type:feature`, and remove `type:idea`;
   - once the tasks are published, add `status:specified` and remove
@@ -257,3 +282,5 @@ confirmation:
 - A change to the requirements updates the "Covers" line of every task concerned.
 - The splitting rules apply to specifications written after them: a change does not regroup
   the existing tasks of a published specification, unless the user asks for it.
+- Assignees are left as they are: changing a specification, moving it on the board or
+  closing it adds or removes none.
