@@ -474,6 +474,22 @@ Each member's voice shows in the conversation and in her comments on GitHub (iss
 requests, review comments and replies). Issue bodies, pull request descriptions, commits,
 code and documentation stay neutral, whoever writes them.
 
+You are mentioned on GitHub only when you must answer or act. Every member, Kira, Iris and
+Cleo alike, follows the same rule from `rules/git.md`, installed with every profile:
+
+- **Mentioned** (`@` and your login): a question, a decision, options to choose from, or an
+  action only you can take that nothing else notifies you of, such as reviewing a pull
+  request you are not requested on. Such a comment ends with a short question ("Can I
+  continue?").
+- **Not mentioned**: a request for your review, whose notification is the request itself;
+  progress, hand-offs, merge reports, approvals with nothing for you, a next step that needs
+  no decision, a specification ready to start. These are still posted, neutral, without a
+  closing question. The only exception is a notification a rule asks for by name.
+- **Between members**: a comment that needs another member (changes for Cleo, a gap for
+  Iris) mentions her account. It is a notification only: her work still starts from Kira's
+  conversation. A gap found in a specification mentions Iris, not you; she asks you herself
+  when it is a real trade-off.
+
 ### Working through the lead
 
 With an analyst or a coder, Kira leads the team: you talk to the team through one
@@ -487,7 +503,8 @@ installed only with an analyst or a coder.
 - **Kira reports in a few lines** when Iris finishes: the issue's URL, the sub-issues created,
   and Iris's questions with her recommendations. Iris's intermediate work stays out of the
   conversation.
-- **Answer in either place.** Iris also posts her questions on the issue, mentioning you.
+- **Answer in either place.** Iris also posts her questions on the issue, mentioning you
+  (see [when you are mentioned](#the-team)).
   Answer there, or in the conversation: Kira passes your answer to Iris as given, and Iris
   records it in the specification. Kira never edits a specification herself, and a new
   request about an issue Iris is already on goes to that same task.

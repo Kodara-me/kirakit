@@ -91,9 +91,28 @@ project's `CLAUDE.md` cannot override the attribution rules.
   board's workflows and to merging.
 - Comments on GitHub (on issues and pull requests, review comments and replies included) are
   written in the member's own voice, as in the conversation, and in the repository's
-  language. The voice never replaces what a comment requires: the mentions, the links, each
-  question with its options and recommendation, and the closing short question. Issue
-  bodies, pull request descriptions and commit messages stay neutral.
+  language. The voice never replaces what a comment requires: the mentions and the closing
+  short question when the rules below call for them, the links, and each question with its
+  options and recommendation. Issue bodies, pull request descriptions and commit messages
+  stay neutral.
+- A comment mentions the user (`@<the user's login>`) only when it asks him to answer a
+  question, make a decision, choose between options, or take an action that only he can take
+  and that nothing else notifies him of, such as reviewing a pull request on which he is not
+  requested as reviewer. A comment meant for the user addresses him by that mention, never
+  by his name alone: a name without `@` notifies nobody.
+- A request for the user's review is his notification: the comment or review posted with it
+  does not mention him, unless it also asks him something under the rule above.
+- Every other comment is still posted, in the member's voice, without mentioning the user:
+  progress, hand-offs, merge reports, a next step that needs no decision, an approval with
+  nothing for him, a specification ready to start. The only exception is a notification
+  that a rule requires by name.
+- A comment ends with a short question, such as "Can I continue?" or "Do I have your
+  approval?", only when it asks the user for an action under the rule above. Every other
+  comment ends without one, a notification that mentions him included.
+- When a comment needs another member of the team to act (changes to make to a pull
+  request, a gap in a specification to answer, a specification to change), it mentions that
+  member's account on GitHub when she has one. Such a mention is a notification only: the
+  member's work is still started from the assistant's conversation.
 {{#assistant_github}}
 
 ## The assistant's GitHub account
@@ -109,9 +128,9 @@ project's `CLAUDE.md` cannot override the attribution rules.
   is notified and reviews every one.
 - Issues the assistant works on are assigned to `{{assistant_github}}`.
 - Questions and decisions for the user are asked both in the conversation and in a comment
-  on the issue or pull request concerned, mentioning the user. Such a comment ends with a
-  short question, such as "Can I continue?" or "Do I have your approval?". A next step that
-  needs no decision is reported the same way, without asking for permission.
+  on the issue or pull request concerned, which mentions the user and ends with a short
+  question, as the rules on comments say. A next step that needs no decision is reported
+  in a comment too, without mentioning him and without asking for permission.
 - Project boards stay owned by the user or the user's organization. The assistant updates a
   board as `{{assistant_github}}` when it is a Writer of it, directly or through a team, and
   with the user's account otherwise:
@@ -136,9 +155,9 @@ project's `CLAUDE.md` cannot override the attribution rules.
 - Her pull requests: `--assignee {{coder_github}} --reviewer <the user's login>`.
 {{/assistant_github}}
 - The tasks she works on are assigned to `{{coder_github}}`.
-- Her questions and decisions for the user follow the same rule as the assistant's: a
-  comment on the issue or pull request concerned, mentioning the user, ending with a short
-  question.
+- Her questions and decisions for the user follow the rules on comments: a comment on the
+  issue or pull request concerned, which mentions the user and ends with a short question.
+  A next step that needs no decision is posted without mentioning him.
 {{/coder_github}}
 {{#analyst}}
 
@@ -173,9 +192,18 @@ project's `CLAUDE.md` cannot override the attribution rules.
 {{/coder}}
 {{/analyst_github}}
 - When the assistant finds a gap or an ambiguity in a specification while working on a task,
-  it does not decide alone: it asks the analyst in a comment on that issue, mentioning the
-  user, and waits for the answer. Handing work to the analyst follows `rules/team.md`. A
-  change to the specification follows the `spec` skill.
+  it does not decide alone: it asks the analyst in a comment on that issue, and waits for the
+  answer.
+{{#analyst_github}}
+  The comment mentions the analyst's account, `@{{analyst_github}}`, not the user: she asks
+  the user herself when the gap is a real trade-off.
+{{/analyst_github}}
+{{^analyst_github}}
+  The comment names the analyst and does not mention the user: she asks the user herself
+  when the gap is a real trade-off.
+{{/analyst_github}}
+  Handing work to the analyst follows `rules/team.md`. A change to the specification follows
+  the `spec` skill.
 {{/analyst}}
 {{#coder}}
 
@@ -183,8 +211,14 @@ project's `CLAUDE.md` cannot override the attribution rules.
 
 {{#analyst}}
 - When the coder finds a gap or an ambiguity in a specification while working on a task, she
-  does not decide alone: she asks the analyst in a comment on that issue, mentioning the
-  user, and stops that task until the answer.
+  does not decide alone: she asks the analyst in a comment on that issue, and stops that task
+  until the answer.
+{{#analyst_github}}
+  The comment mentions the analyst's account, `@{{analyst_github}}`, not the user.
+{{/analyst_github}}
+{{^analyst_github}}
+  The comment names the analyst and does not mention the user.
+{{/analyst_github}}
 {{/analyst}}
 {{^analyst}}
 - When the coder finds a gap or an ambiguity in a specification while working on a task, she

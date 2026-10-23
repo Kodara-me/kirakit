@@ -78,7 +78,11 @@ apply in the assistant's session; the coder follows her own persona.
   - `not ready`: CI is still running; the assistant waits for the pending checks in a
     background step and runs `review-pr` again;
   - anything under "For the user" in the result is said to the user when the assistant
-    requests the user's review, and in its report;
+    requests the user's review, and in its report. The review request is the user's
+    notification (`rules/git.md`): the review it posts mentions him only when a "For the
+    user" item is a question for him, and then ends with a short question; a
+    security-sensitive change alone calls for no mention, since it is in the review he is
+    asked to read;
   - on approval, it requests the user's review (`gh pr edit <n> --add-reviewer <the user's
     login>`) and moves the pull request to In review with the `board-status` skill
 {{#assistant_github}}

@@ -655,6 +655,81 @@ check 'roles: the analyst has Triage or Write (#39 R6)' contains "$rules" 'Her r
 check 'roles: no analyst role without her account (#39 R6)' sh -c '! grep -q "Triage" "$1"' _ "$tmp/analyst-no-login/rules/git.md"
 check 'team rules: no section without an analyst' sh -c '! grep -q "The team\|Iris" "$1"' _ "$tmp/iris-none/rules/git.md"
 
+# --- mentioning the user only when he must answer or act (#137 R1–R7, R9) ----------------
+
+# bullet FILE START: the bullet of FILE whose first line contains START, on one line.
+bullet() {
+	awk -v start="$2" '
+		found && (/^- / || /^#/ || $0 == "") { exit }
+		!found && index($0, start) && /^ *- / { found = 1 }
+		found && !/^\{\{/ { sub(/^ +/, ""); printf "%s ", $0 }
+	' "$1"
+}
+# bullet_has FILE START TEXT...: whether that bullet holds every TEXT.
+bullet_has() {
+	text=$(bullet "$1" "$2")
+	[ -n "$text" ] || return 1
+	shift 2
+	for wanted in "$@"; do
+		printf '%s\n' "$text" | grep -qF -- "$wanted" || return 1
+	done
+}
+# bullet_lacks FILE START TEXT: whether that bullet exists and does not hold TEXT.
+bullet_lacks() {
+	text=$(bullet "$1" "$2")
+	[ -n "$text" ] && ! printf '%s\n' "$text" | grep -qF -- "$3"
+}
+$shell "$root/scripts/build.sh" -o "$tmp/mention-full" --analyst --analyst-github iris-bot \
+	--assistant 'Kira <kira@example.com>' --assistant-signing-key /keys/kira.pub --assistant-github kira-bot \
+	--coder 'Cleo <cleo@example.com>' --coder-signing-key /keys/cleo.pub --coder-github cleo-bot \
+	--co-author 'Kira <kira@example.com>' >/dev/null
+check 'mention: full build has no placeholder' no_placeholder "$tmp/mention-full"
+# With and without the members' accounts (R9).
+for build in build2 build3 commit-coder-solo iris-build mention-full; do
+	rules=$tmp/$build/rules/git.md
+	check "mention: the user when he must answer or act, $build (R1)" bullet_has "$rules" 'A comment mentions the user' \
+		"only when it asks him to answer a question, make a decision, choose between options, or take an action that only he can take and that nothing else notifies him of" \
+		'reviewing a pull request on which he is not requested as reviewer'
+	check "mention: the review request is his notification, $build (R2)" bullet_has "$rules" "A request for the user's review is his notification" \
+		'does not mention him, unless it also asks him something'
+	check "mention: every other comment posted neutral, $build (R3)" bullet_has "$rules" 'Every other comment is still posted' \
+		"in the member's voice, without mentioning the user" 'merge reports' 'a next step that needs no decision' \
+		'a specification ready to start' 'a notification that a rule requires by name'
+	check "mention: closing question only on a question for him, $build (R4)" bullet_has "$rules" 'A comment ends with a short question' \
+		'"Can I continue?"' 'only when it asks the user for an action under the rule above' 'Every other comment ends without one'
+	check "mention: members mention each other as a notification, $build (R5)" bullet_has "$rules" 'When a comment needs another member of the team to act' \
+		"mentions that member's account on GitHub" 'Such a mention is a notification only'
+	check "mention: by @login, never by name alone, $build (R7)" bullet_has "$rules" 'A comment mentions the user' \
+		'(`@<the user'"'"'s login>`)' 'never by his name alone'
+	check "mention: mentions kept only when called for, $build (R1, R4)" bullet_has "$rules" 'Comments on GitHub' \
+		'the mentions and the closing short question when the rules below call for them'
+	check "mention: \"Can I continue?\" only under the rule, $build (R4)" \
+		test "$(grep -c 'Can I continue?' "$rules")" = 1
+done
+full=$tmp/mention-full/rules/git.md
+check 'mention: the assistant asks the user with a mention (R1, R4)' bullet_has "$full" 'Questions and decisions for the user are asked' \
+	'which mentions the user and ends with a short question' 'without mentioning him and without asking for permission'
+check 'mention: the coder asks the user with a mention (R1, R4)' bullet_has "$full" 'Her questions and decisions for the user' \
+	'which mentions the user and ends with a short question' 'is posted without mentioning him'
+for build in mention-full iris-build commit-coder analyst-no-login; do
+	rules=$tmp/$build/rules/git.md
+	check "mention: the assistant's gap does not mention the user, $build (R6)" \
+		bullet_lacks "$rules" 'When the assistant finds a gap' 'mentioning the user'
+done
+check "mention: the assistant's gap names the analyst without her account (R6)" bullet_has "$tmp/analyst-no-login/rules/git.md" \
+	'When the assistant finds a gap' 'names the analyst and does not mention the user'
+check "mention: the analyst's account mentioned for a gap (R5, R6)" bullet_has "$full" 'When the assistant finds a gap' 'mentions the analyst'"'"'s account, `@iris-bot`'
+check "mention: the coder's gap mentions the analyst's account (R5, R6)" bullet_has "$full" 'When the coder finds a gap' 'mentions the analyst'"'"'s account, `@iris-bot`, not the user'
+check "mention: the coder's gap names the analyst without her account (R6)" bullet_has "$tmp/commit-coder/rules/git.md" 'When the coder finds a gap' 'names the analyst and does not mention the user'
+check "mention: the coder's gap does not mention the user with an analyst (R6)" bullet_lacks "$full" 'When the coder finds a gap' 'mentioning the user'
+check 'mention: without an analyst, the gap goes to the user (R6)' bullet_has "$tmp/commit-coder-solo/rules/git.md" 'When the coder finds a gap' \
+	'she asks the user in a comment on that issue, mentioning the user'
+team=$tmp/mention-full/rules/team.md
+check 'mention: the review request notifies the user, in the lead rules (R2)' contains "$team" "The review request is the user's"
+check 'mention: a "For the user" question makes the review mention him (R1, R2)' contains "$team" 'user" item is a question for him, and then ends with a short question'
+check 'mention: a security-sensitive change alone calls for no mention (R2)' contains "$team" 'security-sensitive change alone calls for no mention'
+check 'mention: README says when the user is mentioned (R9)' sh -c 'grep -q "^You are mentioned on GitHub only when you must answer or act" "$1" && grep -q "^- \*\*Not mentioned\*\*: a request for your review" "$1" && grep -q "^- \*\*Between members\*\*" "$1"' _ "$root/README.md"
+
 # --- models of the agents and skills (#97 R1–R4, R6–R9) ----------------------------------
 
 # expected_model NAME: the model an agent or skill declares, or nothing for an unknown one, so
