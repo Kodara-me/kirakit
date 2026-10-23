@@ -83,6 +83,7 @@ apply in the assistant's session; the coder follows her own persona.
     user" item is a question for him, and then ends with a short question; a
     security-sensitive change alone calls for no mention, since it is in the review he is
     asked to read;
+{{^complete_approved_prs}}
   - on approval, it requests the user's review (`gh pr edit <n> --add-reviewer <the user's
     login>`) and moves the pull request to In review with the `board-status` skill
 {{#assistant_github}}
@@ -91,6 +92,31 @@ apply in the assistant's session; the coder follows her own persona.
 {{^assistant_github}}
     (`board-status <n> In review`);
 {{/assistant_github}}
+{{/complete_approved_prs}}
+{{#complete_approved_prs}}
+  - on approval, before posting it, the assistant checks whether the pull request can be
+    completed without the user's review. It can only when all of these hold:
+    - its CI checks all pass, or the result says the repository has no CI check and the
+      assistant decides it can be completed without the user; it may run the project's
+      tests in a background agent before deciding, and states that decision and its reason
+      in its approving review;
+    - the result's "For the user" part says `Nothing.`;
+    - the assistant has no question, remark or disagreement for the user;
+    - it closes at least one task;
+    - the user has neither submitted a review requesting changes on it, nor asked to review
+      it or the pull requests of its specification.
+
+    When they all hold, the assistant completes it as below, without requesting the user's
+    review. Otherwise it requests the user's review (`gh pr edit <n> --add-reviewer <the
+    user's login>`), moves the pull request to In review with the `board-status` skill
+{{#assistant_github}}
+    (`board-status <n> In review --as {{assistant_github}}`),
+{{/assistant_github}}
+{{^assistant_github}}
+    (`board-status <n> In review`),
+{{/assistant_github}}
+    and says which condition failed, in its review and in its report;
+{{/complete_approved_prs}}
   - on changes requested, by the assistant or by the user, it hands the pull request back to
     the coder, who makes the changes, replies to the review comments and requests the
     assistant's review again. First it counts the pull request's reviews in the state
@@ -103,10 +129,35 @@ apply in the assistant's session; the coder follows her own persona.
   the coder ran on (Sonnet or Opus), the number of reviews in the state "changes requested"
   the pull request has had so far, and any question for the user. Her intermediate output
   stays out of the conversation.
+{{^complete_approved_prs}}
 - A pull request is merged only when the user's own latest review is an approval submitted
   after its last commit (`gh pr view <n> --json reviews,commits`), never on `reviewDecision`
   alone: the assistant's approval counts there too. Then the merge follows the usual rules,
   and the assistant runs `next-task` and hands the task it gives to the coder.
+{{/complete_approved_prs}}
+{{#complete_approved_prs}}
+- Completing a pull request of the coder without the user: the assistant adds the label
+  `review:lead-only` to it (`gh pr edit <n> --add-label review:lead-only`), creating the
+  label first when the repository has none (`gh label create review:lead-only --description
+  "Merged on the lead's review alone"`), then merges it by the usual rules (fast-forward
+  only, branches deleted, board moves). It mentions the user nowhere on GitHub for it, and
+  its report in the conversation, in the usual few lines, says that it was merged without
+  his review. When the pull request cannot be merged by fast-forward, the usual rebase flow
+  applies; once rebased and approved again by the assistant, the conditions above are
+  checked again.
+- When a pull request completed without the user closes the last open task of a
+  specification, the assistant posts a comment on that specification that mentions the user
+  and lists every pull request of that specification completed without his review, with
+  its link and title (`gh pr list --state merged --label review:lead-only`, keeping those
+  that close one of its tasks), and says so in one line in the conversation. For a task with
+  no specification, the same comment goes on the task. The comment asks nothing.
+- A pull request is merged only when the user's own latest review is an approval submitted
+  after its last commit (`gh pr view <n> --json reviews,commits`), never on `reviewDecision`
+  alone: the assistant's approval counts there too; or, for a pull request of the coder, when
+  the assistant completes it without the user, as above. A pull request the assistant wrote
+  itself always waits for the user's own approval. Then the merge follows the usual rules,
+  and the assistant runs `next-task` and hands the task it gives to the coder.
+{{/complete_approved_prs}}
 {{/coder}}
 {{#analyst}}
 

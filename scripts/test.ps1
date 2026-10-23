@@ -148,7 +148,32 @@ foreach ($step in $steps) {
     $run = Invoke-Installer $complete 'main' 'C' (@('-Copy', '-Assistant', 'Kira <kira@example.com>', '-Coder', 'Cleo <cleo@example.com>') + $step.Arguments)
     Test-Check "complete: $($step.Name) (#122 R1)" ($run.Status -eq 0 -and (Test-ProfileLine $complete $step.Expected)) `
         (($run.Lines | ForEach-Object { "$_" }) -join "`n")
+    # #122 R3-R10 with the setting on and a coder; R2 with it off.
+    $team = Get-Content -Raw -LiteralPath (Join-Path (Join-Path $complete 'rules') 'team.md')
+    $rules = $team.Contains('`review:lead-only`') -and $team.Contains('and says which condition failed') -and
+        $team.Contains('itself always waits for the user''s own approval.') -and
+        $team.Contains('no specification, the same comment goes on the task.') -and
+        $team.Contains('once rebased and approved again by the assistant, the conditions above are')
+    if ($step.Expected -eq 'complete_approved_prs=yes') {
+        Test-Check "complete: $($step.Name), completion rules installed (#122 R3, R4, R5, R6, R7, R8, R9, R10)" $rules
+    } else {
+        Test-Check "complete: $($step.Name), no completion rule (#122 R2)" `
+            (-not $rules -and -not $team.Contains('review:lead-only'))
+    }
 }
+
+# #122 R2: with the setting on and no coder, the installed files are those without it.
+$nocoderOn = Join-Path $tmp 'complete-nocoder-on'
+$nocoderOff = Join-Path $tmp 'complete-nocoder-off'
+$runOn = Invoke-Installer $nocoderOn 'main' 'C' @('-Copy', '-Assistant', 'Kira <kira@example.com>', '-CompleteApprovedPrs')
+$runOff = Invoke-Installer $nocoderOff 'main' 'C' @('-Copy', '-Assistant', 'Kira <kira@example.com>')
+$same = $runOn.Status -eq 0 -and $runOff.Status -eq 0
+foreach ($path in @('CLAUDE.md', (Join-Path 'rules' 'git.md'))) {
+    $on = Get-Content -Raw -LiteralPath (Join-Path $nocoderOn $path)
+    $off = Get-Content -Raw -LiteralPath (Join-Path $nocoderOff $path)
+    if ($on -cne $off) { $same = $false }
+}
+Test-Check 'complete: on without a coder, the files without the setting (#122 R2)' $same
 
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 if ($failures) {

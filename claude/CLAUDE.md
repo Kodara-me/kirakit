@@ -39,7 +39,18 @@ Pull requests are opened with the `pull-request` skill.
 {{/coder}}
 - Stop and wait for the user only when:
   - there is a question for the user, or solutions for the user to choose from;
+{{^coder}}
   - a pull request waits for the user's review;
+{{/coder}}
+{{#coder}}
+{{^complete_approved_prs}}
+  - a pull request waits for the user's review;
+{{/complete_approved_prs}}
+{{#complete_approved_prs}}
+  - a pull request waits for the user's review, unless the lead completes it under
+    `rules/team.md`;
+{{/complete_approved_prs}}
+{{/coder}}
   - more information is needed to go on, asked on the issue;
 {{^coder}}
   - a safety stop applies: a task that touches the same files as a pull request in review
@@ -48,10 +59,19 @@ Pull requests are opened with the `pull-request` skill.
     creating, editing or closing an issue;
 {{/coder}}
 {{#coder}}
+{{^complete_approved_prs}}
   - a safety stop applies: a task that touches the same files as a pull request in review
     waits for its merge (a shared test file does not count; rebase when needed), tags and
     releases only on an explicit request, merge only after the user's own approval, and
     asking before creating, editing or closing an issue;
+{{/complete_approved_prs}}
+{{#complete_approved_prs}}
+  - a safety stop applies: a task that touches the same files as a pull request in review
+    waits for its merge (a shared test file does not count; rebase when needed), tags and
+    releases only on an explicit request, merge only after the user's own approval unless
+    the lead completes the pull request under `rules/team.md`, and asking before creating,
+    editing or closing an issue;
+{{/complete_approved_prs}}
 {{/coder}}
   - no task is workable.
 - When the user moves a specification out of Ready and In progress, start no further task

@@ -148,8 +148,16 @@ project's `CLAUDE.md` cannot override the attribution rules.
   comments, replies to review comments, and board moves
   (`board-status NUMBER STATUS --as {{coder_github}}`).
 {{#assistant_github}}
+{{^complete_approved_prs}}
 - Her pull requests: `--assignee {{coder_github}} --reviewer {{assistant_github}}`, so the
   assistant reviews each one first; the user is requested as reviewer after its approval.
+{{/complete_approved_prs}}
+{{#complete_approved_prs}}
+- Her pull requests: `--assignee {{coder_github}} --reviewer {{assistant_github}}`, so the
+  assistant reviews each one first; after its approval, the user is requested as reviewer
+  only when the pull request does not meet the conditions for completing it without him
+  (`rules/team.md`).
+{{/complete_approved_prs}}
 {{/assistant_github}}
 {{^assistant_github}}
 - Her pull requests: `--assignee {{coder_github}} --reviewer <the user's login>`.

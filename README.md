@@ -180,6 +180,21 @@ The git rules (`rules/git.md`, which Claude Code loads on its own) follow the pr
   her own GitHub account (`--coder-github`), her pull requests, comments, replies and board
   moves are written as that account, and her pull requests ask for the assistant's review.
 
+  With `--complete-approved-prs` (off by default; it applies only with a coder), the
+  assistant completes a pull request of the coder on its own approval, without requesting
+  your review, when all of these hold: its CI checks all pass, or the repository has none
+  and the assistant decides it can, giving its reason in its review; the review's "For the
+  user" part says `Nothing.`; the assistant has no question, remark or disagreement for you;
+  it closes at least one task; and you have neither requested changes on it nor asked to
+  review it or its specification's pull requests. It then labels the pull request
+  `review:lead-only`, merges it by the usual rules and mentions you nowhere on GitHub for
+  it. When any condition fails, it falls back to the usual flow: it requests your review,
+  moves the pull request to In review and says which condition failed. When such a pull
+  request closes the last open task of a specification (or a task with no specification),
+  the assistant posts a comment there that mentions you and lists every pull request of it
+  merged without your review. The assistant's own pull requests always wait for your
+  approval.
+
 The installer also sets `"attribution": {"commit": "", "pr": ""}` in `settings.json`, so
 Claude Code stops suggesting its own trailer and pull request footer. If `attribution` is
 already set to something else, it is left unchanged, with a warning.

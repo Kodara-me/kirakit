@@ -1178,6 +1178,58 @@ for path in rules CLAUDE.md skills agents; do
 	check "complete: off, $path as the build without the option (R2)" \
 		diff -r "$tmp/complete-build/$path" "$claude/$path"
 done
+check 'complete: off, no completion rule with a coder (R2)' \
+	sh -c '! grep -rqF -e "review:lead-only" -e "completed without" -e "unless the lead completes" "$1"' _ "$tmp/complete-build"
+
+# R2: with the setting on and no coder, the build is the one without the option.
+complete_build() {
+	out=$1
+	shift
+	$shell "$root/scripts/build.sh" -o "$out" --name Alex --gender female --language auto \
+		--co-author 'Kira <kira@example.com>' --assistant 'Kira <kira@example.com>' \
+		--assistant-github kira-bot "$@" >/dev/null
+}
+complete_build "$tmp/complete-nocoder-on" --complete-approved-prs
+complete_build "$tmp/complete-nocoder-off"
+check 'complete: on without a coder, the build without the option (R2)' \
+	diff -r "$tmp/complete-nocoder-off" "$tmp/complete-nocoder-on"
+
+# R3-R10: the completion rules, with the setting on and a coder.
+complete_build "$tmp/complete-on" --coder 'Cleo <cleo@example.com>' --coder-github cleo-bot \
+	--complete-approved-prs
+complete_build "$tmp/complete-off" --coder 'Cleo <cleo@example.com>' --coder-github cleo-bot
+on_team=$tmp/complete-on/rules/team.md
+off_team=$tmp/complete-off/rules/team.md
+check 'complete: on, team.md checks the conditions (R3)' contains "$on_team" 'completed without the user'"'"'s'
+check 'complete: on, team.md completes without the review (R3)' contains "$on_team" 'without requesting the user'"'"'s'
+check 'complete: on, team.md merges by the usual rules (R3)' contains "$on_team" 'only, branches deleted, board moves)'
+check 'complete: on, condition CI checks (R4)' contains "$on_team" '- its CI checks all pass, or the result says the repository has no CI check and the'
+check 'complete: on, condition For the user (R4)' contains "$on_team" '- the result'"'"'s "For the user" part says `Nothing.`;'
+check 'complete: on, condition no question (R4)' contains "$on_team" '- the assistant has no question, remark or disagreement for the user;'
+check 'complete: on, condition closes a task (R4)' contains "$on_team" '- it closes at least one task;'
+check 'complete: on, condition user review (R4)' contains "$on_team" '- the user has neither submitted a review requesting changes on it, nor asked to review'
+check 'complete: on, no CI check, decision and reason (R5)' contains "$on_team" 'tests in a background agent before deciding, and states that decision and its reason'
+check 'complete: on, fallback to the user'"'"'s review (R6)' contains "$on_team" 'and says which condition failed, in its review and in its report;'
+check 'complete: on, fallback moves to In review (R6)' contains "$on_team" '(`board-status <n> In review --as kira-bot`),'
+check 'complete: on, the lead'"'"'s own pull requests wait (R7)' contains "$on_team" 'itself always waits for the user'"'"'s own approval.'
+check 'complete: on, the label marks it (R8)' contains "$on_team" '`review:lead-only` to it (`gh pr edit <n> --add-label review:lead-only`), creating the'
+check 'complete: on, no mention of the user (R8)' contains "$on_team" 'only, branches deleted, board moves). It mentions the user nowhere on GitHub for it, and'
+check 'complete: on, reported as merged without review (R8)' contains "$on_team" 'his review. When the pull request cannot be merged by fast-forward, the usual rebase flow'
+check 'complete: on, notification on the specification (R9)' contains "$on_team" 'specification, the assistant posts a comment on that specification that mentions the user'
+check 'complete: on, notification lists the pull requests (R9)' contains "$on_team" '(`gh pr list --state merged --label review:lead-only`, keeping those'
+check 'complete: on, notification on a task alone (R9)' contains "$on_team" 'no specification, the same comment goes on the task. The comment asks nothing.'
+check 'complete: on, rebase then conditions again (R10)' contains "$on_team" 'applies; once rebased and approved again by the assistant, the conditions above are'
+check 'complete: on, git.md requests the user only when needed (R3, R6)' \
+	contains "$tmp/complete-on/rules/git.md" 'only when the pull request does not meet the conditions for completing it without him'
+check 'complete: on, CLAUDE.md stop list allows completing (R3)' \
+	contains "$tmp/complete-on/CLAUDE.md" '  - a pull request waits for the user'"'"'s review, unless the lead completes it under'
+check 'complete: on, CLAUDE.md merge stop allows completing (R3)' \
+	contains "$tmp/complete-on/CLAUDE.md" 'merge only after the user'"'"'s own approval unless'
+check 'complete: on, no placeholder left (R3)' no_placeholder "$tmp/complete-on"
+check 'complete: off, no completion rule in team.md (R2)' \
+	sh -c '! grep -qF -e "review:lead-only" -e "completed without" "$1"' _ "$off_team"
+check 'complete: off, the user'"'"'s review is requested (R2)' \
+	contains "$off_team" '  - on approval, it requests the user'"'"'s review (`gh pr edit <n> --add-reviewer <the user'"'"'s'
 
 # A profile saved before the setting reads as off, and nothing is asked.
 claude=$tmp/complete-earlier
@@ -1192,6 +1244,9 @@ check 'complete: earlier profile not asked (R1)' sh -c '! grep -q "no terminal t
 check 'complete: README lists the option (R11)' contains "$root/README.md" '| `--complete-approved-prs` |'
 check 'complete: README lists the no option (R11)' contains "$root/README.md" '| `--no-complete-approved-prs` |'
 check 'complete: README lists the profile key (R11)' contains "$root/README.md" '`complete_approved_prs` (`yes` or `no`, default `no`)'
+check 'complete: README describes the conditions (R11)' contains "$root/README.md" 'it closes at least one task; and you have neither requested changes on it nor asked to'
+check 'complete: README describes the fallback (R11)' contains "$root/README.md" 'it. When any condition fails, it falls back to the usual flow: it requests your review,'
+check 'complete: README describes the notification (R11)' contains "$root/README.md" 'the assistant posts a comment there that mentions you and lists every pull request of it'
 
 # --- dry run -------------------------------------------------------------------------------
 
