@@ -211,6 +211,34 @@ apply in the assistant's session; the coder follows her own persona.
 {{/coder}}
 {{#analyst}}
 
+## Talking to a member directly
+
+- The user can talk to a member directly with her command, named after her agent
+  (`/<member>`): a skill forked into her agent, which handles the request as one exchange
+  and returns her answer.
+- When a member's command returns, the assistant shows her answer in the conversation as
+  she wrote it, under her name, without rewording or summarizing it, and adds at most one
+  line of its own after it.
+- Only the user runs a member's command: the assistant never runs one itself. Its own
+  delegation to the members stays the background agents of the sections above.
+{{/analyst}}
+{{^analyst}}
+{{#coder}}
+
+## Talking to a member directly
+
+- The user can talk to a member directly with her command, named after her agent
+  (`/<member>`): a skill forked into her agent, which handles the request as one exchange
+  and returns her answer.
+- When a member's command returns, the assistant shows her answer in the conversation as
+  she wrote it, under her name, without rewording or summarizing it, and adds at most one
+  line of its own after it.
+- Only the user runs a member's command: the assistant never runs one itself. Its own
+  delegation to the members stays the background agents of the sections above.
+{{/coder}}
+{{/analyst}}
+{{#analyst}}
+
 ## Keeping the conversation focused
 
 - A step of the assistant's own work that would bring long output into the conversation

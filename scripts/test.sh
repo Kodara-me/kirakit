@@ -1046,6 +1046,24 @@ for agent_file in "$full"/agents/*.md; do
 	[ ! -f "$style" ] || check "models: style $agent without a model (#97 R1, #131 R1)" test -z "$(front "$style" model)"
 done
 check 'models: the README says the members'"'"' sessions use your model (#97 R8)' contains "$root/README.md" 'The lead'"'"'s and the analyst'"'"'s own sessions'
+
+# A member's direct answer, in the lead's rules and the README (#120 R6, R7, R11).
+for build in commit-coder iris-build commit-coder-solo; do
+	team=$tmp/$build/rules/team.md
+	check "commands: the lead shows her answer as is, $build (#120 R6)" sh -c 'grep -qx "## Talking to a member directly" "$1" && grep -qF "When a member'"'"'s command returns, the assistant shows her answer in the conversation as" "$1" && grep -qF "she wrote it, under her name, without rewording or summarizing it, and adds at most one" "$1"' _ "$team"
+	check "commands: only the user runs them, $build (#120 R7)" sh -c 'grep -qF "Only the user runs a member'"'"'s command: the assistant never runs one itself. Its own" "$1" && grep -qF "delegation to the members stays the background agents of the sections above." "$1"' _ "$team"
+	check "commands: the rule once, $build (#120 R6)" test "$(grep -c '^## Talking to a member directly$' "$team")" = 1
+done
+check 'commands: no rule without a team (#120 R6)' test ! -e "$tmp/build2/rules/team.md"
+readme_commands() {
+	awk '/^### Talking to a member from the conversation$/ { found = 1; next } found && /^#/ { exit } found' "$root/README.md"
+}
+check 'commands: README explains how to talk to a member (#120 R11)' sh -c 'printf "%s\n" "$1" | grep -qF "Each member has a command named after her, \`/iris\` with an analyst and \`/cleo\` with a coder," && printf "%s\n" "$1" | grep -qF "Type it with your request"' _ "$(readme_commands)"
+check 'commands: README says how they run and their models (#120 R11)' sh -c 'printf "%s\n" "$1" | grep -qF "The command runs forked" && printf "%s\n" "$1" | grep -qF "\`/iris\` runs on Opus and \`/cleo\` on Sonnet"' _ "$(readme_commands)"
+check 'commands: README says the lead shows her answer and never runs them (#120 R6, R7, R11)' sh -c 'printf "%s\n" "$1" | grep -qF "The lead shows her answer as she wrote it" && printf "%s\n" "$1" | grep -qF "the lead never runs one itself"' _ "$(readme_commands)"
+for member in iris cleo; do
+	check "commands: README lists /$member with its model, forked (#120 R11)" grep -q "^| \`$member\` (skill) | .*\`/$member\`.* | $(expected_model "$member") | forked |\$" "$root/README.md"
+done
 mkdir -p "$blocks/team"
 printf '%s\n' --- 'name: Bad' 'description: no model' 'delegate: Use Bad.' --- '' 'Body.' >"$blocks/team/bad.md"
 check 'models: rejects a member without a model (#97 R7)' sh -c '! $1 "$2/scripts/build.sh" -o "$3" 2>"$4" >/dev/null && grep -q "bad.md: missing model" "$4"' _ "$shell" "$blocks" "$tmp/x" "$tmp/x.err"

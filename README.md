@@ -578,6 +578,27 @@ With a coder, code goes through Cleo the same way:
 - A gap Cleo finds in a specification goes to Iris (to you, without an analyst) in a comment
   on the issue, and that task waits for the answer.
 
+### Talking to a member from the conversation
+
+Each member has a command named after her, `/iris` with an analyst and `/cleo` with a coder,
+available in every session. Type it with your request, for example
+`/iris is the second requirement of #120 testable?`, and the member handles it in her own
+persona, under her own rules and on her agent's model, without leaving the conversation:
+
+- **One exchange.** The command runs forked: the request goes to the member's agent (her
+  persona, model and tools) inside the current session, she answers, and the conversation
+  goes on with the lead. No other session starts, and neither the output style nor the
+  settings change.
+- **Her own words.** The lead shows her answer as she wrote it, under her name, with at most
+  one line of its own after it. Answer one of her questions through the lead, as usual, or
+  with the command again.
+- **Yours only.** Only you run these commands: the lead never runs one itself, and keeps
+  handing work to the members as background agents.
+- **No request.** Typed alone, the command makes the member ask, in one line, what you want
+  from her.
+
+`/iris` runs on Opus and `/cleo` on Sonnet (see [Models](#models)). The lead has no command.
+
 ### Talking to Iris directly
 
 The lead setup changes nothing for a direct conversation with Iris:
@@ -591,7 +612,8 @@ The lead setup changes nothing for a direct conversation with Iris:
 ### Team members
 
 A member is written once, in `team/<name>.md`, and built into both `output-styles/<name>.md`
-and `agents/<name>.md`, with the same body. Its front matter holds `name` and `description`
+and `agents/<name>.md`, with the same body, and into her command, `skills/<name>/SKILL.md`.
+The build fails when a member has the same name as a skill of `claude/skills/`. Its front matter holds `name` and `description`
 for the output style, and `delegate`, the agent's description: when to hand work to this
 member, and `model`, the agent's model, which every member declares: the build fails without
 it. Iris's file sits in a `{{#analyst}}` block and Cleo's in a `{{#coder}}` block, so without
