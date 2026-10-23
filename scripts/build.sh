@@ -100,13 +100,15 @@ With no PERSONA, build every overlay in personas/. Skills are always all built.
   --co-author "NAME <EMAIL>" Co-Authored-By trailer for commits (default: none)
   --assistant "NAME <EMAIL>" The assistant's git identity (default: none)
   --assistant-signing-key PATH
-                             The assistant's public SSH signing key (default: none)
+                             The assistant's public SSH signing key (default: none; with a
+                             coder, the coder then commits its work)
   --assistant-github LOGIN   The assistant's GitHub account (default: none)
   --analyst                  The team has an analyst, Iris (default: no)
   --analyst-github LOGIN     The analyst's GitHub account, with --analyst (default: none)
   --assistant-style PERSONA  The assistant launcher's output style (default: kira-cozy)
   --coder "NAME <EMAIL>"     The coder's git identity (default: none)
-  --coder-signing-key PATH   The coder's public SSH signing key, with --coder (default: none)
+  --coder-signing-key PATH   The coder's public SSH signing key, with --coder (default: none;
+                             the assistant then commits her work)
   --coder-github LOGIN       The coder's GitHub account, with --coder (default: none)
   --complete-approved-prs    The lead may complete the coder's pull requests she approved
                              without the user's review (default: no)
@@ -215,7 +217,9 @@ done
 [ -n "$analyst" ] || analyst_github=
 # Nor do the coder's key and account without a coder.
 [ -n "$coder" ] || coder_signing_key='' coder_github=''
-# With a coder, she commits; the assistant leads and never commits.
+# With a coder, the committer is the coder, who writes and commits the code by default; the
+# assistant commits with its own keys only the code it writes at the user's explicit request,
+# or the coder's work when she has no key.
 if [ -n "$coder" ]; then
 	committer='the coder' committer_name=$coder_name committer_email=$coder_email
 	committer_signing_key=$coder_signing_key

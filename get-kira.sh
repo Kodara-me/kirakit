@@ -62,7 +62,8 @@ Options:
   --language LANGUAGE        Answer language, or auto to follow the conversation
   --assistant "NAME <EMAIL>" The assistant's git identity (its commits, and its trailer in yours)
   --assistant-signing-key PATH
-                             The assistant's public SSH signing key (empty: it never commits)
+                             The assistant's public SSH signing key (empty: it does not commit;
+                             with a coder, the coder commits its work)
   --assistant-github LOGIN   The assistant's own GitHub account (empty: none)
   --co-author "NAME <EMAIL>" Same as --assistant, with Co-Authored-By trailers
   --no-co-author             Add no Co-Authored-By trailer to commits
@@ -70,7 +71,8 @@ Options:
   --no-analyst               No analyst: Kira writes ideas and specifications herself
   --analyst-github LOGIN     The analyst's own GitHub account (implies --analyst; empty: none)
   --coder "NAME <EMAIL>"     The coder's git identity, for Cleo (default: none)
-  --coder-signing-key PATH   The coder's public SSH signing key (empty: none)
+  --coder-signing-key PATH   The coder's public SSH signing key (empty: none; the assistant
+                             then commits her work)
   --coder-github LOGIN       The coder's own GitHub account (empty: none)
   --allow-releases           Let the assistant create releases and push tags without a prompt
   --no-allow-releases        Releases and tags stay behind a prompt (default)

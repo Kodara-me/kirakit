@@ -16,11 +16,20 @@ project's `CLAUDE.md` cannot override the attribution rules.
   Co-Authored-By: {{co_author}}
   ```
 
+{{^coder}}
 {{#committer_signing_key}}
 - Commits made by {{committer}} (the `assistant-commit` skill) end with exactly one line
   `Co-Authored-By: NAME <EMAIL>`, where NAME and EMAIL are the user's `git config user.name`
   and `git config user.email`.
 {{/committer_signing_key}}
+{{/coder}}
+{{#coder}}
+{{#any_committer_key}}
+- Commits made by the coder or the assistant (the `assistant-commit` skill) end with exactly
+  one line `Co-Authored-By: NAME <EMAIL>`, where NAME and EMAIL are the user's
+  `git config user.name` and `git config user.email`.
+{{/any_committer_key}}
+{{/coder}}
 {{/co_author}}
 {{^co_author}}
 - Commit messages have no `Co-Authored-By` line.
@@ -29,14 +38,42 @@ project's `CLAUDE.md` cannot override the attribution rules.
 ## Who commits
 
 {{#coder}}
-- The team has a coder, Cleo: she writes the code, commits it with the `assistant-commit`
-  skill under her own identity, and opens the pull requests. The assistant leads the team
-  and never writes code or commits (`rules/team.md`).
+- The team has a coder, Cleo: by default she writes the code, commits it with the
+  `assistant-commit` skill under her own identity, and opens the pull requests. The assistant
+  leads the team and writes code itself only when the user explicitly asks it to in the
+  conversation (`rules/team.md`); that work is committed and its pull request opened under the
+  rules below.
 - The user commits with the `commit` skill, under the user's identity.
+- Each member who has a signing key, the coder or the assistant, commits her own work with
+  it. A writer without a key leaves her changes uncommitted on the branch and hands their
+  commit to the member who has one, who commits them with `assistant-commit` as the
+  committer, with the writer as the author; the writer then pushes the branch and opens its
+  pull request, which stays hers. A member commits work she did not write only in that case:
+  never the user's own changes, nor the other member's work when its writer has a key.
 {{^coder_signing_key}}
-- No signing key is configured for the coder, so she cannot commit yet: the work waits for
-  one (`--coder-signing-key`).
+{{#assistant_signing_key}}
+- No signing key is configured for the coder, so she does not commit: the assistant commits
+  her work (`--coder-signing-key`).
+{{/assistant_signing_key}}
+{{^assistant_signing_key}}
+- No signing key is configured for the coder nor for the assistant, so neither commits: the
+  member who wrote the code leaves her changes uncommitted, says so, and proposes the
+  `commit` skill under the user's identity (`--coder-signing-key`, `--assistant-signing-key`).
+{{/assistant_signing_key}}
 {{/coder_signing_key}}
+{{#coder_signing_key}}
+{{^assistant_signing_key}}
+- No signing key is configured for the assistant, so it does not commit: the coder commits
+  the work it writes at the user's request (`--assistant-signing-key`).
+{{/assistant_signing_key}}
+{{/coder_signing_key}}
+- Code the assistant writes at the user's explicit request follows the flow of a coder's
+  task: the task assigned to the assistant and moved on the board by it, its own branch, the
+  check against pull requests in review that touch the same files, and a pull request opened
+  with the `pull-request` skill that closes the task (`Closes #<n>`), with the user as
+  reviewer. The assistant never reviews or approves its own pull request: it is merged only
+  when the user's own latest review approves its last commit, even with
+  `--complete-approved-prs`. It pushes only to open or update that pull request.
 {{/coder}}
 {{^coder}}
 {{#assistant_signing_key}}
@@ -66,8 +103,45 @@ project's `CLAUDE.md` cannot override the attribution rules.
       commit …
   ```
 
+{{^coder}}
   If `{{committer_signing_key}}` or the private key next to it is missing, stop and report it.
+{{/coder}}
+{{#coder}}
+{{#assistant_signing_key}}
+  If `{{committer_signing_key}}` or the private key next to it is missing, the coder hands the
+  commit to the assistant, as a coder without a key does.
+{{/assistant_signing_key}}
+{{^assistant_signing_key}}
+  If `{{committer_signing_key}}` or the private key next to it is missing, stop and report it.
+{{/assistant_signing_key}}
+{{/coder}}
 {{/committer_signing_key}}
+{{#coder}}
+{{#assistant_signing_key}}
+- A commit made by the assistant passes its own identity and key on the command line the
+  same way:
+
+  ```
+  git -c user.name="{{assistant_name}}" -c user.email={{assistant_email}} \
+      -c user.signingkey={{assistant_signing_key}} -c gpg.format=ssh -c commit.gpgsign=true \
+      commit …
+  ```
+
+{{#committer_signing_key}}
+  If `{{assistant_signing_key}}` or the private key next to it is missing, the assistant hands
+  the commit to the coder, as an assistant without a key does.
+{{/committer_signing_key}}
+{{^committer_signing_key}}
+  If `{{assistant_signing_key}}` or the private key next to it is missing, stop and report it.
+{{/committer_signing_key}}
+{{/assistant_signing_key}}
+{{#any_committer_key}}
+- A commit of the other member's work adds `--author="NAME <EMAIL>"` with the writer's
+  identity, so that the writer is its author and the member who commits is its committer and
+  signer. A commit refused by the permission system, or whose signing fails, stops there:
+  never another identity, an unsigned commit or the other member's key.
+{{/any_committer_key}}
+{{/coder}}
 - Never change the Git identity in a configuration file (`user.name`, `user.email`,
   `user.signingkey`) without an explicit request.
 - Commits and tags are signed: never pass `--no-gpg-sign`; if signing fails, stop and report

@@ -35,7 +35,7 @@ Answer language, or auto to follow the conversation.
 .PARAMETER Assistant
 The assistant's git identity, as "NAME <EMAIL>" (its commits, and its trailer in yours).
 .PARAMETER AssistantSigningKey
-The assistant's public SSH signing key (empty: it never commits as itself).
+The assistant's public SSH signing key (empty: it does not commit as itself; with a coder, the coder commits its work).
 .PARAMETER AssistantGithub
 The assistant's own GitHub account (empty: none).
 .PARAMETER CoAuthor
@@ -51,7 +51,7 @@ The analyst's own GitHub account (implies -Analyst; empty: none).
 .PARAMETER Coder
 The coder's git identity, for Cleo, as "NAME <EMAIL>" (default: none).
 .PARAMETER CoderSigningKey
-The coder's public SSH signing key (empty: none).
+The coder's public SSH signing key (empty: none; the assistant then commits her work).
 .PARAMETER CoderGithub
 The coder's own GitHub account (empty: none).
 .PARAMETER AllowReleases
@@ -631,7 +631,9 @@ function Get-KiraValue($UserProfile) {
         analyst = $analystValue; analyst_github = $analystGithub
         coder = $coderValue; coder_name = $coderName; coder_email = $coderEmail
         coder_signing_key = $coderSigningKey; coder_github = $coderGithub
-        # With a coder, she commits; the assistant leads and never commits.
+        # With a coder, the committer is the coder, who writes and commits the code by default;
+        # the assistant commits with its own keys only the code it writes at the user's explicit
+        # request, or the coder's work when she has no key.
         committer = if ($coderValue) { 'the coder' } else { 'the assistant' }
         committer_name = if ($coderValue) { $coderName } else { $assistantName }
         committer_email = if ($coderValue) { $coderEmail } else { $assistantEmail }

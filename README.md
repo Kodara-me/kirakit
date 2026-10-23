@@ -94,7 +94,7 @@ a pull request template, Copilot instructions, and a workflow that checks pull r
 | `--gender GENDER` | `male`, `female`, `nonbinary` or `unspecified` (sets the pronouns Kira uses) |
 | `--language LANGUAGE` | Answer language, or `auto` to follow the conversation |
 | `--assistant "NAME <EMAIL>"` | The assistant's git identity: its own commits, and its trailer in yours |
-| `--assistant-signing-key PATH` | The assistant's public SSH signing key (empty: it never commits as itself) |
+| `--assistant-signing-key PATH` | The assistant's public SSH signing key (empty: it never commits as itself; with a coder, the coder commits its work) |
 | `--assistant-github LOGIN` | The assistant's own GitHub account (empty: none) |
 | `--co-author "NAME <EMAIL>"` | Same as `--assistant`, with `Co-Authored-By` trailers |
 | `--no-co-author` | Add no `Co-Authored-By` trailer |
@@ -102,7 +102,7 @@ a pull request template, Copilot instructions, and a workflow that checks pull r
 | `--no-analyst` | No analyst: Kira writes ideas and specifications herself |
 | `--analyst-github LOGIN` | The analyst's own GitHub account (implies `--analyst`; empty: none) |
 | `--coder "NAME <EMAIL>"` | Add Cleo, a coder who implements the tasks, with her git identity (default: none) |
-| `--coder-signing-key PATH` | The coder's public SSH signing key (empty: she cannot commit) |
+| `--coder-signing-key PATH` | The coder's public SSH signing key (empty: she does not commit, and the assistant commits her work) |
 | `--coder-github LOGIN` | The coder's own GitHub account (empty: none) |
 | `--allow-releases` | Let the assistant's GitHub account create releases and push tags without a prompt (saved in the profile) |
 | `--no-allow-releases` | Releases and tags stay behind a prompt (default; saved in the profile) |
@@ -166,7 +166,8 @@ The git rules (`rules/git.md`, which Claude Code loads on its own) follow the pr
 - **The assistant commits** the code it wrote with the `assistant-commit` skill, under its own
   name and email, signed with its own SSH key, and you are the co-author. Its identity and key
   are passed on the `git` command line: your git configuration is never changed. Without a
-  signing key in the profile, the assistant never commits as itself.
+  signing key in the profile, the assistant never commits as itself (with a coder, Cleo
+  commits its work instead).
 - **With a GitHub account** for the assistant (`--assistant-github`), the rules also say how
   it works on GitHub: everything it writes uses its own token, its pull requests ask for your
   review, and its questions are asked both in the conversation and in a comment.
@@ -175,8 +176,15 @@ The git rules (`rules/git.md`, which Claude Code loads on its own) follow the pr
   With her own GitHub account (`--analyst-github`), her work (ideas, specifications,
   sub-issues, labels and clarification comments) is written as that account, whoever does
   it; the `idea` and `spec` skills use it too. Any login works, your own included.
-- **With a coder,** Cleo writes the code, commits it with `assistant-commit` under her own
-  identity and key, and opens the pull requests; the assistant leads and never commits. With
+- **With a coder,** Cleo writes the code by default, commits it with `assistant-commit` under
+  her own identity and key, and opens the pull requests; the assistant leads, and writes code
+  itself only when you explicitly ask it to in the conversation, for the task or change you
+  name. It then commits that work under its own identity and key, opens its pull request as
+  its own account with you as reviewer, and never reviews it itself: it waits for your own
+  approval, even with `--complete-approved-prs`. Each of them commits her own work with her
+  key; when one has no key, she leaves her changes uncommitted and the other commits them,
+  with the writer as the commit's author, and the writer still pushes and opens the pull
+  request. With neither key, nothing is committed and the `commit` skill is proposed. With
   her own GitHub account (`--coder-github`), her pull requests, comments, replies and board
   moves are written as that account, and her pull requests ask for the assistant's review.
 
@@ -337,7 +345,9 @@ Iris only writes issues and comments, so her account needs no signing key. The e
 ### Give the coder her own identity
 
 Cleo commits, so she needs both a GitHub account and a signing key, set up like the
-assistant's. The examples use `cleo` and `cleo@example.com`.
+assistant's. Without her key, the assistant commits her work with its own key, with Cleo as
+the commit's author; without the assistant's key, Cleo commits the code the assistant writes
+at your request the same way. Give each of them a key so that each commits her own work. The examples use `cleo` and `cleo@example.com`.
 
 1. Create a GitHub account for her, with its email address verified, and upload her avatar
    (Settings → Public profile).
@@ -535,8 +545,12 @@ installed only with an analyst or a coder.
 With a coder, code goes through Cleo the same way:
 
 - **Kira hands her the work.** The task `next-task` gives, and any change to code you ask
-  for, goes to the `cleo` agent in the background, one task at a time. Kira never writes
-  code or commits herself, and a new request about Cleo's running task goes to that task.
+  for, goes to the `cleo` agent in the background, one task at a time, and a new request
+  about Cleo's running task goes to that task. Kira writes code herself only when you
+  explicitly ask her to in your own message ("write #155 yourself"): only the task or change
+  you name, in parallel with Cleo when she is busy, waiting when it touches the same files as
+  Cleo's task or a pull request in review. A request that does not clearly ask Kira herself
+  ("do #155") still goes to Cleo.
 - **Cleo opens the pull request, Kira reviews it first.** The review runs in the `review-pr`
   skill, forked on Opus whatever model Kira's session uses: it reads the pull request, its
   tasks and their specification, the diff, the CI checks and whether the branch can be
