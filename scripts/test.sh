@@ -477,6 +477,7 @@ check 'coder build: no block without a coder (R24)' same_lines "$tmp/blocks-no-c
 	'no coder'
 check 'coder build: rejects an identity without an email (R23)' sh -c '! $1 "$2/scripts/build.sh" -o "$3" --coder Cleo' _ "$shell" "$root" "$tmp/x"
 check 'coder build: rejects a bad GitHub login (R23)' sh -c '! $1 "$2/scripts/build.sh" -o "$3" --coder "Cleo <cleo@example.com>" --coder-github "a b"' _ "$shell" "$root" "$tmp/x"
+# Outside the guard, as the next run: refused on its options before writing anything.
 check 'coder: installer rejects an identity without an email (R23)' sh -c '! env CLAUDE_CONFIG_DIR="$3" $1 "$2/get-kira.sh" --copy --dry-run --coder Cleo' _ "$shell" "$root" "$tmp/coder-bad"
 check 'coder: installer rejects a bad GitHub login (R23)' sh -c '! env CLAUDE_CONFIG_DIR="$3" $1 "$2/get-kira.sh" --copy --dry-run --coder-github a/b' _ "$shell" "$root" "$tmp/coder-bad"
 
@@ -1413,6 +1414,8 @@ kira --copy --assistant-style kira-focus >/dev/null
 check 'members: --assistant-style (#36 R9)' \
 	test "$(started "$bin/assistant")" = "$(expected -n Kira --settings '{"outputStyle":"Kira (focus)"}')"
 check 'members: assistant style saved (#36 R9)' profile_has 'assistant_style=kira-focus'
+# Outside the guard, as the next run: the profile already holds bin_dir, and both runs are
+# refused on their options before writing anything.
 # The shell is split on purpose, to allow options.
 # shellcheck disable=SC2086
 check 'members: an unknown persona is refused (#36 R9)' sh -c '! "$@" >/dev/null 2>&1' _ \
@@ -1426,9 +1429,9 @@ check 'members: analyst removed with the analyst (#36 R4)' test ! -e "$bin/analy
 mkdir -p "$tmp/shadow"
 printf '#!/bin/sh\n' >"$tmp/shadow/assistant"
 chmod +x "$tmp/shadow/assistant"
+# Outside the guard: the profile of this directory already holds bin_dir.
 # The shell is split on purpose, to allow options.
 # shellcheck disable=SC2086
-# Outside the guard: the profile of this directory already holds bin_dir.
 env PATH="$tmp/shadow:$bin:$PATH" CLAUDE_CONFIG_DIR="$claude" HOME="$claude-home" XDG_DATA_HOME="$claude-data" \
 	$shell "$root/get-kira.sh" --copy </dev/null >"$tmp/members-path.log"
 check 'members: warns about a command earlier in PATH (#36 R15)' \
@@ -1612,7 +1615,6 @@ mv "$tmp/konsole" "$teambin/konsole"
 # launchers_run CONFIG HOME LOG [ENV...]: install the launchers with CONFIG as the configuration
 # directory ("-" for none), under a scratch HOME.
 launchers_run() {
-	# Outside the guard: these runs name their own HOME and aim at launcher locations on purpose.
 	lr_config=$1 lr_home=$2 lr_log=$3
 	shift 3
 	if [ "$lr_config" = - ]; then
@@ -1627,7 +1629,8 @@ launchers_run() {
 	fi
 }
 
-# R6: no configuration directory set, the default locations.
+# R6: no configuration directory set, the default locations. Outside the guard: with the
+# default configuration directory, the launchers go to ~/.local/bin on purpose.
 launchers_run - "$tmp/home-unset" "$tmp/launchers-unset.log" XDG_DATA_HOME="$tmp/data-unset"
 check 'launchers: ~/.local/bin by default, without a configuration directory (#169 R6)' \
 	test -x "$tmp/home-unset/.local/bin/assistant"
@@ -1643,7 +1646,8 @@ check 'launchers: ~/.claude as the configuration directory keeps the defaults (#
 
 # R4, R7: a non-default configuration directory, XDG_DATA_HOME set.
 scratch=$tmp/launchers-scratch
-launchers_run "$scratch" "$tmp/home-scratch" "$tmp/launchers-scratch.log" XDG_DATA_HOME="$tmp/data-scratch"
+guarded 'launchers scratch' "$tmp/home-scratch" "$tmp/data-scratch" \
+	launchers_run "$scratch" "$tmp/home-scratch" "$tmp/launchers-scratch.log" XDG_DATA_HOME="$tmp/data-scratch"
 check 'launchers: in bin/ of a non-default configuration directory (#169 R4)' test -x "$scratch/bin/assistant"
 check 'launchers: color schemes in konsole/ of it, whatever XDG_DATA_HOME (#169 R4)' \
 	test -f "$scratch/konsole/kirakit-assistant.colorscheme"
@@ -1663,10 +1667,13 @@ mkdir -p "$guarded" "$guard_home/.local/bin" "$guard_data/konsole"
 printf 'real launcher\n' >"$guard_home/.local/bin/team"
 printf 'real scheme\n' >"$guard_data/konsole/kirakit-assistant.colorscheme"
 printf '%s\n%s\n' "$guard_home/.local/bin/team" "$guard_data/konsole/kirakit-assistant.colorscheme" >"$guarded/.kirakit-manifest"
-launchers_run "$guarded" "$guard_home" "$tmp/launchers-guarded.log" XDG_DATA_HOME="$guard_data"
-launchers_run "$guarded" "$guard_home" "$tmp/launchers-guarded2.log" XDG_DATA_HOME="$guard_data"
+guarded 'launchers install' "$guard_home" "$guard_data" \
+	launchers_run "$guarded" "$guard_home" "$tmp/launchers-guarded.log" XDG_DATA_HOME="$guard_data"
+guarded 'launchers reinstall' "$guard_home" "$guard_data" \
+	launchers_run "$guarded" "$guard_home" "$tmp/launchers-guarded2.log" XDG_DATA_HOME="$guard_data"
 # shellcheck disable=SC2086
-env CLAUDE_CONFIG_DIR="$guarded" HOME="$guard_home" XDG_DATA_HOME="$guard_data" $shell "$root/get-kira.sh" --uninstall \
+guarded 'launchers uninstall' "$guard_home" "$guard_data" \
+	env CLAUDE_CONFIG_DIR="$guarded" HOME="$guard_home" XDG_DATA_HOME="$guard_data" $shell "$root/get-kira.sh" --uninstall \
 	</dev/null >"$tmp/launchers-guarded3.log"
 check 'launchers: install, reinstall and uninstall leave a default bin directory unchanged (#169 R5)' \
 	test "$(cat "$guard_home/.local/bin/team")" = 'real launcher' -a "$(ls "$guard_home/.local/bin")" = team
@@ -2453,11 +2460,12 @@ check 'no terminal: no profile saved' test ! -e "$claude/.kirakit-profile"
 
 claude=$tmp/github-claude
 git init -q "$tmp/project"
-# Outside the guard: --only github writes its target project on purpose.
-(cd "$tmp/project" && CLAUDE_CONFIG_DIR=$claude $shell "$root/get-kira.sh" --only github >/dev/null)
+# shellcheck disable=SC2086
+(cd "$tmp/project" && guarded 'github' "$tmp/home" "$tmp/data" env CLAUDE_CONFIG_DIR="$claude" $shell "$root/get-kira.sh" --only github >/dev/null)
 check 'github: templates copied' test -f "$tmp/project/.github/ISSUE_TEMPLATE/feature_request.yml"
 check 'github: workflow copied' test -f "$tmp/project/.github/workflows/pr-title.yml"
 check 'github: rerun changes nothing' unchanged kira --only github --target "$tmp/project"
+# Outside the guard: refused before writing anything.
 check 'github: needs a repository' sh -c 'cd "$1" && ! CLAUDE_CONFIG_DIR="$2" $3 "$4/get-kira.sh" --only github' _ "$tmp" "$claude" "$shell" "$root"
 
 # --- without a clone (curl) ----------------------------------------------------------------
@@ -2470,7 +2478,9 @@ git -C "$tmp/remote" -c core.safecrlf=false add -A
 git -C "$tmp/remote" -c user.name=test -c user.email=test@example.com -c commit.gpgsign=false \
 	commit -q -m test
 claude=$tmp/curl
-CLAUDE_CONFIG_DIR=$claude KIRAKIT_REPO="file://$tmp/remote" KIRAKIT_REF=main \
+# shellcheck disable=SC2086
+guarded 'curl install' "$tmp/home" "$tmp/data" \
+	env CLAUDE_CONFIG_DIR="$claude" KIRAKIT_REPO="file://$tmp/remote" KIRAKIT_REF=main \
 	$shell -s -- --name Alex --gender female --language auto --no-co-author \
 	<"$root/get-kira.sh" >/dev/null
 check 'curl: styles copied' test -f "$claude/output-styles/kira-cozy.md" -a ! -L "$claude/output-styles/kira-cozy.md"
@@ -2478,7 +2488,9 @@ check 'curl: no co-author' contains "$claude/rules/git.md" 'Commit messages have
 
 # Which branch or tag a run without a clone fetches.
 fetched() {
-	CLAUDE_CONFIG_DIR=$tmp/ref KIRAKIT_REPO="file://$tmp/remote" $shell -s -- --dry-run \
+	# shellcheck disable=SC2086
+	guarded 'ref dry run' "$tmp/home" "$tmp/data" \
+		env CLAUDE_CONFIG_DIR="$tmp/ref" KIRAKIT_REPO="file://$tmp/remote" $shell -s -- --dry-run \
 		--name Alex --gender female --language auto --no-co-author <"$1" |
 		sed -n 's/^kirakit: fetching .* (\(.*\))$/\1/p'
 }
@@ -2502,7 +2514,9 @@ git -C "$tmp/remote" -c user.name=test -c user.email=test@example.com -c commit.
 # fetch_output REF: everything a dry run fetching REF writes, stdout and stderr, in the
 # French locale when the system has it, with git's advice left at its defaults.
 fetch_output() {
-	CLAUDE_CONFIG_DIR=$tmp/quiet KIRAKIT_REPO="file://$tmp/remote" KIRAKIT_REF=$1 \
+	# shellcheck disable=SC2086
+	guarded "fetch dry run $1" "$tmp/home" "$tmp/data" \
+		env CLAUDE_CONFIG_DIR="$tmp/quiet" KIRAKIT_REPO="file://$tmp/remote" KIRAKIT_REF="$1" \
 		LANG=fr_CA.UTF-8 LC_ALL=fr_CA.UTF-8 $shell -s -- --dry-run \
 		--name Alex --gender female --language auto --no-co-author \
 		<"$root/get-kira.sh" 2>&1
@@ -2520,12 +2534,16 @@ fetch_output main >"$tmp/fetch-main.out" || true
 check 'fetch: only kirakit lines for a branch (#86 R2)' only_kirakit "$tmp/fetch-main.out"
 
 # R4: the installed source is the commit the requested ref points to.
-CLAUDE_CONFIG_DIR=$tmp/at-tag KIRAKIT_REPO="file://$tmp/remote" KIRAKIT_REF=v0.11.0 \
+# shellcheck disable=SC2086
+guarded 'fetch at-tag' "$tmp/home" "$tmp/data" \
+	env CLAUDE_CONFIG_DIR="$tmp/at-tag" KIRAKIT_REPO="file://$tmp/remote" KIRAKIT_REF=v0.11.0 \
 	$shell -s -- --name Alex --gender female --language auto --no-co-author \
 	<"$root/get-kira.sh" >/dev/null 2>&1 || true
 check 'fetch: a tag installs the commit it points to (#86 R4)' \
 	sh -c 'test -f "$1" && ! grep -qF "after the tag" "$1"' _ "$tmp/at-tag/skills/pull/SKILL.md"
-CLAUDE_CONFIG_DIR=$tmp/at-main KIRAKIT_REPO="file://$tmp/remote" KIRAKIT_REF=main \
+# shellcheck disable=SC2086
+guarded 'fetch at-main' "$tmp/home" "$tmp/data" \
+	env CLAUDE_CONFIG_DIR="$tmp/at-main" KIRAKIT_REPO="file://$tmp/remote" KIRAKIT_REF=main \
 	$shell -s -- --name Alex --gender female --language auto --no-co-author \
 	<"$root/get-kira.sh" >/dev/null 2>&1 || true
 check 'fetch: a branch installs its last commit (#86 R4)' \
@@ -2533,7 +2551,9 @@ check 'fetch: a branch installs its last commit (#86 R4)' \
 
 # R3: an unknown ref fails, with git's error and kirakit's, and installs nothing.
 status=0
-CLAUDE_CONFIG_DIR=$tmp/unknown KIRAKIT_REPO="file://$tmp/remote" KIRAKIT_REF=no-such-ref \
+# shellcheck disable=SC2086
+guarded 'fetch unknown ref' "$tmp/home" "$tmp/data" \
+	env CLAUDE_CONFIG_DIR="$tmp/unknown" KIRAKIT_REPO="file://$tmp/remote" KIRAKIT_REF=no-such-ref \
 	LC_ALL=C $shell -s -- --name Alex --gender female --language auto --no-co-author \
 	<"$root/get-kira.sh" >"$tmp/fetch-unknown.out" 2>&1 || status=$?
 check 'fetch: an unknown ref fails (#86 R3)' test "$status" -ne 0
