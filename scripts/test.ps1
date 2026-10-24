@@ -14,11 +14,15 @@ $failures = 0
 # writes outside its configuration directory changes nothing real.
 $scratchHome = Join-Path $tmp 'home'
 $scratchData = Join-Path $tmp 'data'
-# PowerShell's own caches (XDG_CACHE_HOME on Linux, LOCALAPPDATA on Windows) live outside the home
-# the guard watches: they are not the installer's writes.
+# PowerShell's own cache on Linux (~/.cache/powershell) lives outside the home the guard watches.
 $scratchCache = Join-Path $tmp 'cache'
 New-Item -ItemType Directory -Path $scratchHome, $scratchData, $scratchCache | Out-Null
 $guardFailures = @()
+
+# The one file PowerShell itself writes under the user profile on Windows (its startup profile
+# optimization, whatever the installer does; the path follows the profile folder, which no
+# environment variable moves). Ignored by its exact relative path, nothing else.
+$guardIgnored = 'AppData/Local/Microsoft/PowerShell/StartupProfileData-NonInteractive'
 
 # The guard (#169 R9): the files under the given directories with their sizes and modification
 # times, as a table by path.
@@ -26,7 +30,10 @@ function Get-GuardListing([string[]]$Directories) {
     $listing = @{}
     foreach ($dir in $Directories) {
         if (-not (Test-Path -LiteralPath $dir)) { continue }
+        $base = (Get-Item -LiteralPath $dir).FullName.TrimEnd('\', '/')
         Get-ChildItem -LiteralPath $dir -Recurse -File -Force | ForEach-Object {
+            $relative = $_.FullName.Substring($base.Length).TrimStart('\', '/').Replace('\', '/')
+            if ($relative -ceq $guardIgnored) { return }
             $listing[$_.FullName] = "$($_.Length) $($_.LastWriteTimeUtc.Ticks)"
         }
     }
@@ -85,7 +92,7 @@ Copy-Item -LiteralPath (Join-Path $root 'get-kira.ps1') -Destination $installer
 function Invoke-Installer([string]$ConfigDir, [string]$Ref, [string]$Locale, [string[]]$Arguments) {
     $saved = @{}
     $vars = @{ CLAUDE_CONFIG_DIR = $ConfigDir; KIRAKIT_REPO = $remoteUrl; KIRAKIT_REF = $Ref; LANG = $Locale; LC_ALL = $Locale
-        HOME = $scratchHome; USERPROFILE = $scratchHome; XDG_DATA_HOME = $scratchData; XDG_CACHE_HOME = $scratchCache; LOCALAPPDATA = $scratchCache }
+        HOME = $scratchHome; USERPROFILE = $scratchHome; XDG_DATA_HOME = $scratchData; XDG_CACHE_HOME = $scratchCache }
     # A run given a launcher location, as an option or saved in the profile, is out of the guard.
     $profilePath = Join-Path $ConfigDir '.kirakit-profile'
     $given = ($Arguments -match '^-(BinDir|ColorSchemeDir)') -or ((Test-Path -LiteralPath $profilePath) -and
@@ -361,6 +368,16 @@ $selfLeak = Join-Path (Join-Path $selfHome 'bin') 'team'
 [IO.File]::WriteAllText($selfLeak, 'leak')
 $selfChanged = @(Get-GuardDifference $selfBefore (Get-GuardListing @($selfHome)))
 Test-Check 'guard: a file written in the scratch home fails and is named (#169 R9)' (($selfChanged.Count -eq 1) -and ($selfChanged[0] -eq (Get-Item -LiteralPath $selfLeak).FullName))
+# PowerShell's own startup profile file is ignored, but only that exact path.
+$selfPs = Join-Path $selfHome 'AppData/Local/Microsoft/PowerShell'
+New-Item -ItemType Directory -Path $selfPs -Force | Out-Null
+$selfBefore = Get-GuardListing @($selfHome)
+[IO.File]::WriteAllText((Join-Path $selfPs 'StartupProfileData-NonInteractive'), 'cache')
+Test-Check 'guard: the PowerShell startup profile file is ignored (#169 R9)' (@(Get-GuardDifference $selfBefore (Get-GuardListing @($selfHome))).Count -eq 0)
+$selfOther = Join-Path $selfPs 'Other-File'
+[IO.File]::WriteAllText($selfOther, 'leak')
+$selfChanged = @(Get-GuardDifference $selfBefore (Get-GuardListing @($selfHome)))
+Test-Check 'guard: another file in that directory is still flagged (#169 R9)' (($selfChanged.Count -eq 1) -and ($selfChanged[0] -eq (Get-Item -LiteralPath $selfOther).FullName))
 Test-Check 'guard: identical listings pass (#169 R9)' ((Get-GuardDifference $selfBefore $selfBefore).Count -eq 0)
 Test-Check 'guard: no installer run left its scratch area (#169 R9)' ($guardFailures.Count -eq 0) ($guardFailures -join "`n")
 
