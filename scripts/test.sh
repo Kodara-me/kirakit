@@ -2104,8 +2104,11 @@ check 'fetch: an unknown ref installs nothing (#86 R3)' test ! -e "$tmp/unknown"
 #   comments-REPO-N-pr.json and -N-review.json   review comments and reviews of a pull request
 #   issue-REPO-N.json    the issue itself (assignees)
 #   pr-N.json            `gh pr view N`
-#   search.json          `gh search issues`; it fails when search.fail exists
-#   projects.json, items.json   `gh project list` and `gh project item-list`
+#   assigned.json        `gh search issues --assignee` (the repositories of the member's issues)
+#   search-OWNER.json    `gh search issues --owner OWNER` (labelled specifications)
+#   projects-OWNER.json, items-OWNER-N.json   `gh project list` and `gh project item-list`
+#   parent-REPO-N.json   `gh issue view N --repo REPO --json parent` (default: no parent)
+# `gh search` fails when search.fail exists, `gh project` when project.fail exists.
 # Every call is appended to $FAKE_GH_DIR/calls.
 watchbin=$tmp/watchbin
 mkdir -p "$watchbin"
@@ -2118,12 +2121,38 @@ config) echo jonathan ;;
 auth) echo fake-token ;;
 search)
 	[ ! -f "$d/search.fail" ] || exit 1
-	cat "$d/search.json" 2>/dev/null || echo '[]' ;;
+	owner=
+	file=
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--assignee) file=assigned ;;
+		--owner) owner=$2 ;;
+		esac
+		shift
+	done
+	[ -n "$file" ] || file=search-$owner
+	cat "$d/$file.json" 2>/dev/null || echo '[]' ;;
 project)
-	case $2 in
-	list) cat "$d/projects.json" 2>/dev/null || echo '{"projects":[]}' ;;
-	item-list) cat "$d/items.json" 2>/dev/null || echo '{"items":[]}' ;;
+	[ ! -f "$d/project.fail" ] || exit 1
+	sub=$2
+	board=$3
+	owner=
+	while [ $# -gt 0 ]; do
+		[ "$1" != --owner ] || owner=$2
+		shift
+	done
+	case $sub in
+	list) cat "$d/projects-$owner.json" 2>/dev/null || echo '{"projects":[]}' ;;
+	item-list) cat "$d/items-$owner-$board.json" 2>/dev/null || echo '{"items":[]}' ;;
 	esac ;;
+issue)
+	n=$3
+	repo=
+	while [ $# -gt 0 ]; do
+		[ "$1" != --repo ] || repo=$(printf '%s' "$2" | sed 's#/#_#g')
+		shift
+	done
+	cat "$d/parent-$repo-$n.json" 2>/dev/null || echo '{"parent": null}' ;;
 pr)
 	n=$3
 	n=${n##*/}
@@ -2372,41 +2401,75 @@ watch analyst >/dev/null
 check 'watch: the list of reported items stays bounded' \
 	test "$(wc -l <"$XDG_STATE_HOME/kirakit/watch-analyst/seen")" -le 2000
 
-# Ready tasks (#41 R10): by label, or in the Ready column of a board.
+# Ready specifications and issues with no specification (#41 R10, R18).
+# board OWNER ITEMS: a single board of OWNER with these items (a JSON array).
+board() {
+	echo '{"projects": [{"number": 1}]}' >"$watch_dir/projects-$1.json"
+	printf '{"items": %s}\n' "$2" >"$watch_dir/items-$1-1.json"
+}
+# item STATUS REPOSITORY NUMBER [LABEL]: a board item for an issue.
+item() {
+	jq -cn --arg status "$1" --arg repo "$2" --arg number "$3" --arg label "${4-}" \
+		'{status: $status, labels: ([$label] | map(select(. != ""))),
+			content: {type: "Issue", repository: $repo, number: ($number | tonumber),
+				url: "https://github.com/\($repo)/issues/\($number)"}}'
+}
+spec37='ready Kodara-me/kirakit#37 https://github.com/Kodara-me/kirakit/issues/37'
+
 watch_reset
-echo '[{"repository": {"nameWithOwner": "Kodara-me/kirakit"}, "number": 12, "url": "https://github.com/Kodara-me/kirakit/issues/12"}]' \
-	>"$watch_dir/search.json"
-check 'watch: a task labelled status:ready gives one line, for the developer (#41 R10)' \
-	test "$(watch developer)" = 'ready Kodara-me/kirakit#12 https://github.com/Kodara-me/kirakit/issues/12'
-check 'watch: a Ready task is not reported twice (#41 R10)' test -z "$(watch developer)"
-echo '[]' >"$watch_dir/search.json"
-check 'watch: a task leaving Ready gives nothing (#41 R10)' test -z "$(watch developer)"
-echo '[{"repository": {"nameWithOwner": "Kodara-me/kirakit"}, "number": 12, "url": "https://github.com/Kodara-me/kirakit/issues/12"}]' \
-	>"$watch_dir/search.json"
-check 'watch: a task back in Ready is reported again (#41 R10)' test -n "$(watch developer)"
-# A failed lookup keeps the previous list (#41 R10).
+board jonathan "[$(item Ready jonathan/other 37 type:feature)]"
+check "watch: a specification moved to Ready on a board gives one line (#41 R10)" \
+	test "$(watch developer)" = 'ready jonathan/other#37 https://github.com/jonathan/other/issues/37'
+check 'watch: a Ready specification gives nothing to the analyst (#41 R10)' test -z "$(watch analyst)"
+check 'watch: a Ready specification gives nothing to the assistant (#41 R10)' test -z "$(watch assistant)"
+
+watch_reset
+echo '[{"repository": {"nameWithOwner": "Kodara-me/kirakit"}}]' >"$watch_dir/assigned.json"
+board Kodara-me "[$(item Ready Kodara-me/kirakit 37 type:feature)]"
+check "watch: a specification in Ready on an organization's board gives one line (#41 R18)" \
+	test "$(watch developer)" = "$spec37"
+check 'watch: a specification already reported gives nothing after a restart (#41 R10)' test -z "$(watch developer)"
+board Kodara-me "[$(item 'In progress' Kodara-me/kirakit 37 type:feature)]"
+check 'watch: a specification leaving Ready gives nothing (#41 R10)' test -z "$(watch developer)"
+board Kodara-me "[$(item Ready Kodara-me/kirakit 37 type:feature)]"
+check 'watch: a specification back in Ready gives one line (#41 R10)' test "$(watch developer)" = "$spec37"
+# A failed lookup keeps the previous state (#41 R10).
+board Kodara-me "[$(item Ready Kodara-me/kirakit 37 type:feature), $(item Ready Kodara-me/kirakit 38 type:feature)]"
+touch "$watch_dir/project.fail"
+check 'watch: a failed board lookup gives nothing (#41 R10)' test -z "$(watch developer)"
+check 'watch: a failed board lookup keeps the previous state (#41 R10)' \
+	test "$(cat "$XDG_STATE_HOME/kirakit/watch-developer/ready")" = 'Kodara-me/kirakit 37 https://github.com/Kodara-me/kirakit/issues/37'
+rm "$watch_dir/project.fail"
 touch "$watch_dir/search.fail"
-check 'watch: a failed Ready lookup gives nothing (#41 R10)' test -z "$(watch developer)"
-check 'watch: a failed Ready lookup keeps the previous list (#41 R10)' \
-	grep -qxF 'Kodara-me/kirakit 12 https://github.com/Kodara-me/kirakit/issues/12' "$XDG_STATE_HOME/kirakit/watch-developer/ready"
+check 'watch: a failed search gives nothing (#41 R10)' test -z "$(watch developer)"
 rm "$watch_dir/search.fail"
-check 'watch: the next good lookup gives nothing either (#41 R10)' test -z "$(watch developer)"
+check 'watch: the next good check reports only what is new (#41 R10)' \
+	test "$(watch developer)" = 'ready Kodara-me/kirakit#38 https://github.com/Kodara-me/kirakit/issues/38'
 
 watch_reset
-echo '[{"repository": {"nameWithOwner": "Kodara-me/kirakit"}, "number": 12, "url": "https://github.com/Kodara-me/kirakit/issues/12"}]' \
-	>"$watch_dir/search.json"
-check 'watch: a Ready task gives nothing to the analyst (#41 R10)' test -z "$(watch analyst)"
-check 'watch: a Ready task gives nothing to the assistant (#41 R10)' test -z "$(watch assistant)"
+echo '[{"repository": {"nameWithOwner": "Kodara-me/kirakit"}, "number": 37, "url": "https://github.com/Kodara-me/kirakit/issues/37"}]' \
+	>"$watch_dir/search-jonathan.json"
+check 'watch: a specification labelled status:ready in a repository with no board gives one line (#41 R10)' \
+	test "$(watch developer)" = "$spec37"
+watch_reset
+echo '[{"repository": {"nameWithOwner": "Kodara-me/kirakit"}, "number": 37, "url": "https://github.com/Kodara-me/kirakit/issues/37"}]' \
+	>"$watch_dir/search-jonathan.json"
+board jonathan "[$(item Backlog Kodara-me/kirakit 37 type:feature)]"
+check 'watch: a labelled specification on a board where it is not Ready gives nothing (#41 R10)' test -z "$(watch developer)"
 
 watch_reset
-echo '{"projects": [{"number": 1}]}' >"$watch_dir/projects.json"
-echo '{"items": [
-	{"status": "Ready", "assignees": ["cleo-kodara"], "content": {"type": "Issue", "repository": "Kodara-me/kirakit", "number": 13, "url": "https://github.com/Kodara-me/kirakit/issues/13"}},
-	{"status": "Ready", "assignees": ["iris-kodara"], "content": {"type": "Issue", "repository": "Kodara-me/kirakit", "number": 14, "url": "https://github.com/Kodara-me/kirakit/issues/14"}},
-	{"status": "In progress", "assignees": ["cleo-kodara"], "content": {"type": "Issue", "repository": "Kodara-me/kirakit", "number": 15, "url": "https://github.com/Kodara-me/kirakit/issues/15"}}]}' \
-	>"$watch_dir/items.json"
-check "watch: only the developer's task in the Ready column gives a line (#41 R10)" \
-	test "$(watch developer)" = 'ready Kodara-me/kirakit#13 https://github.com/Kodara-me/kirakit/issues/13'
+board jonathan "[$(item Ready Kodara-me/kirakit 50)]"
+check 'watch: an issue with no specification moved to Ready gives one line (#41 R10)' \
+	test "$(watch developer)" = 'ready Kodara-me/kirakit#50 https://github.com/Kodara-me/kirakit/issues/50'
+
+# Tasks assigned to the developer are never looked for (#41 R10).
+watch_reset
+echo '[{"repository": {"nameWithOwner": "Kodara-me/kirakit"}, "number": 41, "url": "https://github.com/Kodara-me/kirakit/issues/41"}]' \
+	>"$watch_dir/assigned.json"
+echo '{"parent": {"number": 37}}' >"$watch_dir/parent-Kodara-me_kirakit-41.json"
+echo '{"parent": {"number": 37}}' >"$watch_dir/parent-Kodara-me_kirakit-42.json"
+board Kodara-me "[$(item Backlog Kodara-me/kirakit 41), $(item Ready Kodara-me/kirakit 42)]"
+check 'watch: a task assigned to the developer, in Backlog or in Ready, gives nothing (#41 R10)' test -z "$(watch developer)"
 
 # Every repository of the notifications is watched, not only the current directory's (#41 R8).
 watch_reset

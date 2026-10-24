@@ -11,8 +11,11 @@
 #   - the account's notifications (participating threads), read with If-Modified-Since, so a
 #     304 costs nothing, and paced by X-Poll-Interval: assignments, comments that wake the
 #     member (see wake_comment) and, for the developer, approving reviews of her pull requests;
-#   - for the developer only, her tasks that are Ready: in the Ready column of a project board
-#     of the user, else labelled status:ready.
+#   - for the developer only, the specifications that enter Ready, and the issues with no
+#     specification that enter a Ready column, on the boards of the user and of the owner of
+#     each repository where an open issue is assigned to her; a specification on no board of
+#     its owner counts when labelled status:ready.
+#     Tasks assigned to her are not looked for: the next-task skill chooses the task.
 #
 # Each line is "KIND REPOSITORY#NUMBER URL". State lives in
 # ${XDG_STATE_HOME:-~/.local/state}/kirakit/watch-ROLE, so a restart reports nothing twice.
@@ -206,32 +209,55 @@ check_notifications() {
 }
 
 
-# ready_tasks: the developer's open tasks that are Ready, one "REPOSITORY NUMBER URL" per line,
-# sorted: those in the Ready column of the user's boards, and those labelled status:ready. It
-# fails when a lookup fails, so that a partial list is never taken for the current one.
-ready_tasks() {
-	local json lines projects number
-	json=$(gh search issues --assignee "$account" --state open --label status:ready \
-		--json repository,number,url 2>/dev/null) || return 1
-	lines=$(printf '%s' "$json" | jq -r '.[]? | "\(.repository.nameWithOwner) \(.number) \(.url)"' 2>/dev/null) || return 1
-	json=$(gh project list --owner "$user" --format json 2>/dev/null) || return 1
-	projects=$(printf '%s' "$json" | jq -r '.projects[]?.number' 2>/dev/null) || return 1
-	for number in $projects; do
-		json=$(gh project item-list "$number" --owner "$user" --format json --limit 200 2>/dev/null) || return 1
-		lines+=$'\n'$(printf '%s' "$json" | jq -r --arg account "$account" '.items[]?
-			| select(.status == "Ready" and .content.type == "Issue"
-				and ((.assignees // []) | index($account)))
-			| "\(.content.repository) \(.content.number) \(.content.url)"' 2>/dev/null) || return 1
+# ready_items: the specifications in Ready, and the issues with no specification in a Ready
+# column, one "REPOSITORY NUMBER URL" per line, sorted. The owners read are the user's login
+# and the owner of every repository with an open issue assigned to the member. On a board, a
+# specification is an issue labelled type:feature; an issue with no parent has no
+# specification. A specification on no board of its owner counts when labelled status:ready.
+# It fails when a lookup fails, so that a partial list is never taken for the current one.
+ready_items() {
+	local json owners owner boards board items boarded lines='' repo number url parent
+	json=$(gh search issues --assignee "$account" --state open --limit 1000 --json repository 2>/dev/null) || return 1
+	owners=$(printf '%s' "$json" | jq -r '.[]?.repository.nameWithOwner | split("/")[0]' 2>/dev/null) || return 1
+	owners=$(printf '%s\n%s\n' "$user" "$owners" | sed '/^$/d' | sort -u)
+	for owner in $owners; do
+		boarded=
+		json=$(gh project list --owner "$owner" --format json 2>/dev/null) || return 1
+		boards=$(printf '%s' "$json" | jq -r '.projects[]?.number' 2>/dev/null) || return 1
+		for board in $boards; do
+			items=$(gh project item-list "$board" --owner "$owner" --format json --limit 1000 2>/dev/null) || return 1
+			boarded+=$'\n'$(printf '%s' "$items" | jq -r '.items[]? | select(.content.type == "Issue")
+				| "\(.content.repository) \(.content.number)"' 2>/dev/null) || return 1
+			lines+=$'\n'$(printf '%s' "$items" | jq -r '.items[]?
+				| select(.status == "Ready" and .content.type == "Issue" and ((.labels // []) | index("type:feature")))
+				| "\(.content.repository) \(.content.number) \(.content.url)"') || return 1
+			while read -r repo number url; do
+				[ -n "$repo" ] || continue
+				json=$(gh issue view "$number" --repo "$repo" --json parent 2>/dev/null) || return 1
+				parent=$(printf '%s' "$json" | jq -r '.parent.number // ""' 2>/dev/null) || return 1
+				[ -n "$parent" ] || lines+=$'\n'"$repo $number $url"
+			done < <(printf '%s' "$items" | jq -r '.items[]?
+				| select(.status == "Ready" and .content.type == "Issue" and (((.labels // []) | index("type:feature")) | not))
+				| "\(.content.repository) \(.content.number) \(.content.url)"')
+		done
+		json=$(gh search issues --owner "$owner" --label type:feature --label status:ready --state open \
+			--limit 1000 --json repository,number,url 2>/dev/null) || return 1
+		while read -r repo number url; do
+			[ -n "$repo" ] || continue
+			printf '%s\n' "$boarded" | grep -qxF -- "$repo $number" && continue
+			lines+=$'\n'"$repo $number $url"
+		done < <(printf '%s' "$json" | jq -r '.[]? | "\(.repository.nameWithOwner) \(.number) \(.url)"' 2>/dev/null)
 	done
 	printf '%s\n' "$lines" | sed '/^$/d' | sort -u
 }
 
-# check_ready: report the tasks that became Ready since the last check. A task that leaves
-# Ready is forgotten, so it is reported again if it comes back. When a lookup fails, the
+# check_ready: report the specifications and the issues with no specification that entered
+# Ready since the last check, including on the first one. One that leaves Ready is forgotten,
+# so it is reported again if it comes back. When a lookup fails, the
 # previous list is kept.
 check_ready() {
 	local current previous repo number url
-	current=$(ready_tasks) || return 0
+	current=$(ready_items) || return 0
 	previous=$(cat "$state/ready" 2>/dev/null || true)
 	printf '%s\n' "$current" | while read -r repo number url; do
 		[ -n "$repo" ] || continue
