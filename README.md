@@ -232,7 +232,8 @@ for `GH_TOKEN=$(gh auth token --user LOGIN) gh`, with that member's login:
 | --- | --- |
 | Assistant (`--assistant-github`) | `Bash(P issue create:*)`, `issue edit`, `issue comment`, `issue close`; `Bash(P pr create:*)`, `pr comment`, `pr review`; `Bash(P label create:*)`; `Bash(git push -u origin TYPE/:*)` and `Bash(git push origin TYPE/:*)` for `feat`, `fix`, `docs`, `refactor`, `test`, `chore` and `ci`; `Bash(git push origin main)`; `Bash(git push origin --delete:*)`; `Bash(P project item-edit:*)` and `Bash(P project item-add:*)` |
 | Assistant, with `--allow-releases` | Also `Bash(P release create:*)` and `Bash(git push origin v:*)` |
-| Assistant, with a coder's account | Also `Bash(P pr edit:*)`, to request your review on the coder's approved pull requests || Analyst (`--analyst-github`) | `Bash(P issue create:*)`, `issue edit`, `issue comment`, `issue close`; `Bash(P label create:*)`; `Bash(P project item-edit:*)` and `Bash(P project item-list:*)` |
+| Assistant, with a coder's account | Also `Bash(P pr edit:*)`, to request your review on the coder's approved pull requests |
+| Analyst (`--analyst-github`) | `Bash(P issue create:*)`, `issue edit`, `issue comment`, `issue close`; `Bash(P label create:*)`; `Bash(P project item-edit:*)` and `Bash(P project item-list:*)` |
 | Coder (`--coder-github`) | `Bash(P issue create:*)`, `issue edit`, `issue comment`; `Bash(P pr create:*)`, `pr comment`, `pr review`, `pr edit`; the assistant's work branch pushes; `Bash(git push origin --delete TYPE/:*)` for the same branch types; `Bash(P project item-edit:*)` and `Bash(P project item-add:*)`. Nothing that pushes or deletes `main`: the assistant merges |
 
 A member without a GitHub account gets no rules. The `git push` rules are not tied to an
@@ -606,10 +607,10 @@ With a coder, code goes through Cleo the same way:
   write files and writes nothing: Kira posts its verdict on GitHub as her own account, in her
   own voice, and never approves against it. Like the members' rules (see
   [Permission rules](#permission-rules)), the review needs auto mode: a background agent
-  cannot ask for a permission, and in the default mode its `gh` reads are refused. Once she approves, she
-  requests your review and tells you what the review flagged for you (security-sensitive
-  changes, questions); changes requested, by her or by you, go back to Cleo, who makes them,
-  replies to the comments and asks Kira again.
+  cannot ask for a permission, and in the default mode its `gh` reads are refused. Once she
+  approves, she requests your review and tells you what the review flagged for you
+  (security-sensitive changes, questions); changes requested, by her or by you, go back to
+  Cleo, who makes them, replies to the comments and asks Kira again.
 - **Cleo runs on Sonnet, and on Opus for hard tasks.** A task runs on Opus when it carries
   the label `model:opus`, which Iris adds at specification time to the tasks the `spec`
   skill calls hard (concurrency, security-sensitive files, data formats and migrations,
