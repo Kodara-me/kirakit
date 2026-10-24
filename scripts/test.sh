@@ -2195,21 +2195,34 @@ valid_json() {
 	fi
 }
 
-# The analyst's session settings (#37 R15, R16; checked in a real session by #40).
+# The analyst's session settings (#37 R15, R16, D16 to D19; checked in a real session by #40).
+# analyst_settings FILE GH LABEL: the checks shared by the profiles with and without an
+# account, where GH is how a gh command starts in FILE.
+analyst_settings() {
+	check "analyst settings $3: built (R15)" test -s "$1"
+	check "analyst settings $3: valid JSON (R15)" valid_json "$1"
+	check "analyst settings $3: refused without a prompt (R15)" contains "$1" '"defaultMode": "dontAsk"'
+	check "analyst settings $3: writes only in her temporary directory (R15)" sh -c 'grep -q "\"Write(~/.cache/kirakit/analyst/\*\*)\"" "$1" && grep -q "\"Edit(~/.cache/kirakit/analyst/\*\*)\"" "$1" && [ "$(grep -c "\"\(Write\|Edit\)(" "$1")" -eq 2 ]' _ "$1"
+	check "analyst settings $3: no gh api and no gh repo but view (R16, D19)" sh -c '! grep -q -e " gh api" -e "gh api " -e " gh repo [^v]" -e "\"Bash(gh repo [^v]" "$1"' _ "$1"
+	check "analyst settings $3: git push denied (R16, D18)" sh -c 'grep -qF "\"Bash(git push)\"" "$1" && grep -qF "\"Bash(git push *)\"" "$1"' _ "$1"
+	check "analyst settings $3: git --output denied (R15, D18)" contains "$1" '"Bash(git *--output*)"'
+	for sub in view list status create edit comment close reopen; do
+		check "analyst settings $3: gh issue $sub allowed (D16)" contains "$1" "\"Bash($2 issue $sub *)\""
+	done
+	check "analyst settings $3: exactly 8 gh issue rules (R15, R16, D16)" sh -c '[ "$(grep -c "gh issue " "$1")" -eq 8 ]' _ "$1"
+	check "analyst settings $3: no gh issue *, develop, delete, transfer, lock, pin or unpin (R15, R16, D16)" sh -c '! grep -qE "gh issue (\*|develop|delete|transfer|lock|unlock|pin|unpin)" "$1"' _ "$1"
+	for sub in list view field-list item-list item-add item-edit; do
+		check "analyst settings $3: gh project $sub allowed (D16)" contains "$1" "\"Bash($2 project $sub *)\""
+	done
+	check "analyst settings $3: exactly 6 gh project rules (R16, D16)" sh -c '[ "$(grep -c "gh project " "$1")" -eq 6 ]' _ "$1"
+	check "analyst settings $3: no gh project * (R16, D16)" sh -c '! grep -qF "gh project *" "$1"' _ "$1"
+}
 $shell "$root/scripts/build.sh" -o "$tmp/analyst-settings" --analyst --analyst-github iris-test >/dev/null
-analyst_settings=$tmp/analyst-settings/settings/analyst.json
-iris_gh='GH_TOKEN=$(gh auth token --user iris-test) gh'
-check 'analyst settings: built with an analyst (R15)' valid_json "$analyst_settings"
-check 'analyst settings: refused without a prompt (R15)' contains "$analyst_settings" '"defaultMode": "dontAsk"'
-check 'analyst settings: the token lookup is allowed on its own' contains "$analyst_settings" '"Bash(gh auth token --user iris-test)"'
-check 'analyst settings: issue commands as her account' contains "$analyst_settings" "\"Bash($iris_gh issue comment *)\""
-check 'analyst settings: writes only in her temporary directory (R15)' sh -c 'grep -q "\"Write(~/.cache/kirakit/analyst/\*\*)\"" "$1" && grep -q "\"Edit(~/.cache/kirakit/analyst/\*\*)\"" "$1" && [ "$(grep -c "\"\(Write\|Edit\)(" "$1")" -eq 2 ]' _ "$analyst_settings"
-check 'analyst settings: no gh api, gh issue *, or other gh repo (R16)' sh -c '! grep -q -e " gh api" -e " gh issue \*" -e " gh repo [^v]" "$1"' _ "$analyst_settings"
-check 'analyst settings: git push denied (R16)' sh -c 'grep -qF "\"Bash(git push)\"" "$1" && grep -qF "\"Bash(git push *)\"" "$1"' _ "$analyst_settings"
-check 'analyst settings: git --output denied (R15)' contains "$analyst_settings" '"Bash(git *--output*)"'
 $shell "$root/scripts/build.sh" -o "$tmp/analyst-settings-local" --analyst >/dev/null
-check 'analyst settings: without an account, plain gh commands' sh -c 'grep -qF "\"Bash(gh issue comment *)\"" "$1" && ! grep -q GH_TOKEN "$1"' _ "$tmp/analyst-settings-local/settings/analyst.json"
-check 'analyst settings: valid without an account' valid_json "$tmp/analyst-settings-local/settings/analyst.json"
+analyst_settings "$tmp/analyst-settings/settings/analyst.json" 'GH_TOKEN=$(gh auth token --user iris-test) gh' 'with an account'
+analyst_settings "$tmp/analyst-settings-local/settings/analyst.json" gh 'without an account'
+check 'analyst settings: the token lookup is allowed on its own (D17)' contains "$tmp/analyst-settings/settings/analyst.json" '"Bash(gh auth token --user iris-test)"'
+check 'analyst settings: without an account, no GH_TOKEN prefix' sh -c '! grep -q GH_TOKEN "$1"' _ "$tmp/analyst-settings-local/settings/analyst.json"
 check 'analyst settings: none without an analyst' test ! -e "$tmp/build/settings/analyst.json"
 
 claude=$tmp/permissions-missing
