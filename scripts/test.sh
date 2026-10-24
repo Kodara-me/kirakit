@@ -59,7 +59,54 @@ check() {
 # The shell is split on purpose, to allow options.
 # shellcheck disable=SC2086
 kira() {
+	guard_given=
+	for guard_arg in "$@"; do
+		case $guard_arg in --bin-dir* | --color-scheme-dir*) guard_given=1 ;; esac
+	done
+	if grep -qE '^(bin_dir|color_scheme_dir)=' "$claude/.kirakit-profile" 2>/dev/null; then
+		guard_given=1
+	fi
+	if [ -n "$guard_given" ]; then
+		kira_run "$@"
+		return
+	fi
+	guard_list "$claude-home" "$claude-data" >"$tmp/guard-before"
+	guard_status=0
+	kira_run "$@" || guard_status=$?
+	guard_list "$claude-home" "$claude-data" >"$tmp/guard-after"
+	guard_report "kira $*" "$tmp/guard-before" "$tmp/guard-after" >>"$tmp/guard-failures" || true
+	return "$guard_status"
+}
+
+kira_run() {
 	CLAUDE_CONFIG_DIR=$claude HOME=$claude-home XDG_DATA_HOME=$claude-data $shell "$root/get-kira.sh" "$@" </dev/null
+}
+
+# The guard (#169 R9). A run given only a scratch configuration directory must write nothing
+# under the scratch home and data directories, which stand for the user's real ~ and
+# XDG_DATA_HOME. A run given a launcher location (an option, or one saved in the profile) is
+# out of its scope.
+
+# guard_list DIR...: one line per file under each directory, sorted: path, checksum, size
+# and modification time.
+guard_list() {
+	for guard_dir in "$@"; do
+		[ -d "$guard_dir" ] || continue
+		find "$guard_dir" ! -type d | sort | while IFS= read -r guard_file; do
+			printf '%s\t%s\t%s\n' "$guard_file" "$(cksum <"$guard_file" 2>/dev/null || echo -)" \
+				"$(ls -ld "$guard_file" | awk '{ print $6, $7, $8 }')"
+		done
+	done
+}
+
+# guard_report WHAT BEFORE AFTER: succeeds silently when the listings are the same;
+# otherwise prints the files created, changed or removed and fails.
+guard_report() {
+	guard_paths=$(diff "$2" "$3" | sed -n 's/^[<>] //p' | cut -f1 | sort -u) || true
+	[ -n "$guard_paths" ] || return 0
+	printf '%s wrote outside its configuration directory:\n' "$1"
+	printf '%s\n' "$guard_paths" | sed 's/^/  /'
+	return 1
 }
 
 # kira with a complete profile, so that nothing is asked.
@@ -2960,6 +3007,29 @@ unset XDG_STATE_HOME
 # --- the clone -----------------------------------------------------------------------------
 
 check "clone: dist/ unchanged" test "$(dist_fingerprint)" = "$dist_before"
+
+# --- the guard (#169 R9) -------------------------------------------------------------------
+
+# Self-test: a file written in the scratch home between two listings is reported by name.
+mkdir -p "$tmp/guard-self/home/.local/bin"
+guard_list "$tmp/guard-self/home" >"$tmp/guard-self/before"
+printf 'leak\n' >"$tmp/guard-self/home/.local/bin/team"
+guard_list "$tmp/guard-self/home" >"$tmp/guard-self/after"
+guard_self_ok=
+guard_self=$(guard_report self "$tmp/guard-self/before" "$tmp/guard-self/after") || guard_self_ok=1
+check 'guard: a file written in the scratch home fails and is named (#169 R9)' \
+	sh -c 'test -n "$1" && printf "%s" "$2" | grep -qF "$3"' _ "$guard_self_ok" "$guard_self" "$tmp/guard-self/home/.local/bin/team"
+guard_list "$tmp/guard-self/home" >"$tmp/guard-self/same"
+check 'guard: identical listings pass (#169 R9)' guard_report self "$tmp/guard-self/after" "$tmp/guard-self/same"
+
+# Every installer run above that was given only a scratch configuration directory.
+if [ -s "$tmp/guard-failures" ]; then
+	cat "$tmp/guard-failures"
+	printf 'FAIL  guard: installer runs left their scratch area (#169 R9)\n'
+	failures=$((failures + 1))
+else
+	printf 'ok    guard: no installer run left its scratch area (#169 R9)\n'
+fi
 
 if [ "$failures" -gt 0 ]; then
 	printf '%s test(s) failed\n' "$failures"

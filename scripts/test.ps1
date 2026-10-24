@@ -9,6 +9,34 @@ $tmp = Join-Path ([IO.Path]::GetTempPath()) ('kirakit-test.' + [Guid]::NewGuid()
 New-Item -ItemType Directory -Path $tmp | Out-Null
 $failures = 0
 
+# The user's real home and data directories stand for these: HOME, USERPROFILE and
+# XDG_DATA_HOME point into the temporary directory for every installer run, so that a run which
+# writes outside its configuration directory changes nothing real.
+$scratchHome = Join-Path $tmp 'home'
+$scratchData = Join-Path $tmp 'data'
+$scratchCache = Join-Path $tmp 'cache'
+New-Item -ItemType Directory -Path $scratchHome, $scratchData, $scratchCache | Out-Null
+$guardFailures = @()
+
+# The guard (#169 R9): the files under the given directories with their sizes and modification
+# times, as a table by path.
+function Get-GuardListing([string[]]$Directories) {
+    $listing = @{}
+    foreach ($dir in $Directories) {
+        if (-not (Test-Path -LiteralPath $dir)) { continue }
+        Get-ChildItem -LiteralPath $dir -Recurse -File -Force | ForEach-Object {
+            $listing[$_.FullName] = "$($_.Length) $($_.LastWriteTimeUtc.Ticks)"
+        }
+    }
+    return $listing
+}
+
+# The paths created, changed or removed between two listings, sorted.
+function Get-GuardDifference($Before, $After) {
+    $paths = @(@($Before.Keys) + @($After.Keys) | Sort-Object -Unique)
+    return @($paths | Where-Object { $Before[$_] -ne $After[$_] })
+}
+
 function Test-Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
     if ($Ok) {
         Write-Host "ok   $Name"
@@ -54,7 +82,13 @@ Copy-Item -LiteralPath (Join-Path $root 'get-kira.ps1') -Destination $installer
 # each line of stderr as an error record.
 function Invoke-Installer([string]$ConfigDir, [string]$Ref, [string]$Locale, [string[]]$Arguments) {
     $saved = @{}
-    $vars = @{ CLAUDE_CONFIG_DIR = $ConfigDir; KIRAKIT_REPO = $remoteUrl; KIRAKIT_REF = $Ref; LANG = $Locale; LC_ALL = $Locale }
+    $vars = @{ CLAUDE_CONFIG_DIR = $ConfigDir; KIRAKIT_REPO = $remoteUrl; KIRAKIT_REF = $Ref; LANG = $Locale; LC_ALL = $Locale
+        HOME = $scratchHome; USERPROFILE = $scratchHome; XDG_DATA_HOME = $scratchData; XDG_CACHE_HOME = $scratchCache }
+    # A run given a launcher location, as an option or saved in the profile, is out of the guard.
+    $profilePath = Join-Path $ConfigDir '.kirakit-profile'
+    $given = ($Arguments -match '^-(BinDir|ColorSchemeDir)') -or ((Test-Path -LiteralPath $profilePath) -and
+        ([IO.File]::ReadAllText($profilePath) -match '(?m)^(bin_dir|color_scheme_dir)='))
+    $before = Get-GuardListing $scratchHome, $scratchData
     foreach ($name in $vars.Keys) {
         $saved[$name] = [Environment]::GetEnvironmentVariable($name)
         [Environment]::SetEnvironmentVariable($name, $vars[$name])
@@ -66,6 +100,12 @@ function Invoke-Installer([string]$ConfigDir, [string]$Ref, [string]$Locale, [st
         return @{ Status = $LASTEXITCODE; Lines = $lines }
     } finally {
         foreach ($name in $saved.Keys) { [Environment]::SetEnvironmentVariable($name, $saved[$name]) }
+        if (-not $given) {
+            $changed = Get-GuardDifference $before (Get-GuardListing $scratchHome, $scratchData)
+            if ($changed.Count -gt 0) {
+                $script:guardFailures += "installer run ($($Arguments -join ' ')) wrote outside its configuration directory:`n  " + ($changed -join "`n  ")
+            }
+        }
     }
 }
 
@@ -310,6 +350,17 @@ Test-Check 'commands: a new member gets hers (#120 R2)' ($run.Status -eq 0 -and
 $run = Invoke-Installer (Join-Path $tmp 'members-clash') 'member-clash' 'C' @('-Copy')
 Test-Check 'commands: a clash with a skill fails, naming the member (#120 R9)' ($run.Status -ne 0 -and
     (Get-RunText $run).Contains('team member test has the same name as the skill')) (Get-RunText $run)
+
+# #169 R9: the guard fails on a file written outside the configuration directory, naming it.
+$selfHome = Join-Path $tmp 'guard-self'
+New-Item -ItemType Directory -Path (Join-Path $selfHome 'bin') -Force | Out-Null
+$selfBefore = Get-GuardListing @($selfHome)
+$selfLeak = Join-Path (Join-Path $selfHome 'bin') 'team'
+[IO.File]::WriteAllText($selfLeak, 'leak')
+$selfChanged = @(Get-GuardDifference $selfBefore (Get-GuardListing @($selfHome)))
+Test-Check 'guard: a file written in the scratch home fails and is named (#169 R9)' (($selfChanged.Count -eq 1) -and ($selfChanged[0] -eq (Get-Item -LiteralPath $selfLeak).FullName))
+Test-Check 'guard: identical listings pass (#169 R9)' ((Get-GuardDifference $selfBefore $selfBefore).Count -eq 0)
+Test-Check 'guard: no installer run left its scratch area (#169 R9)' ($guardFailures.Count -eq 0) ($guardFailures -join "`n")
 
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 if ($failures) {
