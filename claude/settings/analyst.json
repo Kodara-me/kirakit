@@ -1,0 +1,59 @@
+{{#analyst}}
+{
+  "permissions": {
+    "defaultMode": "dontAsk",
+    "allow": [
+      "Read",
+      "Grep",
+      "Glob",
+{{#analyst_github}}
+      "Bash(gh auth token --user {{analyst_github}})",
+      "Bash(GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh issue view *)",
+      "Bash(GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh issue list *)",
+      "Bash(GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh issue status *)",
+      "Bash(GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh issue create *)",
+      "Bash(GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh issue edit *)",
+      "Bash(GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh issue comment *)",
+      "Bash(GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh issue close *)",
+      "Bash(GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh issue reopen *)",
+      "Bash(GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh pr view *)",
+      "Bash(GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh pr list *)",
+      "Bash(GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh search *)",
+      "Bash(GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh project *)",
+      "Bash(GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh label list *)",
+      "Bash(GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh label create *)",
+      "Bash(GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh repo view *)",
+{{/analyst_github}}
+{{^analyst_github}}
+      "Bash(gh issue view *)",
+      "Bash(gh issue list *)",
+      "Bash(gh issue status *)",
+      "Bash(gh issue create *)",
+      "Bash(gh issue edit *)",
+      "Bash(gh issue comment *)",
+      "Bash(gh issue close *)",
+      "Bash(gh issue reopen *)",
+      "Bash(gh pr view *)",
+      "Bash(gh pr list *)",
+      "Bash(gh search *)",
+      "Bash(gh project *)",
+      "Bash(gh label list *)",
+      "Bash(gh label create *)",
+      "Bash(gh repo view *)",
+{{/analyst_github}}
+      "Bash(gh config get user *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git diff *)",
+      "Bash(git status *)",
+      "Write(~/.cache/kirakit/analyst/**)",
+      "Edit(~/.cache/kirakit/analyst/**)"
+    ],
+    "deny": [
+      "Bash(git push)",
+      "Bash(git push *)",
+      "Bash(git *--output*)"
+    ]
+  }
+}
+{{/analyst}}

@@ -9,6 +9,7 @@
 #                                    from team/<member>.md
 #   DIR/konsole/<scheme>.colorscheme from launchers/konsole/<scheme>.colorscheme
 #   DIR/bin/<launcher>               from launchers/<launcher>, executable
+#   DIR/settings/<name>.json         from claude/settings/<name>.json
 #
 # An overlay is a Markdown file whose front matter becomes the style's front matter and
 # whose body replaces the {{overlay}} marker of the core text. Files starting with "_" in
@@ -554,6 +555,11 @@ done
 if [ -f "$claude_dir/CLAUDE.md" ]; then
 	build_file "$claude_dir/CLAUDE.md" "$out_dir/CLAUDE.md"
 fi
+# Settings that a launcher passes to its session, such as the analyst's (#37 R15, R16).
+for file in "$claude_dir"/settings/*.json; do
+	[ -f "$file" ] || continue
+	build_file "$file" "$out_dir/settings/$(basename "$file")"
+done
 for file in "$root"/launchers/konsole/*.colorscheme; do
 	[ -f "$file" ] || continue
 	build_file "$file" "$out_dir/konsole/$(basename "$file")"

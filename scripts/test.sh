@@ -2195,6 +2195,23 @@ valid_json() {
 	fi
 }
 
+# The analyst's session settings (#37 R15, R16; checked in a real session by #40).
+$shell "$root/scripts/build.sh" -o "$tmp/analyst-settings" --analyst --analyst-github iris-test >/dev/null
+analyst_settings=$tmp/analyst-settings/settings/analyst.json
+iris_gh='GH_TOKEN=$(gh auth token --user iris-test) gh'
+check 'analyst settings: built with an analyst (R15)' valid_json "$analyst_settings"
+check 'analyst settings: refused without a prompt (R15)' contains "$analyst_settings" '"defaultMode": "dontAsk"'
+check 'analyst settings: the token lookup is allowed on its own' contains "$analyst_settings" '"Bash(gh auth token --user iris-test)"'
+check 'analyst settings: issue commands as her account' contains "$analyst_settings" "\"Bash($iris_gh issue comment *)\""
+check 'analyst settings: writes only in her temporary directory (R15)' sh -c 'grep -q "\"Write(~/.cache/kirakit/analyst/\*\*)\"" "$1" && grep -q "\"Edit(~/.cache/kirakit/analyst/\*\*)\"" "$1" && [ "$(grep -c "\"\(Write\|Edit\)(" "$1")" -eq 2 ]' _ "$analyst_settings"
+check 'analyst settings: no gh api, gh issue *, or other gh repo (R16)' sh -c '! grep -q -e " gh api" -e " gh issue \*" -e " gh repo [^v]" "$1"' _ "$analyst_settings"
+check 'analyst settings: git push denied (R16)' sh -c 'grep -qF "\"Bash(git push)\"" "$1" && grep -qF "\"Bash(git push *)\"" "$1"' _ "$analyst_settings"
+check 'analyst settings: git --output denied (R15)' contains "$analyst_settings" '"Bash(git *--output*)"'
+$shell "$root/scripts/build.sh" -o "$tmp/analyst-settings-local" --analyst >/dev/null
+check 'analyst settings: without an account, plain gh commands' sh -c 'grep -qF "\"Bash(gh issue comment *)\"" "$1" && ! grep -q GH_TOKEN "$1"' _ "$tmp/analyst-settings-local/settings/analyst.json"
+check 'analyst settings: valid without an account' valid_json "$tmp/analyst-settings-local/settings/analyst.json"
+check 'analyst settings: none without an analyst' test ! -e "$tmp/build/settings/analyst.json"
+
 claude=$tmp/permissions-missing
 kira_team --copy >/dev/null
 check 'permissions: file missing, created (R1)' contains "$claude/settings.json" "$kira_rule"
