@@ -173,6 +173,11 @@ jobs:
           grep -qx 'model: opus' "$RUNNER_TEMP/ps-analyst/agents/iris.md"
           test -f "$RUNNER_TEMP/ps-coder/output-styles/cleo.md"
           test ! -e "$RUNNER_TEMP/ps-analyst/agents/cleo.md"
+          # The lead's review agent, only with a coder, by both installers (#183 R8).
+          grep -qx 'model: opus' "$RUNNER_TEMP/ps-coder/agents/kira.md"
+          for dir in sh ps sh-assistant ps-assistant sh-analyst ps-analyst sh-generic ps-generic; do
+            test ! -e "$RUNNER_TEMP/$dir/agents/kira.md"
+          done
           # The members' permission rules are in the settings compared above (#67 R10).
           grep -qF '"Bash(GH_TOKEN=$(gh auth token --user kira-bot) gh issue create:*)",' "$RUNNER_TEMP/ps-assistant/settings.json"
           grep -qF '"Bash(GH_TOKEN=$(gh auth token --user iris-bot) gh project item-list:*)"' "$RUNNER_TEMP/ps-analyst/settings.json"

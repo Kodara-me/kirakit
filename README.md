@@ -61,7 +61,7 @@ In `$CLAUDE_CONFIG_DIR` (default: `~/.claude`):
 | --- | --- |
 | `output-styles/kira-*.md` | `styles` |
 | `output-styles/iris.md`, with an analyst; `output-styles/cleo.md`, with a coder | `styles` |
-| `CLAUDE.md`, `rules/git.md`, `skills/*`, `agents/*` (`rules/team.md` with an analyst or a coder, `agents/iris.md` with an analyst, `agents/cleo.md` with a coder) | `claude` |
+| `CLAUDE.md`, `rules/git.md`, `skills/*`, `agents/*` (`rules/team.md` with an analyst or a coder, `agents/iris.md` with an analyst, `agents/cleo.md` and `agents/kira.md` with a coder) | `claude` |
 | `outputStyle`, `attribution` and the members' rules in `permissions.allow` in `settings.json` | `claude` — only these are changed; the file is edited in place (see [Permission rules](#permission-rules)) |
 | `.kirakit-profile`, `.kirakit-manifest`, `.kirakit-originals` | Profile and the record used by `--uninstall` |
 | `.kirakit-permissions` | The permission rules kirakit added to `settings.json`, one per line |
@@ -232,8 +232,7 @@ for `GH_TOKEN=$(gh auth token --user LOGIN) gh`, with that member's login:
 | --- | --- |
 | Assistant (`--assistant-github`) | `Bash(P issue create:*)`, `issue edit`, `issue comment`, `issue close`; `Bash(P pr create:*)`, `pr comment`, `pr review`; `Bash(P label create:*)`; `Bash(git push -u origin TYPE/:*)` and `Bash(git push origin TYPE/:*)` for `feat`, `fix`, `docs`, `refactor`, `test`, `chore` and `ci`; `Bash(git push origin main)`; `Bash(git push origin --delete:*)`; `Bash(P project item-edit:*)` and `Bash(P project item-add:*)` |
 | Assistant, with `--allow-releases` | Also `Bash(P release create:*)` and `Bash(git push origin v:*)` |
-| Assistant, with a coder's account | Also `Bash(P pr edit:*)`, to request your review on the coder's approved pull requests |
-| Analyst (`--analyst-github`) | `Bash(P issue create:*)`, `issue edit`, `issue comment`, `issue close`; `Bash(P label create:*)`; `Bash(P project item-edit:*)` and `Bash(P project item-list:*)` |
+| Assistant, with a coder's account | Also `Bash(P pr edit:*)`, to request your review on the coder's approved pull requests || Analyst (`--analyst-github`) | `Bash(P issue create:*)`, `issue edit`, `issue comment`, `issue close`; `Bash(P label create:*)`; `Bash(P project item-edit:*)` and `Bash(P project item-list:*)` |
 | Coder (`--coder-github`) | `Bash(P issue create:*)`, `issue edit`, `issue comment`; `Bash(P pr create:*)`, `pr comment`, `pr review`, `pr edit`; the assistant's work branch pushes; `Bash(git push origin --delete TYPE/:*)` for the same branch types; `Bash(P project item-edit:*)` and `Bash(P project item-add:*)`. Nothing that pushes or deletes `main`: the assistant merges |
 
 A member without a GitHub account gets no rules. The `git push` rules are not tied to an
@@ -596,13 +595,16 @@ With a coder, code goes through Cleo the same way:
   you name, in parallel with Cleo when she is busy, waiting when it touches the same files as
   Cleo's task or a pull request in review. A request that does not clearly ask Kira herself
   ("do #155") still goes to Cleo.
-- **Cleo opens the pull request, Kira reviews it first.** The review runs in the `review-pr`
-  skill, forked on Opus whatever model Kira's session uses: it reads the pull request, its
-  tasks and their specification, the diff, the CI checks and whether the branch can be
-  fast-forwarded, through `gh` only, and returns a verdict (`approve`, `request changes` or
-  `not ready` while CI runs) with its comments and a "For the user" section, while the diff
-  stays out of Kira's conversation. It writes nothing: Kira posts its verdict on GitHub as her
-  own account, in her own voice, and never approves against it. Once she approves, she
+- **Cleo opens the pull request, Kira reviews it first.** The review runs in the `kira` agent,
+  in the background like the other members: it appears among the running agents as Kira,
+  with a status such as "Reviewing PR #42", and Kira keeps answering you meanwhile. The agent
+  runs on Opus whatever model Kira's session uses, and follows the `review-pr` skill, which
+  it preloads: it reads the pull request, its tasks and their specification, the diff, the
+  CI checks and whether the branch can be fast-forwarded, through `gh` only, and returns a
+  verdict (`approve`, `request changes` or `not ready` while CI runs) with its comments and a
+  "For the user" section, while the diff stays out of Kira's conversation. It has no tool to
+  write files and writes nothing: Kira posts its verdict on GitHub as her own account, in her
+  own voice, and never approves against it. Once she approves, she
   requests your review and tells you what the review flagged for you (security-sensitive
   changes, questions); changes requested, by her or by you, go back to Cleo, who makes them,
   replies to the comments and asks Kira again.
@@ -738,6 +740,7 @@ when a member invokes it herself, it runs on her model.
 | --- | --- | --- | --- |
 | `iris` (agent) | Clarifies ideas, writes specifications and their tasks | opus | agent |
 | `cleo` (agent) | Implements tasks and opens pull requests | sonnet | agent |
+| `kira` (agent) | Reviews a pull request of the coder for the lead, in the background | opus | agent |
 | `next-task` | Finds the next workable task on the board | sonnet | forked |
 | `board-status` | Moves a task, a specification or a pull request on its boards | haiku | forked |
 | `test` | Runs the unit tests and shows a results table | haiku | forked |
@@ -757,8 +760,8 @@ The lead's and the analyst's own sessions (`assistant`, `analyst`) run on your m
 your Claude Code settings: kirakit does not pin it. `board-status` takes the account that
 writes as an argument (`--as LOGIN`), since a forked skill cannot tell who called it. The lead
 gives its background agents a model suited to the step (`haiku` to read CI logs or run the
-tests, `sonnet` to search across many files), and none when it starts `iris`, so that her
-own model applies. It starts `cleo` with no model, so that her Sonnet applies, except for
+tests, `sonnet` to search across many files), and none when it starts `iris` or `kira`, so
+that their own model applies. It starts `cleo` with no model, so that her Sonnet applies, except for
 the tasks that run on Opus (see the team section).
 
 ## Specifications

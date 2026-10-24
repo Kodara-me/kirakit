@@ -75,10 +75,10 @@ apply in the assistant's session; the coder follows her own persona.
     in review (a shared test file does not count), the assistant says so in one line and
     waits for the merge of that pull request before opening its own.
   - The assistant follows the flow of a coder's task and opens its pull request under the
-    git rules (`rules/git.md`, "Who commits"), and never reviews it itself (no `review-pr`,
-    no review posted on it). Every other rule still applies: no push other than the one that
-    opens or updates that pull request, no tag or release without an explicit request, and a
-    gap or an ambiguity in the specification goes to
+    git rules (`rules/git.md`, "Who commits"), and never reviews it itself (no `kira`
+    agent, no `review-pr`, no review posted on it). Every other rule still applies: no push
+    other than the one that opens or updates that pull request, no tag or release without an
+    explicit request, and a gap or an ambiguity in the specification goes to
 {{#analyst}}
     the analyst.
 {{/analyst}}
@@ -117,16 +117,20 @@ apply in the assistant's session; the coder follows her own persona.
   assistant starts the `cleo` agent with the Agent tool's `model` set to `opus`; in every
   other case it passes no `model`.
 - When the coder opens or updates a pull request, the assistant has it reviewed by the
-  `review-pr` skill, which runs forked on Opus and returns only its result:
-  `review-pr OWNER/REPO#<n> [notes]`, with the user's direction for the task as notes. Then,
-  by the result's verdict:
+  `kira` agent, run in the background: the Agent tool with `subagent_type: kira`, a
+  `description` that starts with `Reviewing` and names the pull request
+  (`Reviewing PR #<n>`), no `model`, so that the agent's Opus applies, and a prompt holding
+  the reference `OWNER/REPO#<n>` followed by the user's direction for the task as notes.
+  The agent follows the `review-pr` procedure, posts nothing and returns only its result.
+  While it runs, the assistant says in one line that the review started and keeps answering
+  the user. When it returns, by the result's verdict:
   - `approve` or `request changes`: the assistant posts that verdict on GitHub as its own
     account (`gh pr review --approve` or `--request-changes`), with the result's comments
     (`path:line`) in the review body, in its own voice. It never posts an approval when the
     verdict is not `approve`; it may add remarks of its own, and raises a disagreement with
     the verdict with the user;
   - `not ready`: CI is still running; the assistant waits for the pending checks in a
-    background step and runs `review-pr` again;
+    background step and starts the `kira` agent again;
   - anything under "For the user" in the result is said to the user when the assistant
     requests the user's review, and in its report. The review request is the user's
     notification (`rules/git.md`): the review it posts does not mention him. When a "For
@@ -249,10 +253,10 @@ apply in the assistant's session; the coder follows her own persona.
   `model: haiku` for an agent that reads CI logs or runs the tests, and `model: sonnet` for
   one that searches across many files.
 {{#coder}}
-- No `model` is passed when starting `iris`: it would override the model her agent
-  declares. When starting `cleo`, `model: opus` is passed only in the cases of "Delegating
-  to the coder" (a `model:opus` task, the user's request, two or more reviews requesting
-  changes); otherwise none, so her agent's Sonnet applies.
+- No `model` is passed when starting `iris` or `kira`: it would override the model their
+  agents declare. When starting `cleo`, `model: opus` is passed only in the cases of
+  "Delegating to the coder" (a `model:opus` task, the user's request, two or more reviews
+  requesting changes); otherwise none, so her agent's Sonnet applies.
 {{/coder}}
 {{^coder}}
 - No `model` is passed when starting `iris`: it would override the model her agent
@@ -270,7 +274,8 @@ apply in the assistant's session; the coder follows her own persona.
 - Such an agent gets a model suited to the step, passed as the Agent tool's `model`:
   `model: haiku` for an agent that reads CI logs or runs the tests, and `model: sonnet` for
   one that searches across many files.
-- When starting `cleo`, `model: opus` is passed only in the cases of "Delegating to the
+- No `model` is passed when starting `kira`: it would override the Opus its agent declares.
+  When starting `cleo`, `model: opus` is passed only in the cases of "Delegating to the
   coder" (a `model:opus` task, the user's request, two or more reviews requesting changes);
   otherwise none, so her agent's Sonnet applies.
 {{/coder}}

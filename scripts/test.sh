@@ -471,8 +471,8 @@ for dir in "$tmp/lead-coder" "$tmp/lead-both"; do
 	check "$what: the request covers the named work only (#163 R4)" sh -c 'grep -qF "The request covers only the task or the change it names, with the changes requested" "$1" && grep -qF "The next task that \`next-task\` gives, and any other" "$1"' _ "$team"
 	check "$what: the lead works in parallel with a busy coder (#163 R12)" contains "$team" 'parallel with her, without waiting for her task to end and without stopping or taking'
 	check "$what: the lead waits on an overlap (#163 R13)" sh -c 'grep -qF "When that work touches the same files as the coder'"'"'s running task or as a pull request" "$1" && grep -qF "waits for the merge of that pull request before opening its own." "$1"' _ "$team"
-	check "$what: the lead does not review her own work (#163 R8)" contains "$team" 'never reviews it itself (no `review-pr`,'
-	check "$what: other rules unchanged (#163 R9)" sh -c 'grep -qF "no push other than the one that" "$1" && grep -qF "no tag or release without an explicit request" "$1"' _ "$team"
+	check "$what: the lead does not review her own work (#163 R8, #183 R1)" flat_has "$team" 'never reviews it itself (no `kira` agent, no `review-pr`,'
+	check "$what: other rules unchanged (#163 R9)" flat_has "$team" 'no push other than the one that' 'no tag or release without an explicit request'
 	check "$what: no unqualified 'never codes' (#163 R10)" sh -c '! grep -q "never writes" "$1" "$2"' _ "$team" "$dir/rules/git.md"
 	check "$what: one coder task at a time (R16)" contains "$team" 'One coder task at a time.'
 	check "$what: the lead reviews first (R18)" contains "$team" 'the assistant posts that verdict on GitHub as its own'
@@ -1069,7 +1069,7 @@ check 'marker: README says approvals count only from your account (#38 R7)' sh -
 # that a new agent or skill fails until it is listed here and in the README.
 expected_model() {
 	case $1 in
-	iris | idea | spec | review-pr) echo opus ;;
+	iris | kira | idea | spec | review-pr) echo opus ;;
 	cleo | next-task | diffv | pull-request) echo sonnet ;;
 	board-status | test | pull | push | commit | assistant-commit) echo haiku ;;
 	esac
@@ -1191,20 +1191,47 @@ check 'review-pr: only reads (#130 R9)' contains "$review" 'This skill only read
 check 'review-pr: no write in allowed-tools (#130 R9)' sh -c 'tools=$(grep "^allowed-tools: " "$1") && ! printf "%s\n" "$tools" | grep -Eq "review|comment|edit|merge|close|create|project|push|commit|Write|Edit|gh api:|gh api\)|gh api \*" && printf "%s\n" "$tools" | grep -qF "Bash(gh api repos/*/compare/*)"' _ "$review"
 check 'review-pr: every gh api call a GET (#130 R9)' contains "$review" 'Every `gh api` call is a GET'
 team=$full/rules/team.md
-check 'review-pr: the lead runs it (#130 R10)' contains "$team" '`review-pr OWNER/REPO#<n> [notes]`, with the user'"'"'s direction for the task as notes.'
-check 'review-pr: the lead posts the verdict herself (#130 R10)' contains "$team" 'the assistant posts that verdict on GitHub as its own'
-check 'review-pr: reruns on not ready (#130 R10)' contains "$team" 'background step and runs `review-pr` again;'
-check 'review-pr: no approval against the verdict (#130 R10)' contains "$team" 'It never posts an approval when the'
-check 'review-pr: For the user reported (#130 R10)' contains "$team" 'anything under "For the user" in the result is said to the user'
-check 'review-pr: also with a coder only (#130 R10)' contains "$tmp/commit-coder-solo/rules/team.md" '`review-pr OWNER/REPO#<n> [notes]`'
-check 'review-pr: the README describes the review (#130 R12)' contains "$root/README.md" 'The review runs in the `review-pr`'
+check 'review-pr: the lead posts the verdict herself (#130 R10, #183 R7)' contains "$team" 'the assistant posts that verdict on GitHub as its own'
+check 'review-pr: no approval against the verdict (#130 R10, #183 R7)' contains "$team" 'It never posts an approval when the'
+check 'review-pr: For the user reported (#130 R10, #183 R7)' contains "$team" 'anything under "For the user" in the result is said to the user'
+check 'review-pr: the lead no longer invokes it herself (#183 D7)' sh -c '! grep -qF "\`review-pr OWNER/REPO#<n> [notes]\`" "$1"' _ "$team"
+
+# The lead's review in the kira agent (#183).
+kira_agent=$full/agents/kira.md
+check 'kira agent: built with a coder (#183 R8)' test -f "$kira_agent"
+for build in commit-assistant iris-build build2; do
+	check "kira agent: none without a coder, $build (#183 R8)" test ! -e "$tmp/$build/agents/kira.md"
+done
+check 'kira agent: installed with a coder (#183 R8)' test -f "$tmp/coder/agents/kira.md"
+check 'kira agent: not installed without a coder (#183 R8)' test ! -e "$tmp/coder-earlier/agents/kira.md"
+check 'kira agent: front matter on the first line (#183 R1)' test "$(head -n 1 "$kira_agent")" = ---
+check 'kira agent: named kira (#183 R1)' test "$(front "$kira_agent" name)" = kira
+check 'kira agent: runs on Opus (#183 R3, R9)' test "$(front "$kira_agent" model)" = opus
+check 'kira agent: reads only, no writing tool, no agent (#183 R5, R9)' sh -c 'tools=$(awk -v key="tools: " "NR > 1 && \$0 == \"---\" { exit } index(\$0, key) == 1 { print substr(\$0, length(key) + 1) }" "$1") && test -n "$tools" && ! printf "%s\n" "$tools" | grep -Eq "Edit|Write|NotebookEdit|Agent|Task|\\*"' _ "$kira_agent"
+check 'kira agent: preloads the review procedure (#183 R4, R9)' test "$(front "$kira_agent" skills)" = review-pr
+check 'kira agent: posts nothing (#183 R5)' flat_has "$kira_agent" 'Post no review, comment or label, move nothing on a board, and push, commit or change nothing'
+check 'kira agent: returns the result only (#183 R4)' flat_has "$kira_agent" 'Return only that procedure'"'"'s result, in its format and in neutral language.'
+for build in commit-coder commit-coder-solo; do
+	team=$tmp/$build/rules/team.md
+	check "kira agent: the lead starts it in the background, $build (#183 R1, R2)" flat_has "$team" 'reviewed by the `kira` agent, run in the background: the Agent tool with `subagent_type: kira`'
+	check "kira agent: a Reviewing description naming the pull request, $build (#183 R1)" flat_has "$team" 'a `description` that starts with `Reviewing` and names the pull request (`Reviewing PR #<n>`)'
+	check "kira agent: no model passed, $build (#183 R3)" flat_has "$team" '(`Reviewing PR #<n>`), no `model`, so that the agent'"'"'s Opus applies'
+	check "kira agent: the reference and the notes, $build (#183 R4)" flat_has "$team" 'the reference `OWNER/REPO#<n>` followed by the user'"'"'s direction for the task as notes.'
+	check "kira agent: the lead keeps answering, $build (#183 R2)" flat_has "$team" 'the assistant says in one line that the review started and keeps answering the user.'
+	check "kira agent: started again on not ready, $build (#183 R7)" flat_has "$team" 'background step and starts the `kira` agent again;'
+done
+check 'kira agent: no model in Keeping the conversation focused (#183 R3)' flat_has "$full/rules/team.md" 'No `model` is passed when starting `iris` or `kira`:'
+check 'kira agent: no model, coder only (#183 R3)' flat_has "$tmp/commit-coder-solo/rules/team.md" 'No `model` is passed when starting `kira`:'
+check 'kira agent: no rule without a coder (#183 R8)' sh -c '! grep -q "\`kira\` agent" "$1"' _ "$tmp/iris-build/rules/team.md"
+check 'kira agent: the README says the review appears as Kira (#183 R9)' flat_has "$root/README.md" 'The review runs in the `kira` agent' 'appears among the running agents as Kira'
+check 'kira agent: the README lists it with a coder (#183 R9)' contains "$root/README.md" '`agents/kira.md` with a coder'
 
 # Background agents (#97 R6, D10).
 for build in commit-coder iris-build commit-coder-solo; do
 	check "models: background agents' models, $build (#97 R6)" sh -c 'grep -qF "\`model: haiku\` for an agent that reads CI logs or runs the tests" "$1" && grep -qF "\`model: sonnet\` for" "$1"' _ "$tmp/$build/rules/team.md"
 done
-check 'models: no model for iris (#97 D10, #131 R2)' contains "$full/rules/team.md" 'No `model` is passed when starting `iris`:'
-check 'models: opus for cleo only when needed (#131 R2)' contains "$full/rules/team.md" 'When starting `cleo`, `model: opus` is passed only in the cases of "Delegating'
+check 'models: no model for iris (#97 D10, #131 R2)' contains "$full/rules/team.md" 'No `model` is passed when starting `iris` or `kira`:'
+check 'models: opus for cleo only when needed (#131 R2)' flat_has "$full/rules/team.md" 'When starting `cleo`, `model: opus` is passed only in the cases of "Delegating to the coder"'
 check 'models: no model for iris without a coder (#97 D10)' contains "$tmp/iris-build/rules/team.md" 'No `model` is passed when starting `iris`:'
 check 'models: opus for cleo only when needed, coder only (#131 R2)' contains "$tmp/commit-coder-solo/rules/team.md" 'When starting `cleo`, `model: opus` is passed only in the cases of "Delegating to the'
 check 'models: no cleo model rule without a coder (#131 R6)' sh -c '! grep -q "starting \`cleo\`" "$1"' _ "$tmp/iris-build/rules/team.md"
@@ -2099,6 +2126,8 @@ claude=$tmp/coder-rules-none
 kira_team --coder 'Cleo <cleo@example.com>' --copy >/dev/null
 check "coder rules: no account, no rule (R25)" sh -c '! grep -q "pr edit" "$1"' _ "$claude/settings.json"
 check "coder rules: no lead's pr edit without a coder account (R27)" test "$(rule_count "$claude/settings.json")" = 33
+# The kira agent's reads run in auto mode without a rule: none is added for them (#183 R6).
+check 'coder rules: no read rule for the review (#183 R6)' sh -c '! grep -q -e "gh pr view" -e "gh pr diff" -e "gh api" "$1"' _ "$claude/settings.json"
 
 # --- no terminal ---------------------------------------------------------------------------
 
