@@ -77,6 +77,7 @@ user=${KIRAKIT_USER-}
 state=${XDG_STATE_HOME:-$HOME/.local/state}/kirakit/watch-$role
 mkdir -p "$state" || exit 1
 poll_interval=$min_interval
+notifications_status=
 
 # seen KEY: whether KEY was reported; remember KEY: record it.
 seen() { grep -qxF -- "$1" "$state/seen" 2>/dev/null; }
@@ -101,66 +102,101 @@ api_get() {
 	gh api -i ${headers[@]+"${headers[@]}"} "$1" 2>/dev/null
 }
 
-# check_comments REPOSITORY NUMBER: report the new comments of a thread that wake the member.
-check_comments() {
-	local repo=$1 number=$2 comment key since
-	since=$(cat "$state/since" 2>/dev/null || true)
-	gh api "repos/$repo/issues/$number/comments${since:+?since=$since}" 2>/dev/null |
-		jq -c '.[]?' 2>/dev/null | while IFS= read -r comment; do
-		key=comment:$(printf '%s' "$comment" | jq -r '.id')
-		seen "$key" && continue
-		wake_comment "$repo" "$number" "$comment" || continue
-		remember "$key"
-		report comment "$repo" "$number" "$(printf '%s' "$comment" | jq -r '.html_url')"
-	done
+# wake_item KIND REPOSITORY NUMBER ID JSON: report an item (a comment, a review comment or a
+# review) once, when it wakes the member. JSON has user.login and html_url.
+wake_item() {
+	local key=$1:$4
+	seen "$key" && return 0
+	wake_comment "$2" "$3" "$5" || return 0
+	remember "$key"
+	report "$1" "$2" "$3" "$(printf '%s' "$5" | jq -r '.html_url')"
 }
 
-# check_approvals URL: report the new approving reviews of a pull request (developer only).
+# each_item PATH: the elements of a (paginated) list of the API, one JSON per line.
+each_item() {
+	gh api --paginate "$1" 2>/dev/null | jq -c '.[]?' 2>/dev/null
+}
+
+# check_comments REPOSITORY NUMBER TYPE: report the new comments of a thread that wake the
+# member: the comments of the issue or pull request and, on a pull request, its review
+# comments and the bodies of its reviews.
+check_comments() {
+	local repo=$1 number=$2 type=$3 item since
+	since=$(cat "$state/since" 2>/dev/null || true)
+	while IFS= read -r item; do
+		wake_item comment "$repo" "$number" "$(printf '%s' "$item" | jq -r '.id')" "$item"
+	done < <(each_item "repos/$repo/issues/$number/comments${since:+?since=$since}")
+	[ "$type" = PullRequest ] || return 0
+	while IFS= read -r item; do
+		wake_item review-comment "$repo" "$number" "$(printf '%s' "$item" | jq -r '.id')" "$item"
+	done < <(each_item "repos/$repo/pulls/$number/comments${since:+?since=$since}")
+	# A review counts by its body, or by its verdict when it has none (the inline comments of a
+	# review without a body are the review comments above).
+	while IFS= read -r item; do
+		wake_item review "$repo" "$number" "$(printf '%s' "$item" | jq -r '.id')" "$item"
+	done < <(each_item "repos/$repo/pulls/$number/reviews" |
+		jq -c 'select(.state != "PENDING" and ((.body // "") != "" or .state == "CHANGES_REQUESTED" or .state == "APPROVED"))')
+}
+
+# check_approvals REPOSITORY NUMBER: report the new approving reviews of a pull request the
+# member wrote (developer only).
 check_approvals() {
-	local url=$1 pr review key
-	pr=$(gh pr view "$url" --json number,url,reviews 2>/dev/null) || return 0
+	local repo=$1 number=$2 pr review key
+	pr=$(gh pr view "https://github.com/$repo/pull/$number" --json number,url,author,reviews 2>/dev/null) || return 0
+	[ "$(printf '%s' "$pr" | jq -r '.author.login // ""')" = "$account" ] || return 0
 	printf '%s' "$pr" | jq -c '.reviews[]? | select(.state == "APPROVED")' | while IFS= read -r review; do
 		key=review:$(printf '%s' "$review" | jq -r '.id')
 		seen "$key" && continue
 		remember "$key"
-		report approved "$(printf '%s' "$url" | sed -n 's#.*github.com/\([^/]*/[^/]*\)/pull/.*#\1#p')" \
-			"$(printf '%s' "$pr" | jq -r '.number')" "$(printf '%s' "$pr" | jq -r '.url')"
+		report approved "$repo" "$number" "$(printf '%s' "$pr" | jq -r '.url')"
 	done
 }
 
+# check_assignment REPOSITORY NUMBER URL REASON: report the assignment of a thread once. The
+# reason of a notification is that of its latest event, so a thread new to the state is
+# looked at: it may have been assigned before a later comment.
+check_assignment() {
+	local key=assigned:$1#$2 looked=looked:$1#$2
+	seen "$key" && return 0
+	if [ "$4" != assign ]; then
+		seen "$looked" && return 0
+		remember "$looked"
+		gh api "repos/$1/issues/$2" 2>/dev/null |
+			jq -e --arg account "$account" '[.assignees[]?.login] | index($account)' >/dev/null 2>&1 || return 0
+	fi
+	remember "$key"
+	report assigned "$1" "$2" "$3"
+}
+
 # check_notifications: read the notifications, honoring If-Modified-Since and X-Poll-Interval.
+# It sets notifications_status, the HTTP status of the reply.
 check_notifications() {
-	local response status modified interval body line repo number url reason type key
+	local response modified interval body line repo number url reason type html
 	response=$(api_get 'notifications?participating=true' "$(cat "$state/modified" 2>/dev/null || true)")
-	status=$(printf '%s\n' "$response" | sed -n '1s/^HTTP[^ ]* \([0-9]*\).*/\1/p')
+	notifications_status=$(printf '%s\n' "$response" | sed -n '1s/^HTTP[^ ]* \([0-9]*\).*/\1/p')
 	interval=$(printf '%s\n' "$response" | tr -d '\r' | sed -n 's/^[Xx]-[Pp]oll-[Ii]nterval: *//p' | head -n 1)
 	case $interval in '' | *[!0-9]*) ;; *) poll_interval=$interval ;; esac
 	[ "$poll_interval" -ge "$min_interval" ] || poll_interval=$min_interval
-	[ "$status" = 200 ] || return 0
+	[ "$notifications_status" = 200 ] || return 0
 	modified=$(printf '%s\n' "$response" | tr -d '\r' | sed -n 's/^[Ll]ast-[Mm]odified: *//p' | head -n 1)
 	body=$(printf '%s\n' "$response" | tr -d '\r' | sed '1,/^$/d')
-	printf '%s' "$body" | jq -c '.[]?' 2>/dev/null | while IFS= read -r line; do
+	while IFS= read -r line; do
 		repo=$(printf '%s' "$line" | jq -r '.repository.full_name')
 		url=$(printf '%s' "$line" | jq -r '.subject.url')
 		number=${url##*/}
 		reason=$(printf '%s' "$line" | jq -r '.reason')
 		type=$(printf '%s' "$line" | jq -r '.subject.type')
-		html=https://github.com/$repo/$([ "$type" = PullRequest ] && echo pull || echo issues)/$number
 		case $type in Issue | PullRequest) ;; *) continue ;; esac
-		if [ "$reason" = assign ]; then
-			key=assigned:$repo#$number
-			if ! seen "$key"; then
-				remember "$key"
-				report assigned "$repo" "$number" "$html"
-			fi
-		fi
-		check_comments "$repo" "$number"
+		html=https://github.com/$repo/$([ "$type" = PullRequest ] && echo pull || echo issues)/$number
+		check_assignment "$repo" "$number" "$html" "$reason"
+		check_comments "$repo" "$number" "$type"
 		if [ "$role" = developer ] && [ "$type" = PullRequest ]; then
-			check_approvals "$html"
+			check_approvals "$repo" "$number"
 		fi
-	done
+	done < <(printf '%s' "$body" | jq -c '.[]?' 2>/dev/null)
 	[ -z "$modified" ] || printf '%s\n' "$modified" >"$state/modified"
 }
+
 
 # ready_tasks: the developer's open tasks that are Ready, one "REPOSITORY NUMBER URL" per line,
 # sorted: those in the Ready column of the user's boards, and those labelled status:ready.
@@ -195,12 +231,30 @@ check_ready() {
 	printf '%s\n' "$current" | sed '/^$/d' >"$state/ready"
 }
 
+# minute_ago: the UTC time a minute ago (GNU or BSD date), else now.
+minute_ago() {
+	date -u -d '1 minute ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null ||
+		date -u -v-1M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null ||
+		date -u +%Y-%m-%dT%H:%M:%SZ
+}
+
+# check: one round. The first one only starts the clock: comments older than the watch are not
+# reported. Afterwards, `since` moves forward, with a margin of a minute for clocks that
+# differ (an item seen twice is reported once), only when GitHub answered (200 or 304): after
+# a failure the next round looks again from the last good one.
 check() {
 	local started
 	started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+	[ -f "$state/since" ] || printf '%s\n' "$started" >"$state/since"
 	check_notifications
 	[ "$role" != developer ] || check_ready
-	printf '%s\n' "$started" >"$state/since"
+	case $notifications_status in
+	200 | 304) minute_ago >"$state/since" ;;
+	esac
+	# Keep the memory of what was reported bounded.
+	if [ "$(wc -l <"$state/seen" 2>/dev/null || echo 0)" -gt 2000 ]; then
+		tail -n 1000 "$state/seen" >"$state/seen.tmp" && mv "$state/seen.tmp" "$state/seen"
+	fi
 }
 
 if [ -n "$once" ]; then

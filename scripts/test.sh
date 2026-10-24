@@ -2101,6 +2101,8 @@ check 'fetch: an unknown ref installs nothing (#86 R3)' test ! -e "$tmp/unknown"
 #   notifications.json   the notifications; notifications.status (default 200) and
 #                        notifications.interval are the status and X-Poll-Interval of the reply
 #   comments-REPO-N.json the comments of a thread (REPO with / as _)
+#   comments-REPO-N-pr.json and -N-review.json   review comments and reviews of a pull request
+#   issue-REPO-N.json    the issue itself (assignees)
 #   pr-N.json            `gh pr view N`
 #   search.json          `gh search issues`
 #   projects.json, items.json   `gh project list` and `gh project item-list`
@@ -2133,14 +2135,22 @@ api)
 		printf 'Last-Modified: Fri, 23 Oct 2026 10:00:00 GMT\r\n\r\n'
 		if [ "$status" = 200 ]; then cat "$d/notifications.json"; else exit 1; fi
 	else
-		path=${2%%\?*}
-		file=$(printf '%s' "$path" | sed 's#^repos/##; s#/issues/#-#; s#/comments$##; s#/#_#g')
-		cat "$d/comments-$file.json" 2>/dev/null || echo '[]'
+		shift
+		while [ "${1#-}" != "$1" ]; do shift; done
+		path=${1%%\?*}
+		printf '%s\n' "$1" >>"$d/paths"
+		case $path in
+		*/issues/*/comments) file=comments-$(printf '%s' "$path" | sed 's#^repos/##; s#/issues/#-#; s#/comments$##; s#/#_#g') ;;
+		*/pulls/*/comments) file=comments-$(printf '%s' "$path" | sed 's#^repos/##; s#/pulls/#-#; s#/comments$#-pr#; s#/#_#g') ;;
+		*/pulls/*/reviews) file=comments-$(printf '%s' "$path" | sed 's#^repos/##; s#/pulls/#-#; s#/reviews$#-review#; s#/#_#g') ;;
+		*) file=issue-$(printf '%s' "$path" | sed 's#^repos/##; s#/issues/#-#; s#/#_#g') ;;
+		esac
+		if [ -f "$d/$file.json" ]; then cat "$d/$file.json"; elif [ "${file#issue-}" != "$file" ]; then echo '{}'; else echo '[]'; fi
 	fi ;;
 esac
 FAKE
 chmod +x "$watchbin/gh"
-for tool in bash cat date dirname grep head jq mkdir printf rm sed sort tr; do
+for tool in bash cat date dirname grep head jq mkdir mv printf rm sed sort tail tr wc; do
 	ln -sf "$(command -v "$tool")" "$watchbin/$tool"
 done
 
@@ -2155,7 +2165,7 @@ watch_reset() {
 }
 # watch ROLE [ARGS...]: a single check, with the fake gh only.
 watch() {
-	env PATH="$watchbin" FAKE_GH_DIR="$watch_dir" KIRAKIT_WATCH_ACCOUNT=cleo-kodara KIRAKIT_USER=jonathan \
+	env -u GH_TOKEN PATH="$watchbin" FAKE_GH_DIR="$watch_dir" KIRAKIT_WATCH_ACCOUNT=cleo-kodara KIRAKIT_USER=jonathan \
 		"$root/launchers/kirakit-watch" "$@" --once 2>/dev/null
 }
 # notification REASON TYPE NUMBER: a notification of Kodara-me/kirakit.
@@ -2223,7 +2233,7 @@ printf '%s\n' '#!/bin/sh' 'echo "$1" >>"$FAKE_SLEEP_LOG"' 'exit 1' >"$fakesleep"
 chmod +x "$fakesleep"
 watch_loop() {
 	rm -f "$tmp/sleep-log"
-	env PATH="$watchbin" FAKE_GH_DIR="$watch_dir" KIRAKIT_WATCH_ACCOUNT=cleo-kodara KIRAKIT_USER=jonathan \
+	env -u GH_TOKEN PATH="$watchbin" FAKE_GH_DIR="$watch_dir" KIRAKIT_WATCH_ACCOUNT=cleo-kodara KIRAKIT_USER=jonathan \
 		KIRAKIT_WATCH_SLEEP="$fakesleep" FAKE_SLEEP_LOG="$tmp/sleep-log" \
 		"$root/launchers/kirakit-watch" analyst >/dev/null 2>&1
 	cat "$tmp/sleep-log"
@@ -2238,21 +2248,90 @@ check 'watch: waits as long as X-Poll-Interval asks (#41 R4)' test "$(watch_loop
 # Approving reviews of the developer's pull requests.
 watch_reset
 notification author PullRequest 9
-echo '{"number": 9, "url": "https://github.com/Kodara-me/kirakit/pull/9", "reviews": [{"id": "R1", "state": "APPROVED"}]}' \
+echo '{"number": 9, "author": {"login": "cleo-kodara"}, "url": "https://github.com/Kodara-me/kirakit/pull/9", "reviews": [{"id": "R1", "state": "APPROVED"}]}' \
 	>"$watch_dir/pr-9.json"
 check "watch: an approving review of the developer's pull request gives one line (#41 R5)" \
 	test "$(watch developer)" = 'approved Kodara-me/kirakit#9 https://github.com/Kodara-me/kirakit/pull/9'
 check 'watch: the review is not reported twice (#41 R5)' test -z "$(watch developer)"
 watch_reset
 notification author PullRequest 9
-echo '{"number": 9, "url": "https://github.com/Kodara-me/kirakit/pull/9", "reviews": [{"id": "R1", "state": "COMMENTED"}]}' \
+echo '{"number": 9, "author": {"login": "cleo-kodara"}, "url": "https://github.com/Kodara-me/kirakit/pull/9", "reviews": [{"id": "R1", "state": "COMMENTED"}]}' \
 	>"$watch_dir/pr-9.json"
 check 'watch: a review that does not approve gives nothing (#41 R5)' test -z "$(watch developer)"
 watch_reset
 notification author PullRequest 9
-echo '{"number": 9, "url": "https://github.com/Kodara-me/kirakit/pull/9", "reviews": [{"id": "R1", "state": "APPROVED"}]}' \
+echo '{"number": 9, "author": {"login": "cleo-kodara"}, "url": "https://github.com/Kodara-me/kirakit/pull/9", "reviews": [{"id": "R1", "state": "APPROVED"}]}' \
 	>"$watch_dir/pr-9.json"
 check 'watch: approvals concern the developer only (#41 R5)' test -z "$(watch analyst)"
+
+# Approvals concern the developer's own pull requests only (#41 R5).
+watch_reset
+notification mention PullRequest 9
+echo '{"number": 9, "author": {"login": "someone-else"}, "url": "https://github.com/Kodara-me/kirakit/pull/9", "reviews": [{"id": "R1", "state": "APPROVED"}]}' \
+	>"$watch_dir/pr-9.json"
+check "watch: an approved pull request by someone else gives nothing (#41 R5)" test -z "$(watch developer)"
+
+# The user's review comments and review bodies on a pull request wake the member (#41 R5).
+watch_reset
+notification mention PullRequest 9
+echo '[{"id": 300, "user": {"login": "jonathan"}, "html_url": "https://github.com/Kodara-me/kirakit/pull/9#discussion_r300"}]' \
+	>"$watch_dir/comments-Kodara-me_kirakit-9-pr.json"
+check "watch: the user's review comment gives one line (#41 R5)" \
+	test "$(watch developer)" = 'review-comment Kodara-me/kirakit#9 https://github.com/Kodara-me/kirakit/pull/9#discussion_r300'
+check 'watch: the review comment is not reported twice (#41 R5)' test -z "$(watch developer)"
+watch_reset
+notification mention PullRequest 9
+echo '[{"id": 301, "state": "CHANGES_REQUESTED", "body": "", "user": {"login": "jonathan"}, "html_url": "https://github.com/Kodara-me/kirakit/pull/9#pullrequestreview-301"},
+	{"id": 302, "state": "COMMENTED", "body": "", "user": {"login": "jonathan"}, "html_url": "https://github.com/Kodara-me/kirakit/pull/9#pullrequestreview-302"},
+	{"id": 303, "state": "COMMENTED", "body": "ok", "user": {"login": "someone-else"}, "html_url": "https://github.com/Kodara-me/kirakit/pull/9#pullrequestreview-303"}]' \
+	>"$watch_dir/comments-Kodara-me_kirakit-9-review.json"
+check "watch: the user's requested changes give one line, other reviews nothing (#41 R5)" \
+	test "$(watch developer)" = 'review Kodara-me/kirakit#9 https://github.com/Kodara-me/kirakit/pull/9#pullrequestreview-301'
+watch_reset
+notification mention Issue 9
+echo '[{"id": 304, "user": {"login": "jonathan"}, "html_url": "x"}]' >"$watch_dir/comments-Kodara-me_kirakit-9-pr.json"
+check 'watch: an issue has no review comments (#41 R5)' test -z "$(watch developer)"
+
+# `since` moves forward only after GitHub answered (#41 R5).
+watch_reset
+watch analyst >/dev/null
+first=$(cat "$XDG_STATE_HOME/kirakit/watch-analyst/since")
+echo 500 >"$watch_dir/notifications.status"
+printf '2000-01-01T00:00:00Z\n' >"$XDG_STATE_HOME/kirakit/watch-analyst/since"
+watch analyst >/dev/null
+check 'watch: since stays after a failed check (#41 R5)' \
+	test "$(cat "$XDG_STATE_HOME/kirakit/watch-analyst/since")" = 2000-01-01T00:00:00Z
+echo 304 >"$watch_dir/notifications.status"
+watch analyst >/dev/null
+check 'watch: since moves forward after a 304 (#41 R5)' \
+	test "$(cat "$XDG_STATE_HOME/kirakit/watch-analyst/since")" != 2000-01-01T00:00:00Z
+check 'watch: since is a timestamp (#41 R5)' sh -c 'printf "%s" "$1" | grep -Eq "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$"' _ "$first"
+
+# The first check reads only the comments from its start on (#41 R5).
+watch_reset
+notification mention Issue 7
+watch analyst >/dev/null
+check 'watch: the first check asks for comments since its start (#41 R5)' grep -q 'issues/7/comments?since=' "$watch_dir/paths"
+
+# An assignment hidden by a later comment is found from the issue (#41 R5).
+watch_reset
+notification comment Issue 8
+echo '{"assignees": [{"login": "cleo-kodara"}]}' >"$watch_dir/issue-Kodara-me_kirakit-8.json"
+check 'watch: an assignment hidden by a comment gives one line (#41 R5)' \
+	test "$(watch developer)" = 'assigned Kodara-me/kirakit#8 https://github.com/Kodara-me/kirakit/issues/8'
+check 'watch: it is not reported twice (#41 R5)' test -z "$(watch developer)"
+watch_reset
+notification comment Issue 8
+echo '{"assignees": [{"login": "someone-else"}]}' >"$watch_dir/issue-Kodara-me_kirakit-8.json"
+check 'watch: an issue assigned to someone else gives nothing (#41 R5)' test -z "$(watch developer)"
+
+# The memory of what was reported stays bounded.
+watch_reset
+watch analyst >/dev/null
+seq 1 2500 | sed 's/^/comment:/' >"$XDG_STATE_HOME/kirakit/watch-analyst/seen"
+watch analyst >/dev/null
+check 'watch: the list of reported items stays bounded' \
+	test "$(wc -l <"$XDG_STATE_HOME/kirakit/watch-analyst/seen")" -le 2000
 
 # Ready tasks (#41 R10): by label, or in the Ready column of a board.
 watch_reset
