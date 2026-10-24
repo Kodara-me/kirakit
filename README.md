@@ -73,7 +73,7 @@ Outside it, on Linux and macOS (see [Launchers](#launchers)):
 | --- | --- |
 | `assistant`, `team`, `kirakit-session` in `~/.local/bin` (or `--bin-dir`) | `launchers` |
 | `analyst` in the same directory, with an analyst | `launchers` |
-| `kirakit-assistant.colorscheme` in `$XDG_DATA_HOME/konsole` (default: `~/.local/share/konsole`) | `launchers` |
+| `kirakit-assistant.colorscheme` in `$XDG_DATA_HOME/konsole` (default: `~/.local/share/konsole`; or `--color-scheme-dir`) | `launchers` |
 | `kirakit-analyst.colorscheme` in the same directory, with an analyst | `launchers` |
 
 The `github` component is installed only on request (`--only github`), into a repository's
@@ -110,7 +110,8 @@ a pull request template, Copilot instructions, and a workflow that checks pull r
 | `--no-complete-approved-prs` | Every pull request waits for your review (default; saved in the profile) |
 | `--default-style PERSONA` | Style selected in `settings.json` (default: `kira-cozy`) |
 | `--assistant-style PERSONA` | Style of the `assistant` launcher (default: the default style) |
-| `--bin-dir DIR` | Where the launchers go, an absolute path (default: `~/.local/bin`) |
+| `--bin-dir DIR` | Where the launchers go, an absolute path (default: `~/.local/bin`; saved in the profile) |
+| `--color-scheme-dir DIR` | Where the Konsole color schemes go, an absolute path (default: `konsole/` in `XDG_DATA_HOME`; saved in the profile) |
 | `--reconfigure` | Ask all profile questions again |
 | `--persona NAME` | Install only this persona (repeatable; default: all) |
 | `--only COMPONENT` | `styles`, `claude`, `launchers` or `github`; default: `styles`, `claude` and `launchers` |
@@ -121,7 +122,8 @@ a pull request template, Copilot instructions, and a workflow that checks pull r
 Environment variables:
 
 - `CLAUDE_CONFIG_DIR` — Claude Code configuration directory (default: `~/.claude`)
-- `XDG_DATA_HOME` — where the Konsole color schemes go, in `konsole/` (default: `~/.local/share`)
+- `XDG_DATA_HOME` — where the Konsole color schemes go without `--color-scheme-dir`, in
+  `konsole/` (default: `~/.local/share`)
 - `KIRAKIT_REPO`, `KIRAKIT_REF` — repository and branch or tag fetched without a clone
   (default: the release the installer comes from, otherwise the latest `vX.Y.Z` tag; set
   `KIRAKIT_REF=main` for unreleased changes)
@@ -155,7 +157,10 @@ The answers are saved in `$CLAUDE_CONFIG_DIR/.kirakit-profile` and reused by lat
 questions that are not answered yet are asked. Options override the saved values, and
 `--reconfigure` asks everything again. Without a terminal, unanswered values fall back to
 defaults: no name, `unspecified`, `auto`, no assistant, no analyst, no coder; the optional assistant
-values default to empty, and trailers to yes when there is an assistant.
+values default to empty, and trailers to yes when there is an assistant. The launcher
+locations (`bin_dir`, `color_scheme_dir`) are saved only when passed with `--bin-dir` or
+`--color-scheme-dir`, never as their default; later runs use a saved one, `--uninstall`
+included.
 
 ### Who commits
 

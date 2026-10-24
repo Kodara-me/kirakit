@@ -36,7 +36,9 @@ profile=$CLAUDE_DIR/.kirakit-profile
 manifest=$CLAUDE_DIR/.kirakit-manifest
 originals=$CLAUDE_DIR/.kirakit-originals
 permissions_record=$CLAUDE_DIR/.kirakit-permissions
-konsole_dir=${XDG_DATA_HOME:-$HOME/.local/share}/konsole
+# The launcher directory and the color scheme directory: resolved by resolve_launcher_dirs.
+bin_dir=
+konsole_dir=
 profile_keys='name gender language assistant assistant_signing_key assistant_github co_author_trailer analyst analyst_github coder coder_signing_key coder_github'
 nl='
 '
@@ -81,7 +83,9 @@ Options:
   --no-complete-approved-prs Every pull request waits for your review (default)
   --default-style PERSONA    Output style selected in settings.json (default: kira-cozy)
   --assistant-style PERSONA  Style of the assistant launcher (default: the default style)
-  --bin-dir DIR              Where the launchers go (default: ~/.local/bin)
+  --bin-dir DIR              Where the launchers go (default: ~/.local/bin; saved)
+  --color-scheme-dir DIR     Where the Konsole color schemes go (default: konsole/ in
+                             XDG_DATA_HOME; saved)
   --reconfigure              Ask all profile questions again
   --persona NAME             Install only this persona (repeatable; default: all)
   --only COMPONENT           styles, claude (CLAUDE.md, rules, settings, agents, skills),
@@ -100,7 +104,8 @@ Profile options are asked once and saved in \$CLAUDE_CONFIG_DIR/.kirakit-profile
 
 Environment:
   CLAUDE_CONFIG_DIR  Claude Code configuration directory (default: ~/.claude)
-  XDG_DATA_HOME      Where the Konsole color schemes go, in konsole/ (default: ~/.local/share)
+  XDG_DATA_HOME      Where the Konsole color schemes go without --color-scheme-dir, in konsole/
+                     (default: ~/.local/share)
   KIRAKIT_REPO       Repository fetched without a clone (default: $KIRAKIT_REPO)
   KIRAKIT_REF        Branch or tag fetched without a clone (default: the latest release)
 EOF
@@ -358,6 +363,27 @@ expand_home() {
 	esac
 }
 
+# resolve_launcher_dirs: the launcher directory and the color scheme directory, each from its
+# option on this run, else the profile, else the default. given_bin_dir and
+# given_color_scheme_dir hold a location given on this run or saved earlier, and are empty
+# for a default, which is never saved in the profile.
+resolve_launcher_dirs() {
+	given_bin_dir=${opt_bin_dir-${saved_bin_dir-}}
+	given_color_scheme_dir=${opt_color_scheme_dir-${saved_color_scheme_dir-}}
+	[ -z "$given_bin_dir" ] || given_bin_dir=$(expand_home "$given_bin_dir")
+	[ -z "$given_color_scheme_dir" ] || given_color_scheme_dir=$(expand_home "$given_color_scheme_dir")
+	bin_dir=${given_bin_dir:-$HOME/.local/bin}
+	konsole_dir=${given_color_scheme_dir:-${XDG_DATA_HOME:-$HOME/.local/share}/konsole}
+	case $bin_dir in
+	/*) ;;
+	*) die "the bin directory must be an absolute path: $bin_dir" ;;
+	esac
+	case $konsole_dir in
+	/*) ;;
+	*) die "the color scheme directory must be an absolute path: $konsole_dir" ;;
+	esac
+}
+
 load_profile() {
 	[ -f "$profile" ] || return 0
 	while IFS='=' read -r key value; do
@@ -381,6 +407,7 @@ load_profile() {
 		style) saved_style=$value ;;
 		assistant_style) saved_assistant_style=$value ;;
 		bin_dir) saved_bin_dir=$value ;;
+		color_scheme_dir) saved_color_scheme_dir=$value ;;
 		esac
 	done <"$profile"
 	# Profiles before the analyst: the team had none, and the question is not asked again.
@@ -444,11 +471,7 @@ setup_profile() {
 	default_style=${opt_style-${saved_style:-kira-cozy}}
 	# Empty: the assistant launcher follows the default style.
 	assistant_style=${opt_assistant_style-${saved_assistant_style-}}
-	bin_dir=$(expand_home "${opt_bin_dir-${saved_bin_dir:-$HOME/.local/bin}}")
-	case $bin_dir in
-	/*) ;;
-	*) die "the bin directory must be an absolute path: $bin_dir" ;;
-	esac
+	resolve_launcher_dirs
 
 	missing=
 	for key in $profile_keys; do
@@ -519,7 +542,10 @@ setup_profile() {
 	fi
 
 	[ -z "${no_save-}" ] || return 0
-	profile_text="name=$user_name${nl}gender=$user_gender${nl}language=$user_language${nl}assistant_name=$assistant_name${nl}assistant_email=$assistant_email${nl}assistant_signing_key=$assistant_signing_key${nl}assistant_github=$assistant_github${nl}co_author_trailer=$co_author_trailer${nl}analyst=$analyst${nl}analyst_github=$analyst_github${nl}coder=$coder${nl}coder_signing_key=$coder_signing_key${nl}coder_github=$coder_github${nl}allow_releases=$allow_releases${nl}complete_approved_prs=$complete_approved_prs${nl}style=$default_style${nl}assistant_style=$assistant_style${nl}bin_dir=$bin_dir"
+	profile_text="name=$user_name${nl}gender=$user_gender${nl}language=$user_language${nl}assistant_name=$assistant_name${nl}assistant_email=$assistant_email${nl}assistant_signing_key=$assistant_signing_key${nl}assistant_github=$assistant_github${nl}co_author_trailer=$co_author_trailer${nl}analyst=$analyst${nl}analyst_github=$analyst_github${nl}coder=$coder${nl}coder_signing_key=$coder_signing_key${nl}coder_github=$coder_github${nl}allow_releases=$allow_releases${nl}complete_approved_prs=$complete_approved_prs${nl}style=$default_style${nl}assistant_style=$assistant_style"
+	# Only a location given on this run or saved earlier, never the computed default.
+	[ -z "$given_bin_dir" ] || profile_text="$profile_text${nl}bin_dir=$given_bin_dir"
+	[ -z "$given_color_scheme_dir" ] || profile_text="$profile_text${nl}color_scheme_dir=$given_color_scheme_dir"
 	if [ -f "$profile" ] && [ "$(cat "$profile")" = "$profile_text" ]; then
 		return
 	fi
@@ -616,7 +642,7 @@ install_launchers() {
 	if [ -f "$manifest" ]; then
 		while IFS= read -r path; do
 			case $path in "$CLAUDE_DIR"/* | "$konsole_dir"/* | "$bin_dir"/*) continue ;; esac
-			[ -f "$src/launchers/${path##*/}" ] || continue
+			[ -f "$src/launchers/${path##*/}" ] || [ -f "$src/launchers/konsole/${path##*/}" ] || continue
 			remove_installed "$path"
 			removed="$removed$path$nl"
 		done <"$manifest"
@@ -1089,7 +1115,7 @@ remove_installed() {
 uninstall_all() {
 	[ -f "$manifest" ] || die "nothing to uninstall: $manifest not found"
 	load_profile
-	bin_dir=${saved_bin_dir:-$HOME/.local/bin}
+	resolve_launcher_dirs
 	while IFS= read -r path; do
 		case $path in
 		'') continue ;;
@@ -1112,7 +1138,7 @@ while [ $# -gt 0 ]; do
 	--dry-run) dry_run=1 ;;
 	--name | --gender | --language | --co-author | --assistant | --assistant-signing-key | \
 		--assistant-github | --analyst-github | --default-style | --persona | --only | --target | \
-		--assistant-style | --bin-dir | --coder | --coder-signing-key | --coder-github)
+		--assistant-style | --bin-dir | --color-scheme-dir | --coder | --coder-signing-key | --coder-github)
 		[ $# -ge 2 ] || die "missing value for $1"
 		case $1 in
 		--name) opt_name=$2 ;;
@@ -1170,6 +1196,10 @@ while [ $# -gt 0 ]; do
 		--bin-dir)
 			case $2 in '' | *"$nl"*) die "invalid bin directory: $2" ;; esac
 			opt_bin_dir=$2
+			;;
+		--color-scheme-dir)
+			case $2 in '' | *"$nl"*) die "invalid color scheme directory: $2" ;; esac
+			opt_color_scheme_dir=$2
 			;;
 		--only)
 			case $2 in

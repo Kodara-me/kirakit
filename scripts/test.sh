@@ -1326,6 +1326,38 @@ kira --copy --name Alex --gender female --language auto --no-co-author --bin-dir
 check 'members: the assistant is Kira without a git identity (#36 R10)' \
 	test "$(started "$claude-bin/assistant")" = "$(expected -n Kira --settings '{"outputStyle":"Kira (cozy)"}')"
 
+# --- launcher locations: --color-scheme-dir and what the profile keeps (#169 R1, R2, R3, R10) -
+
+claude=$tmp/schemes
+schemes=$tmp/schemes-colors
+kira_profile --copy --bin-dir "$claude-bin" --color-scheme-dir "$schemes" --only launchers >/dev/null
+check 'color schemes: installed in --color-scheme-dir (#169 R1)' test -f "$schemes/kirakit-assistant.colorscheme"
+check 'color schemes: not in the default directory (#169 R1)' test ! -e "$claude-data/konsole/kirakit-assistant.colorscheme"
+check 'color schemes: directory saved (#169 R2)' profile_has "color_scheme_dir=$schemes"
+rm "$schemes/kirakit-assistant.colorscheme"
+kira --copy --only launchers >/dev/null
+check 'color schemes: reused without the option (#169 R2)' test -f "$schemes/kirakit-assistant.colorscheme"
+check 'color schemes: saved values kept unchanged (#169 R3)' sh -c 'grep -qxF "color_scheme_dir=$2" "$1" && grep -qxF "bin_dir=$3" "$1"' _ "$claude/.kirakit-profile" "$schemes" "$claude-bin"
+kira --copy --color-scheme-dir "$schemes-2" --only launchers >/dev/null
+check 'color schemes: moved to a new directory (#169 R2)' sh -c 'test -f "$1/kirakit-assistant.colorscheme" && ! ls "$2"/* >/dev/null 2>&1' _ "$schemes-2" "$schemes"
+kira --uninstall >/dev/null
+check 'color schemes: uninstall removes them from the saved directory (#169 R2)' sh -c '! ls "$1"/* >/dev/null 2>&1' _ "$schemes-2"
+check 'color schemes: uninstall removes the launchers from the saved directory (#169 R2)' sh -c '! ls "$1"/* >/dev/null 2>&1' _ "$claude-bin"
+# The shell is split on purpose, to allow options.
+# shellcheck disable=SC2086
+check 'color schemes: a relative directory is refused (#169 R1)' sh -c '! "$@" >"$0" 2>&1 && grep -q "the color scheme directory must be an absolute path: konsole" "$0"' "$tmp/schemes-relative.log" \
+	env CLAUDE_CONFIG_DIR="$tmp/schemes-relative" HOME="$tmp/schemes-relative-home" $shell "$root/get-kira.sh" --copy --color-scheme-dir konsole
+claude=$tmp/schemes-home
+# shellcheck disable=SC2088 # a literal "~/", expanded by the installer
+kira_profile --copy --color-scheme-dir '~/colors' --bin-dir '~/bin' --only launchers >/dev/null
+check 'color schemes: a leading ~/ is expanded (#169 R1)' sh -c 'test -f "$1/colors/kirakit-assistant.colorscheme" && grep -qxF "color_scheme_dir=$1/colors" "$2"' _ "$claude-home" "$claude/.kirakit-profile"
+claude=$tmp/schemes-fresh
+kira_profile --copy >/dev/null
+check 'launcher locations: a fresh run saves neither default (#169 R3)' sh -c '! grep -q "^bin_dir=\|^color_scheme_dir=" "$1"' _ "$claude/.kirakit-profile"
+check 'launcher locations: the defaults still used (#169 R3)' sh -c 'test -e "$1/.local/bin/assistant" && test -f "$2/konsole/kirakit-assistant.colorscheme"' _ "$claude-home" "$claude-data"
+check 'color schemes: in the help (#169 R10)' sh -c '$1 "$2/get-kira.sh" --help | grep -q "^  --color-scheme-dir DIR     Where the Konsole color schemes go"' _ "$shell" "$root"
+check 'color schemes: in the README (#169 R10)' grep -q '^| `--color-scheme-dir DIR` | Where the Konsole color schemes go, an absolute path' "$root/README.md"
+
 # --- launchers: Konsole colors (#36 R12) ---------------------------------------------------
 
 # A fake qdbus6 that answers the profile of the session and the window's default profile.

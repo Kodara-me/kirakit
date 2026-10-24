@@ -540,8 +540,12 @@ function Get-KiraProfile {
     }
 
     # The launchers are not installed on Windows; their settings, made by get-kira.sh, are kept.
+    # A launcher location is saved only when get-kira.sh saved one: never a computed default.
     $assistantStyle = if ($saved.ContainsKey('assistant_style')) { $saved.assistant_style } else { '' }
-    $binDir = if ($saved.ContainsKey('bin_dir') -and $saved.bin_dir) { $saved.bin_dir } else { "$HOME/.local/bin" }
+    $launcherDirs = ''
+    foreach ($key in @('bin_dir', 'color_scheme_dir')) {
+        if ($saved.ContainsKey($key) -and $saved[$key]) { $launcherDirs += "$key=$($saved[$key])$Nl" }
+    }
 
     if (-not $save) { return $result }
     $text ="name=$($result.name)${Nl}gender=$($result.gender)${Nl}language=$($result.language)${Nl}" +
@@ -551,7 +555,7 @@ function Get-KiraProfile {
         "analyst_github=$($result.analyst_github)${Nl}coder=$($result.coder)${Nl}" +
         "coder_signing_key=$($result.coder_signing_key)${Nl}coder_github=$($result.coder_github)${Nl}" +
         "allow_releases=$($result.allow_releases)${Nl}complete_approved_prs=$($result.complete_approved_prs)${Nl}style=$($result.style)${Nl}" +
-        "assistant_style=$assistantStyle${Nl}bin_dir=$binDir$Nl"
+        "assistant_style=$assistantStyle$Nl" + $launcherDirs
     $current = if (Test-Path -LiteralPath $ProfilePath) { Read-KiraText $ProfilePath } else { $null }
     if ($current -ne $text) {
         Write-KiraLog "save profile: $ProfilePath"
