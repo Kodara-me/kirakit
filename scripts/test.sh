@@ -2226,12 +2226,12 @@ comment() {
 
 # add_comment THREAD ID LOGIN AT [BODY]: append a comment to this thread.
 add_comment() {
-	local f=$watch_dir/comments-$1.json
-	[ -f "$f" ] || echo '[]' >"$f"
+	add_comment_file="$watch_dir"/comments-"$1".json
+	[ -f "$add_comment_file" ] || echo '[]' >"$add_comment_file"
 	jq --arg id "$2" --arg login "$3" --arg at "$4" --arg body "${5-}" \
 		'. + [{id: ($id | tonumber), user: {login: $login}, created_at: $at, body: $body,
-			html_url: "https://github.com/Kodara-me/kirakit/issues/7#issuecomment-\($id)"}]' "$f" >"$f.tmp" &&
-		mv "$f.tmp" "$f"
+			html_url: "https://github.com/Kodara-me/kirakit/issues/7#issuecomment-\($id)"}]' "$add_comment_file" >"$add_comment_file.tmp" &&
+		mv "$add_comment_file.tmp" "$add_comment_file"
 }
 marker='text
 
