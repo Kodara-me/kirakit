@@ -19,7 +19,8 @@ trap 'rm -rf "$tmp"' EXIT
 failures=0
 claude=
 # The launchers go to ~/.local/bin and their Konsole color schemes to $XDG_DATA_HOME/konsole:
-# never the real ones.
+# never the real ones. XDG_CONFIG_HOME is scratch too, though the guard does not list it:
+# get-kira.sh only reads konsolerc there.
 HOME=$tmp/home
 XDG_DATA_HOME=$tmp/data
 XDG_CONFIG_HOME=$tmp/config
@@ -70,12 +71,7 @@ kira() {
 		kira_run "$@"
 		return
 	fi
-	guard_list "$claude-home" "$claude-data" >"$tmp/guard-before"
-	guard_status=0
-	kira_run "$@" || guard_status=$?
-	guard_list "$claude-home" "$claude-data" >"$tmp/guard-after"
-	guard_report "kira $*" "$tmp/guard-before" "$tmp/guard-after" >>"$tmp/guard-failures" || true
-	return "$guard_status"
+	guarded "kira $*" "$claude-home" "$claude-data" kira_run "$@"
 }
 
 kira_run() {
@@ -97,6 +93,21 @@ guard_list() {
 				"$(find "$guard_file" -prune -exec ls -ld {} + | awk '{ print $6, $7, $8 }')"
 		done
 	done
+}
+
+# guarded WHAT HOME DATA COMMAND...: runs the command, which is given only a scratch
+# configuration directory, and records in $tmp/guard-failures any file it created, changed or
+# removed under HOME or DATA. Returns the command's status. XDG_CONFIG_HOME is not listed:
+# get-kira.sh only reads konsolerc there.
+guarded() {
+	guard_what=$1 guard_home=$2 guard_data=$3
+	shift 3
+	guard_list "$guard_home" "$guard_data" >"$tmp/guard-before"
+	guard_status=0
+	"$@" || guard_status=$?
+	guard_list "$guard_home" "$guard_data" >"$tmp/guard-after"
+	guard_report "$guard_what" "$tmp/guard-before" "$tmp/guard-after" >>"$tmp/guard-failures" || true
+	return "$guard_status"
 }
 
 # guard_report WHAT BEFORE AFTER: succeeds silently when the listings are the same;
@@ -374,7 +385,8 @@ check 'optional: not listed as built' sh -c '! grep -q optional.md "$1"' _ "$tmp
 # --copy, or empty for link mode, so it is split on purpose like the shell.
 # shellcheck disable=SC2086
 optional_kira() {
-	CLAUDE_CONFIG_DIR=$claude $shell "$optional/get-kira.sh" $1 --name Alex --gender female \
+	guarded "optional_kira $*" "$tmp/home" "$tmp/data" \
+		env CLAUDE_CONFIG_DIR="$claude" $shell "$optional/get-kira.sh" $1 --name Alex --gender female \
 		--language auto --assistant 'Kira <kira@example.com>' --assistant-github "$2" </dev/null
 }
 
@@ -446,7 +458,9 @@ check 'analyst: earlier profile not asked' sh -c '! grep -q "no terminal to ask 
 # The installer passes the analyst to the build.
 claude=$tmp/analyst-build
 printf '%s\n' '{{#analyst}}' 'For {{analyst_github}}.' '{{/analyst}}' >"$optional/claude/agents/analyst.md"
-CLAUDE_CONFIG_DIR=$claude $shell "$optional/get-kira.sh" --copy --name Alex --gender female --language auto \
+# shellcheck disable=SC2086
+guarded 'analyst build' "$tmp/home" "$tmp/data" \
+	env CLAUDE_CONFIG_DIR="$claude" $shell "$optional/get-kira.sh" --copy --name Alex --gender female --language auto \
 	--no-co-author --analyst-github iris-bot </dev/null >/dev/null
 check 'analyst: passed to the build' contains "$claude/agents/analyst.md" 'For iris-bot.'
 
@@ -470,7 +484,9 @@ claude=$tmp/coder
 mkdir -p "$tmp/coder-keys"
 : >"$tmp/coder-keys/cleo" && : >"$tmp/coder-keys/cleo.pub"
 printf '%s\n' '{{#coder}}' 'For {{coder}}, {{coder_github}}.' '{{/coder}}' >"$optional/claude/agents/analyst.md"
-CLAUDE_CONFIG_DIR=$claude $shell "$optional/get-kira.sh" --copy --name Alex --gender female --language auto \
+# shellcheck disable=SC2086
+guarded 'coder install' "$tmp/home" "$tmp/data" \
+	env CLAUDE_CONFIG_DIR="$claude" $shell "$optional/get-kira.sh" --copy --name Alex --gender female --language auto \
 	--assistant 'Kira <kira@example.com>' --coder 'Cleo <cleo@example.com>' --coder-github cleo-bot \
 	--coder-signing-key "$tmp/coder-keys/cleo.pub" </dev/null >"$tmp/coder.log"
 check 'coder: identity saved (R23)' profile_has 'coder=Cleo <cleo@example.com>'
@@ -480,7 +496,9 @@ check 'coder: passed to the build (R23)' contains "$claude/agents/analyst.md" 'F
 check 'coder: in the summary' grep -q 'coder Cleo <cleo@example.com>' "$tmp/coder.log"
 check 'coder: /cleo installed (#120 R10)' contains "$claude/skills/cleo/SKILL.md" 'agent: cleo'
 check 'coder: /cleo recorded (#120 R10)' grep -qxF "$claude/skills/cleo" "$claude/.kirakit-manifest"
-CLAUDE_CONFIG_DIR=$claude $shell "$optional/get-kira.sh" --copy </dev/null >"$tmp/coder-rerun.log"
+# shellcheck disable=SC2086
+guarded 'coder rerun' "$tmp/home" "$tmp/data" \
+	env CLAUDE_CONFIG_DIR="$claude" $shell "$optional/get-kira.sh" --copy </dev/null >"$tmp/coder-rerun.log"
 check 'coder: reloaded on the next run (R23)' contains "$claude/agents/analyst.md" 'For Cleo <cleo@example.com>, cleo-bot.'
 check 'coder: rerun asks nothing (R23)' sh -c '! grep -q "no terminal to ask for" "$1"' _ "$tmp/coder-rerun.log"
 check 'coder: rerun keeps the profile (R23)' profile_has 'coder_github=cleo-bot'
@@ -1410,6 +1428,7 @@ printf '#!/bin/sh\n' >"$tmp/shadow/assistant"
 chmod +x "$tmp/shadow/assistant"
 # The shell is split on purpose, to allow options.
 # shellcheck disable=SC2086
+# Outside the guard: the profile of this directory already holds bin_dir.
 env PATH="$tmp/shadow:$bin:$PATH" CLAUDE_CONFIG_DIR="$claude" HOME="$claude-home" XDG_DATA_HOME="$claude-data" \
 	$shell "$root/get-kira.sh" --copy </dev/null >"$tmp/members-path.log"
 check 'members: warns about a command earlier in PATH (#36 R15)' \
@@ -1593,6 +1612,7 @@ mv "$tmp/konsole" "$teambin/konsole"
 # launchers_run CONFIG HOME LOG [ENV...]: install the launchers with CONFIG as the configuration
 # directory ("-" for none), under a scratch HOME.
 launchers_run() {
+	# Outside the guard: these runs name their own HOME and aim at launcher locations on purpose.
 	lr_config=$1 lr_home=$2 lr_log=$3
 	shift 3
 	if [ "$lr_config" = - ]; then
@@ -2433,6 +2453,7 @@ check 'no terminal: no profile saved' test ! -e "$claude/.kirakit-profile"
 
 claude=$tmp/github-claude
 git init -q "$tmp/project"
+# Outside the guard: --only github writes its target project on purpose.
 (cd "$tmp/project" && CLAUDE_CONFIG_DIR=$claude $shell "$root/get-kira.sh" --only github >/dev/null)
 check 'github: templates copied' test -f "$tmp/project/.github/ISSUE_TEMPLATE/feature_request.yml"
 check 'github: workflow copied' test -f "$tmp/project/.github/workflows/pr-title.yml"

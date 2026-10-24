@@ -9,8 +9,8 @@ $tmp = Join-Path ([IO.Path]::GetTempPath()) ('kirakit-test.' + [Guid]::NewGuid()
 New-Item -ItemType Directory -Path $tmp | Out-Null
 $failures = 0
 
-# The user's real home and data directories stand for these: HOME, USERPROFILE and
-# XDG_DATA_HOME point into the temporary directory for every installer run, so that a run which
+# The user's real home and data directories stand for these: HOME, USERPROFILE,
+# XDG_DATA_HOME and XDG_CACHE_HOME point into the temporary directory for every installer run, so that a run which
 # writes outside its configuration directory changes nothing real.
 $scratchHome = Join-Path $tmp 'home'
 $scratchData = Join-Path $tmp 'data'
