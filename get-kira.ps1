@@ -70,6 +70,13 @@ Every specification waits in Specified for the user (default).
 Output style selected in settings.json (default: kira-cozy).
 .PARAMETER Reconfigure
 Ask all profile questions again.
+.PARAMETER BinDir
+Where get-kira.sh puts the launchers, an absolute path (saved in the profile under bin_dir).
+This installer installs no launchers and writes nothing there; the option lets both installers
+take the same command line.
+.PARAMETER ColorSchemeDir
+Where get-kira.sh puts the Konsole color schemes, an absolute path (saved in the profile under
+color_scheme_dir). Nothing is written there by this installer.
 .PARAMETER Persona
 Install only these personas (default: all).
 .PARAMETER Only
@@ -111,6 +118,8 @@ param(
     [switch]$NoStartVerifiedSpecs,
     [string]$DefaultStyle,
     [switch]$Reconfigure,
+    [string]$BinDir,
+    [string]$ColorSchemeDir,
     [string[]]$Persona = @(),
     [ValidateSet('styles', 'claude', 'launchers', 'github')]
     [string]$Only,
@@ -550,9 +559,27 @@ function Get-KiraProfile {
     # The launchers are not installed on Windows; their settings, made by get-kira.sh, are kept.
     # A launcher location is saved only when get-kira.sh saved one: never a computed default.
     $assistantStyle = if ($saved.ContainsKey('assistant_style')) { $saved.assistant_style } else { '' }
+    # A location given on this run wins over the saved one; both must be absolute paths.
     $launcherDirs = ''
-    foreach ($key in @('bin_dir', 'color_scheme_dir')) {
-        if ($saved.ContainsKey($key) -and $saved[$key]) { $launcherDirs += "$key=$($saved[$key])$Nl" }
+    $launcherOptions = @(
+        @{ Key = 'bin_dir'; Param = 'BinDir'; Label = 'bin directory' },
+        @{ Key = 'color_scheme_dir'; Param = 'ColorSchemeDir'; Label = 'color scheme directory' }
+    )
+    foreach ($option in $launcherOptions) {
+        $value = ''
+        if ($Bound.ContainsKey($option.Param)) {
+            $value = [string]$Bound[$option.Param]
+            if (-not $value -or $value.Contains("`n")) { throw "invalid $($option.Label): $value" }
+        } elseif ($saved.ContainsKey($option.Key) -and $saved[$option.Key]) {
+            $value = $saved[$option.Key]
+        }
+        if ($value) {
+            $value = Expand-KiraHome $value
+            if (-not [IO.Path]::IsPathRooted($value) -or $value -match '^[A-Za-z]:[^\\/]') {
+                throw "the $($option.Label) must be an absolute path: $value"
+            }
+            $launcherDirs += "$($option.Key)=$value$Nl"
+        }
     }
 
     if (-not $save) { return $result }

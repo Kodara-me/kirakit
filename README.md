@@ -85,8 +85,12 @@ a pull request template, Copilot instructions, and a workflow that checks pull r
 `get-kira.ps1` takes the same options in PowerShell form (`-DryRun`, `-Name`, `-CoAuthor`,
 `-Coder`, `-CoderSigningKey`, `-CoderGithub`, `-AllowReleases`, `-NoAllowReleases`,
 `-CompleteApprovedPrs`, `-NoCompleteApprovedPrs`, `-StartVerifiedSpecs`,
-`-NoStartVerifiedSpecs`, …; see
-`Get-Help .\get-kira.ps1 -Detailed`).
+`-NoStartVerifiedSpecs`, `-BinDir`, `-ColorSchemeDir`, …; see
+`Get-Help .\get-kira.ps1 -Detailed`). `-BinDir DIR` and `-ColorSchemeDir DIR` are `--bin-dir`
+and `--color-scheme-dir` for `get-kira.ps1`: absolute paths (a leading `~/` is expanded), saved
+in the profile as `bin_dir` and `color_scheme_dir` only when passed (a saved value is kept), so
+that both installers accept the same command line. `get-kira.ps1` installs no launchers or
+color schemes and writes nothing in either directory.
 
 | Option | Effect |
 | --- | --- |
