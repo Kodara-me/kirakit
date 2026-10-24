@@ -2107,7 +2107,8 @@ check 'fetch: an unknown ref installs nothing (#86 R3)' test ! -e "$tmp/unknown"
 #   assigned.json        `gh search issues --assignee` (the repositories of the member's issues)
 #   search-OWNER.json    `gh search issues --owner OWNER` (labelled specifications)
 #   projects-OWNER.json, items-OWNER-N.json   `gh project list` and `gh project item-list`
-#   parent-REPO-N.json   `gh issue view N --repo REPO --json parent` (default: no parent)
+#   parent-REPO-N.json   `gh issue view N --repo REPO --json parent` (default: no parent);
+#                        the call fails when parent-REPO-N.fail exists
 # `gh search` fails when search.fail exists, `gh project` when project.fail exists.
 # Every call is appended to $FAKE_GH_DIR/calls.
 watchbin=$tmp/watchbin
@@ -2152,6 +2153,7 @@ issue)
 		[ "$1" != --repo ] || repo=$(printf '%s' "$2" | sed 's#/#_#g')
 		shift
 	done
+	[ ! -f "$d/parent-$repo-$n.fail" ] || exit 1
 	cat "$d/parent-$repo-$n.json" 2>/dev/null || echo '{"parent": null}' ;;
 pr)
 	n=$3
@@ -2288,11 +2290,17 @@ check 'watch: waits as long as X-Poll-Interval asks (#41 R4)' test "$(watch_loop
 # Approving reviews of the developer's pull requests.
 watch_reset
 notification author PullRequest 9
-echo '{"number": 9, "author": {"login": "cleo-kodara"}, "url": "https://github.com/Kodara-me/kirakit/pull/9", "reviews": [{"id": "R1", "state": "APPROVED"}]}' \
+echo '{"number": 9, "author": {"login": "cleo-kodara"}, "url": "https://github.com/Kodara-me/kirakit/pull/9", "reviews": [{"id": "R1", "state": "APPROVED", "submittedAt": "2999-01-01T00:00:00Z"}]}' \
 	>"$watch_dir/pr-9.json"
 check "watch: an approving review of the developer's pull request gives one line (#41 R5)" \
 	test "$(watch developer)" = 'approved Kodara-me/kirakit#9 https://github.com/Kodara-me/kirakit/pull/9'
 check 'watch: the review is not reported twice (#41 R5)' test -z "$(watch developer)"
+watch_reset
+notification author PullRequest 9
+echo '{"number": 9, "author": {"login": "cleo-kodara"}, "url": "https://github.com/Kodara-me/kirakit/pull/9", "reviews": [{"id": "R2", "state": "APPROVED", "submittedAt": "2000-01-01T00:00:00Z"}]}' \
+	>"$watch_dir/pr-9.json"
+check 'watch: an approval submitted before the first check gives nothing (#41 R5)' test -z "$(watch developer)"
+check 'watch: nor on the next check (#41 R5)' test -z "$(watch developer)"
 watch_reset
 notification author PullRequest 9
 echo '{"number": 9, "author": {"login": "cleo-kodara"}, "url": "https://github.com/Kodara-me/kirakit/pull/9", "reviews": [{"id": "R1", "state": "COMMENTED"}]}' \
@@ -2300,14 +2308,14 @@ echo '{"number": 9, "author": {"login": "cleo-kodara"}, "url": "https://github.c
 check 'watch: a review that does not approve gives nothing (#41 R5)' test -z "$(watch developer)"
 watch_reset
 notification author PullRequest 9
-echo '{"number": 9, "author": {"login": "cleo-kodara"}, "url": "https://github.com/Kodara-me/kirakit/pull/9", "reviews": [{"id": "R1", "state": "APPROVED"}]}' \
+echo '{"number": 9, "author": {"login": "cleo-kodara"}, "url": "https://github.com/Kodara-me/kirakit/pull/9", "reviews": [{"id": "R1", "state": "APPROVED", "submittedAt": "2999-01-01T00:00:00Z"}]}' \
 	>"$watch_dir/pr-9.json"
 check 'watch: approvals concern the developer only (#41 R5)' test -z "$(watch analyst)"
 
 # Approvals concern the developer's own pull requests only (#41 R5).
 watch_reset
 notification mention PullRequest 9
-echo '{"number": 9, "author": {"login": "someone-else"}, "url": "https://github.com/Kodara-me/kirakit/pull/9", "reviews": [{"id": "R1", "state": "APPROVED"}]}' \
+echo '{"number": 9, "author": {"login": "someone-else"}, "url": "https://github.com/Kodara-me/kirakit/pull/9", "reviews": [{"id": "R1", "state": "APPROVED", "submittedAt": "2999-01-01T00:00:00Z"}]}' \
 	>"$watch_dir/pr-9.json"
 check "watch: an approved pull request by someone else gives nothing (#41 R5)" test -z "$(watch developer)"
 
@@ -2335,7 +2343,7 @@ check 'watch: a review submitted before the first check gives nothing (#41 R5)' 
 # The user's approval of the developer's pull request gives the approved line only (#41 R5).
 watch_reset
 notification author PullRequest 9
-echo '{"number": 9, "author": {"login": "cleo-kodara"}, "url": "https://github.com/Kodara-me/kirakit/pull/9", "reviews": [{"id": "R306", "state": "APPROVED"}]}' \
+echo '{"number": 9, "author": {"login": "cleo-kodara"}, "url": "https://github.com/Kodara-me/kirakit/pull/9", "reviews": [{"id": "R306", "state": "APPROVED", "submittedAt": "2999-01-01T00:00:00Z"}]}' \
 	>"$watch_dir/pr-9.json"
 echo '[{"id": 306, "state": "APPROVED", "body": "Good", "submitted_at": "2999-01-01T00:00:00Z", "user": {"login": "jonathan"}, "html_url": "https://github.com/Kodara-me/kirakit/pull/9#pullrequestreview-306"}]' \
 	>"$watch_dir/comments-Kodara-me_kirakit-9-review.json"
@@ -2461,6 +2469,15 @@ watch_reset
 board jonathan "[$(item Ready Kodara-me/kirakit 50)]"
 check 'watch: an issue with no specification moved to Ready gives one line (#41 R10)' \
 	test "$(watch developer)" = 'ready Kodara-me/kirakit#50 https://github.com/Kodara-me/kirakit/issues/50'
+# An issue whose parent cannot be read is skipped without blocking the others, and one already
+# reported is kept (#41 R10).
+board jonathan "[$(item Ready Kodara-me/kirakit 50), $(item Ready Kodara-me/kirakit 51), $(item Ready Kodara-me/kirakit 52 type:feature)]"
+touch "$watch_dir/parent-Kodara-me_kirakit-50.fail" "$watch_dir/parent-Kodara-me_kirakit-51.fail"
+check 'watch: an unreadable issue does not block the Ready lookup (#41 R10)' \
+	test "$(watch developer)" = 'ready Kodara-me/kirakit#52 https://github.com/Kodara-me/kirakit/issues/52'
+rm "$watch_dir/parent-Kodara-me_kirakit-50.fail" "$watch_dir/parent-Kodara-me_kirakit-51.fail"
+check 'watch: an unreadable issue already reported is kept, a new one is reported once readable (#41 R10)' \
+	test "$(watch developer)" = 'ready Kodara-me/kirakit#51 https://github.com/Kodara-me/kirakit/issues/51'
 
 # Tasks assigned to the developer are never looked for (#41 R10).
 watch_reset

@@ -147,12 +147,16 @@ check_comments() {
 }
 
 # check_approvals REPOSITORY NUMBER: report the new approving reviews of a pull request the
-# member wrote (developer only). It fails when the pull request is not hers.
+# member wrote (developer only), those submitted since the last check: an approval older than
+# the watch, or already reported and since forgotten, is not reported. It fails when the pull
+# request is not hers.
 check_approvals() {
-	local repo=$1 number=$2 pr review key
+	local repo=$1 number=$2 pr review key since
+	since=$(cat "$state/since" 2>/dev/null || true)
 	pr=$(gh pr view "https://github.com/$repo/pull/$number" --json number,url,author,reviews 2>/dev/null) || return 1
 	[ "$(printf '%s' "$pr" | jq -r '.author.login // ""')" = "$account" ] || return 1
-	printf '%s' "$pr" | jq -c '.reviews[]? | select(.state == "APPROVED")' | while IFS= read -r review; do
+	printf '%s' "$pr" | jq -c --arg since "$since" '.reviews[]? | select(.state == "APPROVED"
+		and ($since == "" or (.submittedAt // "") >= $since))' | while IFS= read -r review; do
 		key=review:$(printf '%s' "$review" | jq -r '.id')
 		seen "$key" && continue
 		remember "$key"
@@ -214,9 +218,13 @@ check_notifications() {
 # and the owner of every repository with an open issue assigned to the member. On a board, a
 # specification is an issue labelled type:feature; an issue with no parent has no
 # specification. A specification on no board of its owner counts when labelled status:ready.
-# It fails when a lookup fails, so that a partial list is never taken for the current one.
+# It fails when a lookup fails, so that a partial list is never taken for the current one. An
+# issue whose parent cannot be read is skipped, or kept when it was in the previous list, so
+# that one unreadable item neither blocks the others nor comes back as new. Board items are
+# not filtered by state, as in next-task: a closed specification left in Ready is reported.
 ready_items() {
-	local json owners owner boards board items boarded lines='' repo number url parent
+	local json owners owner boards board items boarded lines='' repo number url parent previous
+	previous=$(cat "$state/ready" 2>/dev/null || true)
 	json=$(gh search issues --assignee "$account" --state open --limit 1000 --json repository 2>/dev/null) || return 1
 	owners=$(printf '%s' "$json" | jq -r '.[]?.repository.nameWithOwner | split("/")[0]' 2>/dev/null) || return 1
 	owners=$(printf '%s\n%s\n' "$user" "$owners" | sed '/^$/d' | sort -u)
@@ -233,8 +241,11 @@ ready_items() {
 				| "\(.content.repository) \(.content.number) \(.content.url)"') || return 1
 			while read -r repo number url; do
 				[ -n "$repo" ] || continue
-				json=$(gh issue view "$number" --repo "$repo" --json parent 2>/dev/null) || return 1
-				parent=$(printf '%s' "$json" | jq -r '.parent.number // ""' 2>/dev/null) || return 1
+				if ! json=$(gh issue view "$number" --repo "$repo" --json parent 2>/dev/null) ||
+					! parent=$(printf '%s' "$json" | jq -r '.parent.number // ""' 2>/dev/null); then
+					printf '%s\n' "$previous" | grep -qxF -- "$repo $number $url" && lines+=$'\n'"$repo $number $url"
+					continue
+				fi
 				[ -n "$parent" ] || lines+=$'\n'"$repo $number $url"
 			done < <(printf '%s' "$items" | jq -r '.items[]?
 				| select(.status == "Ready" and .content.type == "Issue" and (((.labels // []) | index("type:feature")) | not))
