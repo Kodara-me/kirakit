@@ -78,6 +78,7 @@ state=${XDG_STATE_HOME:-$HOME/.local/state}/kirakit/watch-$role
 mkdir -p "$state" || exit 1
 poll_interval=$min_interval
 notifications_status=
+first_round=
 
 # seen KEY: whether KEY was reported; remember KEY: record it.
 seen() { grep -qxF -- "$1" "$state/seen" 2>/dev/null; }
@@ -117,11 +118,12 @@ each_item() {
 	gh api --paginate "$1" 2>/dev/null | jq -c '.[]?' 2>/dev/null
 }
 
-# check_comments REPOSITORY NUMBER TYPE: report the new comments of a thread that wake the
-# member: the comments of the issue or pull request and, on a pull request, its review
-# comments and the bodies of its reviews.
+# check_comments REPOSITORY NUMBER TYPE [OWN]: report the new comments of a thread that wake
+# the member: the comments of the issue or pull request and, on a pull request, its review
+# comments and the bodies of its reviews. OWN is set for a pull request of the developer,
+# whose approvals check_approvals reports instead.
 check_comments() {
-	local repo=$1 number=$2 type=$3 item since
+	local repo=$1 number=$2 type=$3 own=${4-} item since
 	since=$(cat "$state/since" 2>/dev/null || true)
 	while IFS= read -r item; do
 		wake_item comment "$repo" "$number" "$(printf '%s' "$item" | jq -r '.id')" "$item"
@@ -135,15 +137,18 @@ check_comments() {
 	while IFS= read -r item; do
 		wake_item review "$repo" "$number" "$(printf '%s' "$item" | jq -r '.id')" "$item"
 	done < <(each_item "repos/$repo/pulls/$number/reviews" |
-		jq -c 'select(.state != "PENDING" and ((.body // "") != "" or .state == "CHANGES_REQUESTED" or .state == "APPROVED"))')
+		jq -c --arg since "$since" --arg own "$own" 'select(.state != "PENDING"
+			and ($since == "" or (.submitted_at // "") >= $since)
+			and ($own == "" or .state != "APPROVED")
+			and ((.body // "") != "" or .state == "CHANGES_REQUESTED" or .state == "APPROVED"))')
 }
 
 # check_approvals REPOSITORY NUMBER: report the new approving reviews of a pull request the
-# member wrote (developer only).
+# member wrote (developer only). It fails when the pull request is not hers.
 check_approvals() {
 	local repo=$1 number=$2 pr review key
-	pr=$(gh pr view "https://github.com/$repo/pull/$number" --json number,url,author,reviews 2>/dev/null) || return 0
-	[ "$(printf '%s' "$pr" | jq -r '.author.login // ""')" = "$account" ] || return 0
+	pr=$(gh pr view "https://github.com/$repo/pull/$number" --json number,url,author,reviews 2>/dev/null) || return 1
+	[ "$(printf '%s' "$pr" | jq -r '.author.login // ""')" = "$account" ] || return 1
 	printf '%s' "$pr" | jq -c '.reviews[]? | select(.state == "APPROVED")' | while IFS= read -r review; do
 		key=review:$(printf '%s' "$review" | jq -r '.id')
 		seen "$key" && continue
@@ -152,11 +157,12 @@ check_approvals() {
 	done
 }
 
-# check_assignment REPOSITORY NUMBER URL REASON: report the assignment of a thread once. The
-# reason of a notification is that of its latest event, so a thread new to the state is
-# looked at: it may have been assigned before a later comment.
+# check_assignment REPOSITORY NUMBER URL REASON UPDATED_AT: report the assignment of a thread
+# once. The reason of a notification is that of its latest event, so a thread is looked at
+# each time it changes: it may have been assigned before a later comment. On the first round
+# (first_round set), an assignment is only remembered, as older comments are not read.
 check_assignment() {
-	local key=assigned:$1#$2 looked=looked:$1#$2
+	local key=assigned:$1#$2 looked=looked:$1#$2:$5
 	seen "$key" && return 0
 	if [ "$4" != assign ]; then
 		seen "$looked" && return 0
@@ -165,14 +171,14 @@ check_assignment() {
 			jq -e --arg account "$account" '[.assignees[]?.login] | index($account)' >/dev/null 2>&1 || return 0
 	fi
 	remember "$key"
-	report assigned "$1" "$2" "$3"
+	[ -n "$first_round" ] || report assigned "$1" "$2" "$3"
 }
 
 # check_notifications: read the notifications, honoring If-Modified-Since and X-Poll-Interval.
 # It sets notifications_status, the HTTP status of the reply.
 check_notifications() {
-	local response modified interval body line repo number url reason type html
-	response=$(api_get 'notifications?participating=true' "$(cat "$state/modified" 2>/dev/null || true)")
+	local response modified interval body line repo number url reason type html updated own
+	response=$(api_get 'notifications?participating=true&per_page=100' "$(cat "$state/modified" 2>/dev/null || true)")
 	notifications_status=$(printf '%s\n' "$response" | sed -n '1s/^HTTP[^ ]* \([0-9]*\).*/\1/p')
 	interval=$(printf '%s\n' "$response" | tr -d '\r' | sed -n 's/^[Xx]-[Pp]oll-[Ii]nterval: *//p' | head -n 1)
 	case $interval in '' | *[!0-9]*) ;; *) poll_interval=$interval ;; esac
@@ -186,39 +192,43 @@ check_notifications() {
 		number=${url##*/}
 		reason=$(printf '%s' "$line" | jq -r '.reason')
 		type=$(printf '%s' "$line" | jq -r '.subject.type')
+		updated=$(printf '%s' "$line" | jq -r '.updated_at // ""')
 		case $type in Issue | PullRequest) ;; *) continue ;; esac
 		html=https://github.com/$repo/$([ "$type" = PullRequest ] && echo pull || echo issues)/$number
-		check_assignment "$repo" "$number" "$html" "$reason"
-		check_comments "$repo" "$number" "$type"
+		check_assignment "$repo" "$number" "$html" "$reason" "$updated"
+		own=
 		if [ "$role" = developer ] && [ "$type" = PullRequest ]; then
-			check_approvals "$repo" "$number"
+			check_approvals "$repo" "$number" && own=1
 		fi
+		check_comments "$repo" "$number" "$type" "$own"
 	done < <(printf '%s' "$body" | jq -c '.[]?' 2>/dev/null)
 	[ -z "$modified" ] || printf '%s\n' "$modified" >"$state/modified"
 }
 
 
 # ready_tasks: the developer's open tasks that are Ready, one "REPOSITORY NUMBER URL" per line,
-# sorted: those in the Ready column of the user's boards, and those labelled status:ready.
+# sorted: those in the Ready column of the user's boards, and those labelled status:ready. It
+# fails when a lookup fails, so that a partial list is never taken for the current one.
 ready_tasks() {
-	{
-		gh search issues --assignee "$account" --state open --label status:ready \
-			--json repository,number,url 2>/dev/null |
-			jq -r '.[]? | "\(.repository.nameWithOwner) \(.number) \(.url)"'
-		local number
-		for number in $(gh project list --owner "$user" --format json 2>/dev/null |
-			jq -r '.projects[]?.number'); do
-			gh project item-list "$number" --owner "$user" --format json --limit 200 2>/dev/null |
-				jq -r --arg account "$account" '.items[]?
-					| select(.status == "Ready" and .content.type == "Issue"
-						and ((.assignees // []) | index($account)))
-					| "\(.content.repository) \(.content.number) \(.content.url)"'
-		done
-	} | sort -u
+	local json lines projects number
+	json=$(gh search issues --assignee "$account" --state open --label status:ready \
+		--json repository,number,url 2>/dev/null) || return 1
+	lines=$(printf '%s' "$json" | jq -r '.[]? | "\(.repository.nameWithOwner) \(.number) \(.url)"' 2>/dev/null) || return 1
+	json=$(gh project list --owner "$user" --format json 2>/dev/null) || return 1
+	projects=$(printf '%s' "$json" | jq -r '.projects[]?.number' 2>/dev/null) || return 1
+	for number in $projects; do
+		json=$(gh project item-list "$number" --owner "$user" --format json --limit 200 2>/dev/null) || return 1
+		lines+=$'\n'$(printf '%s' "$json" | jq -r --arg account "$account" '.items[]?
+			| select(.status == "Ready" and .content.type == "Issue"
+				and ((.assignees // []) | index($account)))
+			| "\(.content.repository) \(.content.number) \(.content.url)"' 2>/dev/null) || return 1
+	done
+	printf '%s\n' "$lines" | sed '/^$/d' | sort -u
 }
 
 # check_ready: report the tasks that became Ready since the last check. A task that leaves
-# Ready is forgotten, so it is reported again if it comes back.
+# Ready is forgotten, so it is reported again if it comes back. When a lookup fails, the
+# previous list is kept.
 check_ready() {
 	local current previous repo number url
 	current=$(ready_tasks) || return 0
@@ -238,14 +248,18 @@ minute_ago() {
 		date -u +%Y-%m-%dT%H:%M:%SZ
 }
 
-# check: one round. The first one only starts the clock: comments older than the watch are not
-# reported. Afterwards, `since` moves forward, with a margin of a minute for clocks that
+# check: one round. The first one only starts the clock: comments, reviews and assignments
+# older than the watch are not reported. Afterwards, `since` moves forward, with a margin of a minute for clocks that
 # differ (an item seen twice is reported once), only when GitHub answered (200 or 304): after
 # a failure the next round looks again from the last good one.
 check() {
 	local started
 	started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-	[ -f "$state/since" ] || printf '%s\n' "$started" >"$state/since"
+	first_round=
+	if [ ! -f "$state/since" ]; then
+		first_round=1
+		printf '%s\n' "$started" >"$state/since"
+	fi
 	check_notifications
 	[ "$role" != developer ] || check_ready
 	case $notifications_status in

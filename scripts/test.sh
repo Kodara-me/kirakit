@@ -2104,7 +2104,7 @@ check 'fetch: an unknown ref installs nothing (#86 R3)' test ! -e "$tmp/unknown"
 #   comments-REPO-N-pr.json and -N-review.json   review comments and reviews of a pull request
 #   issue-REPO-N.json    the issue itself (assignees)
 #   pr-N.json            `gh pr view N`
-#   search.json          `gh search issues`
+#   search.json          `gh search issues`; it fails when search.fail exists
 #   projects.json, items.json   `gh project list` and `gh project item-list`
 # Every call is appended to $FAKE_GH_DIR/calls.
 watchbin=$tmp/watchbin
@@ -2116,7 +2116,9 @@ printf '%s\n' "$*" >>"$d/calls"
 case $1 in
 config) echo jonathan ;;
 auth) echo fake-token ;;
-search) cat "$d/search.json" 2>/dev/null || echo '[]' ;;
+search)
+	[ ! -f "$d/search.fail" ] || exit 1
+	cat "$d/search.json" 2>/dev/null || echo '[]' ;;
 project)
 	case $2 in
 	list) cat "$d/projects.json" 2>/dev/null || echo '{"projects":[]}' ;;
@@ -2168,11 +2170,20 @@ watch() {
 	env -u GH_TOKEN PATH="$watchbin" FAKE_GH_DIR="$watch_dir" KIRAKIT_WATCH_ACCOUNT=cleo-kodara KIRAKIT_USER=jonathan \
 		"$root/launchers/kirakit-watch" "$@" --once 2>/dev/null
 }
-# notification REASON TYPE NUMBER: a notification of Kodara-me/kirakit.
+# notification REASON TYPE NUMBER [UPDATED_AT]: a notification of Kodara-me/kirakit.
 notification() {
-	jq -n --arg reason "$1" --arg type "$2" --arg number "$3" \
-		'[{id: "1", reason: $reason, subject: {type: $type, url: "https://api.github.com/repos/Kodara-me/kirakit/issues/\($number)"},
+	jq -n --arg reason "$1" --arg type "$2" --arg number "$3" --arg updated "${4:-2026-10-23T10:00:00Z}" \
+		'[{id: "1", reason: $reason, updated_at: $updated,
+			subject: {type: $type, url: "https://api.github.com/repos/Kodara-me/kirakit/issues/\($number)"},
 			repository: {full_name: "Kodara-me/kirakit"}}]' >"$watch_dir/notifications.json"
+}
+# watch_start ROLE: a first round with no notification, which only starts the clock.
+watch_start() {
+	local saved
+	saved=$(cat "$watch_dir/notifications.json")
+	echo '[]' >"$watch_dir/notifications.json"
+	watch "$1" >/dev/null
+	printf '%s\n' "$saved" >"$watch_dir/notifications.json"
 }
 # comment THREAD ID LOGIN: a comment on this thread (Kodara-me_kirakit-N).
 comment() {
@@ -2206,6 +2217,7 @@ comment Kodara-me_kirakit-7 102 someone-else
 check "watch: another account's comment gives nothing (#41 R5)" test -z "$(watch developer)"
 
 watch_reset
+watch_start analyst
 notification assign Issue 8
 check 'watch: a new assignment gives one line (#41 R5)' \
 	test "$(watch analyst)" = 'assigned Kodara-me/kirakit#8 https://github.com/Kodara-me/kirakit/issues/8'
@@ -2281,12 +2293,26 @@ check "watch: the user's review comment gives one line (#41 R5)" \
 check 'watch: the review comment is not reported twice (#41 R5)' test -z "$(watch developer)"
 watch_reset
 notification mention PullRequest 9
-echo '[{"id": 301, "state": "CHANGES_REQUESTED", "body": "", "user": {"login": "jonathan"}, "html_url": "https://github.com/Kodara-me/kirakit/pull/9#pullrequestreview-301"},
+echo '[{"id": 301, "state": "CHANGES_REQUESTED", "body": "", "submitted_at": "2999-01-01T00:00:00Z", "user": {"login": "jonathan"}, "html_url": "https://github.com/Kodara-me/kirakit/pull/9#pullrequestreview-301"},
 	{"id": 302, "state": "COMMENTED", "body": "", "user": {"login": "jonathan"}, "html_url": "https://github.com/Kodara-me/kirakit/pull/9#pullrequestreview-302"},
 	{"id": 303, "state": "COMMENTED", "body": "ok", "user": {"login": "someone-else"}, "html_url": "https://github.com/Kodara-me/kirakit/pull/9#pullrequestreview-303"}]' \
 	>"$watch_dir/comments-Kodara-me_kirakit-9-review.json"
 check "watch: the user's requested changes give one line, other reviews nothing (#41 R5)" \
 	test "$(watch developer)" = 'review Kodara-me/kirakit#9 https://github.com/Kodara-me/kirakit/pull/9#pullrequestreview-301'
+watch_reset
+notification mention PullRequest 9
+echo '[{"id": 305, "state": "CHANGES_REQUESTED", "body": "old", "submitted_at": "2000-01-01T00:00:00Z", "user": {"login": "jonathan"}, "html_url": "https://github.com/Kodara-me/kirakit/pull/9#pullrequestreview-305"}]' \
+	>"$watch_dir/comments-Kodara-me_kirakit-9-review.json"
+check 'watch: a review submitted before the first check gives nothing (#41 R5)' test -z "$(watch developer)"
+# The user's approval of the developer's pull request gives the approved line only (#41 R5).
+watch_reset
+notification author PullRequest 9
+echo '{"number": 9, "author": {"login": "cleo-kodara"}, "url": "https://github.com/Kodara-me/kirakit/pull/9", "reviews": [{"id": "R306", "state": "APPROVED"}]}' \
+	>"$watch_dir/pr-9.json"
+echo '[{"id": 306, "state": "APPROVED", "body": "Good", "submitted_at": "2999-01-01T00:00:00Z", "user": {"login": "jonathan"}, "html_url": "https://github.com/Kodara-me/kirakit/pull/9#pullrequestreview-306"}]' \
+	>"$watch_dir/comments-Kodara-me_kirakit-9-review.json"
+check "watch: the user's approval of the developer's pull request gives one line (#41 R5)" \
+	test "$(watch developer)" = 'approved Kodara-me/kirakit#9 https://github.com/Kodara-me/kirakit/pull/9'
 watch_reset
 notification mention Issue 9
 echo '[{"id": 304, "user": {"login": "jonathan"}, "html_url": "x"}]' >"$watch_dir/comments-Kodara-me_kirakit-9-pr.json"
@@ -2315,6 +2341,7 @@ check 'watch: the first check asks for comments since its start (#41 R5)' grep -
 
 # An assignment hidden by a later comment is found from the issue (#41 R5).
 watch_reset
+watch_start developer
 notification comment Issue 8
 echo '{"assignees": [{"login": "cleo-kodara"}]}' >"$watch_dir/issue-Kodara-me_kirakit-8.json"
 check 'watch: an assignment hidden by a comment gives one line (#41 R5)' \
@@ -2324,6 +2351,19 @@ watch_reset
 notification comment Issue 8
 echo '{"assignees": [{"login": "someone-else"}]}' >"$watch_dir/issue-Kodara-me_kirakit-8.json"
 check 'watch: an issue assigned to someone else gives nothing (#41 R5)' test -z "$(watch developer)"
+# A thread looked at while unassigned is looked at again once it changes (#41 R5).
+echo '{"assignees": [{"login": "cleo-kodara"}]}' >"$watch_dir/issue-Kodara-me_kirakit-8.json"
+check 'watch: an unchanged thread is not looked at again (#41 R5)' test -z "$(watch developer)"
+notification comment Issue 8 2026-10-23T11:00:00Z
+check 'watch: an assignment after the thread was looked at gives one line (#41 R5)' \
+	test "$(watch developer)" = 'assigned Kodara-me/kirakit#8 https://github.com/Kodara-me/kirakit/issues/8'
+# The first round only remembers the assignments it finds (#41 R5).
+watch_reset
+notification assign Issue 8
+check 'watch: an assignment found on the first check gives nothing (#41 R5)' test -z "$(watch analyst)"
+check 'watch: nor on the next one (#41 R5)' test -z "$(watch analyst)"
+# The notifications are read 100 per page (#41 R4).
+check 'watch: the notifications are read 100 per page (#41 R4)' grep -q 'notifications?participating=true&per_page=100' "$watch_dir/calls"
 
 # The memory of what was reported stays bounded.
 watch_reset
@@ -2345,6 +2385,13 @@ check 'watch: a task leaving Ready gives nothing (#41 R10)' test -z "$(watch dev
 echo '[{"repository": {"nameWithOwner": "Kodara-me/kirakit"}, "number": 12, "url": "https://github.com/Kodara-me/kirakit/issues/12"}]' \
 	>"$watch_dir/search.json"
 check 'watch: a task back in Ready is reported again (#41 R10)' test -n "$(watch developer)"
+# A failed lookup keeps the previous list (#41 R10).
+touch "$watch_dir/search.fail"
+check 'watch: a failed Ready lookup gives nothing (#41 R10)' test -z "$(watch developer)"
+check 'watch: a failed Ready lookup keeps the previous list (#41 R10)' \
+	grep -qxF 'Kodara-me/kirakit 12 https://github.com/Kodara-me/kirakit/issues/12' "$XDG_STATE_HOME/kirakit/watch-developer/ready"
+rm "$watch_dir/search.fail"
+check 'watch: the next good lookup gives nothing either (#41 R10)' test -z "$(watch developer)"
 
 watch_reset
 echo '[{"repository": {"nameWithOwner": "Kodara-me/kirakit"}, "number": 12, "url": "https://github.com/Kodara-me/kirakit/issues/12"}]' \
