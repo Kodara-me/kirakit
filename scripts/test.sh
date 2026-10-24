@@ -993,6 +993,35 @@ for member in cleo:cleo-bot iris:iris-bot; do
 done
 check 'own account: no rule in a profile without its account (#153)' sh -c '! grep -q "reads included" "$1" "$2"' _ "$tmp/cleo-build/agents/iris.md" "$tmp/iris-none/output-styles/kira-cozy.md"
 
+# --- the session marker and the user's replies (#38 R1, R2, R3, R5, R6, R7) ---------------
+
+section="## Session marker and the user's replies"
+rules=$tmp/mention-full/rules/git.md
+check 'marker: the rule with every account (#38 R1)' sh -c 'grep -qxF "$2" "$1" && grep -qxF "  - \`<!-- kirakit:assistant -->\` for the assistant, as \`kira-bot\`" "$1" && grep -qxF "  - \`<!-- kirakit:analyst -->\` for the analyst, as \`iris-bot\`" "$1" && grep -qxF "  - \`<!-- kirakit:coder -->\` for the coder, as \`cleo-bot\`" "$1"' _ "$rules" "$section"
+check 'marker: on every comment, review and reply, hidden (#38 R1)' sh -c 'grep -qF -- "- Every comment, review and review reply written as a team member'"'"'s account ends with a" "$1" && grep -qF "session marker naming the member'"'"'s role, alone on its last line, hidden once rendered:" "$1" && grep -qF "Issue and pull request bodies stay unmarked." "$1"' _ "$rules"
+check "marker: the user's replies recognized (#38 R2)" sh -c 'grep -qF "A comment counts as the user'"'"'s reply when its author is the user'"'"'s account, or when its" "$1" && grep -qF "author is one of the accounts above, it carries no session marker, and it was posted after" "$1" && grep -qF "the latest comment carrying a session marker in the same thread." "$1"' _ "$rules"
+check 'marker: never from another account (#38 R3)' contains "$rules" 'account never counts as the user'"'"'s reply, with or without a marker.'
+check 'marker: the reply attributed in the next comment (#38 R5)' sh -c 'grep -qF "member writes in that thread starts with one line naming its writer and the account," "$1" && grep -qF "\"Reply from <the user'"'"'s login>, posted from the \`<account>\` account.\"" "$1"' _ "$rules"
+check 'marker: no approval from a team account (#38 R6)' sh -c 'grep -qF -- "- A pull request review posted from one of these accounts is never the user'"'"'s approval," "$1" && grep -qF "with or without a marker: nobody merges on it. The member who merges asks the user, in a" "$1" && grep -qF "comment mentioning him and ending with a short question, to approve from his own account." "$1"' _ "$rules"
+check 'marker: the assistant alone (#38 R1)' sh -c 'grep -qxF "$2" "$1" && grep -q "kirakit:assistant" "$1" && ! grep -q "kirakit:analyst\|kirakit:coder" "$1"' _ "$tmp/build3/rules/git.md" "$section"
+check 'marker: the analyst alone (#38 R1)' sh -c 'grep -qxF "$2" "$1" && grep -q "kirakit:analyst" "$1" && ! grep -q "kirakit:assistant\|kirakit:coder" "$1"' _ "$tmp/iris-build/rules/git.md" "$section"
+check 'marker: the coder alone (#38 R1)' sh -c 'grep -qxF "$2" "$1" && grep -q "kirakit:coder" "$1" && ! grep -q "kirakit:assistant\|kirakit:analyst" "$1"' _ "$tmp/commit-coder-solo/rules/git.md" "$section"
+for build in build2 iris-none cleo-none; do
+	check "marker: nothing without a team account, $build (#38 R1)" sh -c '! grep -rq "kirakit:\|Session marker" "$1/rules" "$1/skills"' _ "$tmp/$build"
+done
+for skill in idea spec; do
+	check "marker: $skill marks its comments as the analyst (#38 R1)" sh -c 'grep -qF "Every comment this skill posts, its comment files included, ends with the" "$1" && grep -qF "analyst'"'"'s session marker, alone on its last line: \`<!-- kirakit:analyst -->\`" "$1" && ! grep -q "kirakit:assistant" "$1"' _ "$tmp/mention-full/skills/$skill/SKILL.md"
+	check "marker: $skill marks its comments as the assistant (#38 R1)" sh -c 'grep -qF "with the assistant'"'"'s session marker, alone on its last line: \`<!-- kirakit:assistant -->\`" "$1" && ! grep -q "kirakit:analyst" "$1"' _ "$tmp/build3/skills/$skill/SKILL.md"
+done
+check 'marker: the idea closed with a marked comment (#38 R1)' contains "$tmp/mention-full/skills/spec/SKILL.md" "Specified in #<new>.\\n\\n<!-- kirakit:analyst -->"
+check "marker: spec reads the user's answers by the rule (#38 R2)" sh -c 'grep -qF "A comment is the user'"'"'s answer under the rule of \`rules/git.md\` (\"Session marker and" "$1" && grep -qF "without a session marker after the latest marked comment of the issue, never by" "$1"' _ "$tmp/mention-full/skills/spec/SKILL.md"
+readme_marker() {
+	awk '/^### Answering from a team account$/ { found = 1; next } found && /^#/ { exit } found' "$root/README.md"
+}
+check 'marker: README explains the marker (#38 R7)' sh -c 'printf "%s\n" "$1" | grep -qF "**Session marker.**" && printf "%s\n" "$1" | grep -qF "\`<!-- kirakit:assistant -->\`"' _ "$(readme_marker)"
+check "marker: README explains how replies are recognized (#38 R7)" sh -c 'printf "%s\n" "$1" | grep -qF "**Your replies.** A comment counts as your reply when it comes from your account, or from"' _ "$(readme_marker)"
+check 'marker: README says approvals count only from your account (#38 R7)' sh -c 'printf "%s\n" "$1" | grep -qF "**Approvals from your account only.** A review posted from a team account is never your"' _ "$(readme_marker)"
+
 # --- models of the agents and skills (#97 R1–R4, R6–R9) ----------------------------------
 
 # expected_model NAME: the model an agent or skill declares, or nothing for an unknown one, so

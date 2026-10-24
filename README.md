@@ -515,6 +515,31 @@ Cleo alike, follows the same rule from `rules/git.md`, installed with every prof
   conversation. A gap found in a specification mentions Iris, not you; she asks you herself
   when it is a real trade-off.
 
+### Answering from a team account
+
+You can answer the team from whichever account your phone or browser is on. When a member
+has a GitHub account, her session marks what it writes there, so that a reply you post from
+a team account after switching still reads as yours:
+
+- **Session marker.** Every comment, review and review reply a member writes as her account
+  ends with a hidden HTML comment naming her role, `<!-- kirakit:assistant -->`,
+  `<!-- kirakit:analyst -->` or `<!-- kirakit:coder -->`, invisible once rendered. Issue and
+  pull request bodies stay unmarked.
+- **Your replies.** A comment counts as your reply when it comes from your account, or from
+  a team account without a marker and after the latest marked comment of the thread (older
+  threads, written before the marker, are not misread). A comment from any other account
+  never counts, with or without a marker, so an outside contributor cannot drive the team.
+- **Attribution.** The member who acts on a reply posted from a team account starts her
+  next comment in that thread with one line: "Reply from <your login>, posted from the
+  `<account>` account."
+- **Approvals from your account only.** A review posted from a team account is never your
+  approval, marker or not: nothing is merged on it, and you are asked, with a mention, to
+  approve from your own account.
+
+The rule lives in `rules/git.md` ("Session marker and the user's replies"), and the `spec`
+skill reads your answers on an issue with it. It is installed only when at least one member
+has a GitHub account.
+
 ### Working through the lead
 
 With an analyst or a coder, Kira leads the team: you talk to the team through one
@@ -809,6 +834,7 @@ identity):
 | `{{coder_signing_key}}`, `{{coder_github}}` | The coder's public SSH signing key and GitHub login, or nothing |
 | `{{committer}}` | Who commits with `assistant-commit`: "the coder" with a coder, "the assistant" otherwise |
 | `{{committer_name}}`, `{{committer_email}}`, `{{committer_signing_key}}` | That member's git identity and signing key: the coder's with a coder, the assistant's otherwise |
+| `{{team_github}}` | "yes" when the assistant, the analyst or the coder has a GitHub account, or nothing |
 | `{{assistant_style}}`, `{{analyst_style}}` | The name of the assistant's and the analyst's output style, e.g. "Kira (cozy)" and "Iris" |
 
 A line holding only a placeholder that expands to nothing is removed.

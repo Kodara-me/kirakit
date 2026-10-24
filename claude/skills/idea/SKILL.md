@@ -18,7 +18,9 @@ whoever runs this skill: every `gh` command of this skill, reads included, is pr
 `GH_TOKEN=$(gh auth token --user {{analyst_github}})`, for example
 `GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh issue create …`. None falls back to
 the user's account: when a command is refused with that token, report it instead of running
-it as the user.
+it as the user. Every comment this skill posts, its comment files included, ends with the
+analyst's session marker, alone on its last line: `<!-- kirakit:analyst -->`
+(`rules/git.md`). Issue bodies stay unmarked.
 {{/analyst_github}}
 {{^analyst_github}}
 {{#assistant_github}}
@@ -28,7 +30,9 @@ This work is done on GitHub as the developer's own account, `{{assistant_github}
 `GH_TOKEN=$(gh auth token --user {{assistant_github}})`, for example
 `GH_TOKEN=$(gh auth token --user {{assistant_github}}) gh issue create …`. None falls back
 to the user's account: when a command is refused with that token, report it instead of
-running it as the user.
+running it as the user. Every comment this skill posts, its comment files included, ends
+with the assistant's session marker, alone on its last line: `<!-- kirakit:assistant -->`
+(`rules/git.md`). Issue bodies stay unmarked.
 {{/assistant_github}}
 {{/analyst_github}}
 

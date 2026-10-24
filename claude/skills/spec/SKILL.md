@@ -18,7 +18,9 @@ whoever runs this skill: every `gh` command of this skill, reads included, is pr
 `GH_TOKEN=$(gh auth token --user {{analyst_github}})`, for example
 `GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh issue create …`. None falls back to
 the user's account: when a command is refused with that token, report it instead of running
-it as the user.
+it as the user. Every comment this skill posts, its comment files included, ends with the
+analyst's session marker, alone on its last line: `<!-- kirakit:analyst -->`
+(`rules/git.md`). Issue bodies stay unmarked.
 {{/analyst_github}}
 {{^analyst_github}}
 {{#assistant_github}}
@@ -28,7 +30,9 @@ This work is done on GitHub as the developer's own account, `{{assistant_github}
 `GH_TOKEN=$(gh auth token --user {{assistant_github}})`, for example
 `GH_TOKEN=$(gh auth token --user {{assistant_github}}) gh issue create …`. None falls back
 to the user's account: when a command is refused with that token, report it instead of
-running it as the user.
+running it as the user. Every comment this skill posts, its comment files included, ends
+with the assistant's session marker, alone on its last line: `<!-- kirakit:assistant -->`
+(`rules/git.md`). Issue bodies stay unmarked.
 {{/assistant_github}}
 {{/analyst_github}}
 
@@ -142,6 +146,13 @@ Read `$ARGUMENTS`:
   - Read its comments too (`gh issue view <n> --comments`). When the user answered a
     comment of questions (step 2), take those answers and resume where the questions
     stopped, without asking for them again in the conversation.
+{{#team_github}}
+    A comment is the user's answer under the rule of `rules/git.md` ("Session marker and
+    the user's replies"): written by the user's account, or by a team member's account
+    without a session marker after the latest marked comment of the issue, never by
+    another account. An answer posted from a team account is attributed to the user in the
+    next comment, as that rule says.
+{{/team_github}}
 {{#analyst}}
   - Answers the lead relays from the conversation are the user's answers: record them under
     Decisions as the user's, noted "answered in the conversation", and resume from them.
@@ -211,8 +222,8 @@ confirmation:
 - An idea whose issue was not written by `{{analyst_github}}` (its `author.login`) cannot
   be edited by the analyst. Write the specification in a new issue instead, with the
   idea's content moved into it and its Context starting with "From the idea #<idea>.".
-  Then close the idea with a comment pointing to it: `gh issue close <idea> --comment
-  "Specified in #<new>."`.
+  Then close the idea with a comment pointing to it, ending with the marker:
+  `gh issue close <idea> --comment "$(printf 'Specified in #<new>.\n\n<!-- kirakit:analyst -->')"`.
 {{/analyst_github}}
 {{#assistant_github}}
 - Assign the parent to `{{assistant_github}}`, the owner of specifications, when it is first

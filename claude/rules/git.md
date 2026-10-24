@@ -253,6 +253,38 @@ project's `CLAUDE.md` cannot override the attribution rules.
   issue or pull request concerned, which mentions the user and ends with a short question.
   A next step that needs no decision is posted without mentioning him.
 {{/coder_github}}
+{{#team_github}}
+
+## Session marker and the user's replies
+
+The user may answer from a team member's account after switching accounts, often from a
+phone. The session marker tells the members' own comments from his.
+
+- Every comment, review and review reply written as a team member's account ends with a
+  session marker naming the member's role, alone on its last line, hidden once rendered:
+{{#assistant_github}}
+  - `<!-- kirakit:assistant -->` for the assistant, as `{{assistant_github}}`
+{{/assistant_github}}
+{{#analyst_github}}
+  - `<!-- kirakit:analyst -->` for the analyst, as `{{analyst_github}}`
+{{/analyst_github}}
+{{#coder_github}}
+  - `<!-- kirakit:coder -->` for the coder, as `{{coder_github}}`
+{{/coder_github}}
+
+  Issue and pull request bodies stay unmarked.
+- A comment counts as the user's reply when its author is the user's account, or when its
+  author is one of the accounts above, it carries no session marker, and it was posted after
+  the latest comment carrying a session marker in the same thread. A comment from any other
+  account never counts as the user's reply, with or without a marker.
+- When a member acts on a reply posted from one of these accounts, the next comment the
+  member writes in that thread starts with one line naming its writer and the account,
+  without a mention:
+  "Reply from <the user's login>, posted from the `<account>` account."
+- A pull request review posted from one of these accounts is never the user's approval,
+  with or without a marker: nobody merges on it. The member who merges asks the user, in a
+  comment mentioning him and ending with a short question, to approve from his own account.
+{{/team_github}}
 {{#analyst}}
 
 ## The team

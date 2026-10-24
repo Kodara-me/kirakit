@@ -136,7 +136,7 @@ $PermissionsPath = Join-Path $ClaudeDir '.kirakit-permissions'
 $PlaceholderKeys = @('user', 'they', 'them', 'their', 'language', 'co_author', 'assistant_name', 'assistant_email',
     'assistant_signing_key', 'assistant_github', 'analyst', 'analyst_github', 'coder', 'coder_name', 'coder_email',
     'coder_signing_key', 'coder_github', 'committer', 'committer_name', 'committer_email', 'committer_signing_key',
-    'complete_approved_prs', 'any_committer_key')
+    'complete_approved_prs', 'any_committer_key', 'team_github')
 
 $script:Work = $null
 $script:BackupDir = $null
@@ -642,6 +642,8 @@ function Get-KiraValue($UserProfile) {
         # with her own key, whatever the coder's key.
         any_committer_key = if (($coderValue -and ($coderSigningKey -or $signingKey)) -or (-not $coderValue -and $signingKey)) { 'yes' } else { '' }
         complete_approved_prs = if ($UserProfile['complete_approved_prs'] -eq 'yes') { 'yes' } else { '' }
+        # The team's accounts: the members' sessions mark what they write as these accounts.
+        team_github = if ($github -or $analystGithub -or $coderGithub) { 'yes' } else { '' }
     }
 }
 

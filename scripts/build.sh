@@ -32,6 +32,8 @@
 #                             team has a coder, "the assistant" otherwise
 #   {{committer_name}} {{committer_email}} {{committer_signing_key}}  that member's git identity
 #                             and signing key: the coder's with a coder, the assistant's otherwise
+#   {{team_github}}           "yes" when a member of the team (the assistant, the analyst or the
+#                             coder) has a GitHub account, or nothing. Derived, not an option.
 #   {{any_committer_key}}     "yes" when a member can commit with the assistant-commit skill:
 #                             the committer has a signing key or, with a coder, the assistant
 #                             has one; or nothing. Derived, not an option.
@@ -218,6 +220,11 @@ done
 [ -n "$analyst" ] || analyst_github=
 # Nor do the coder's key and account without a coder.
 [ -n "$coder" ] || coder_signing_key='' coder_github=''
+# The team's accounts: the members' sessions mark what they write as these accounts.
+team_github=
+if [ -n "$assistant_github$analyst_github$coder_github" ]; then
+	team_github=yes
+fi
 # With a coder, the committer is the coder, who writes and commits the code by default; the
 # assistant commits with its own keys only the code it writes at the user's explicit request,
 # or the coder's work when she has no key.
@@ -257,7 +264,7 @@ export KIRA_USER="$user" KIRA_THEY="$they" KIRA_THEM="$them" KIRA_THEIR="$their"
 	KIRA_CODER_SIGNING_KEY="$coder_signing_key" KIRA_CODER_GITHUB="$coder_github" \
 	KIRA_COMMITTER="$committer" KIRA_COMMITTER_NAME="$committer_name" KIRA_COMMITTER_EMAIL="$committer_email" \
 	KIRA_COMMITTER_SIGNING_KEY="$committer_signing_key" KIRA_COMPLETE_APPROVED_PRS="$complete_approved_prs" \
-	KIRA_ANY_COMMITTER_KEY="$any_committer_key"
+	KIRA_ANY_COMMITTER_KEY="$any_committer_key" KIRA_TEAM_GITHUB="$team_github"
 
 # render FILE [ORIGIN]: print FILE with its placeholders filled and its blocks resolved;
 # errors name ORIGIN (default: FILE).
@@ -278,7 +285,7 @@ render() {
 			exit 1
 		}
 		BEGIN {
-			n = split("user they them their language co_author assistant_name assistant_email assistant_signing_key assistant_github analyst analyst_github assistant_style analyst_style coder coder_name coder_email coder_signing_key coder_github committer committer_name committer_email committer_signing_key complete_approved_prs any_committer_key", keys, " ")
+			n = split("user they them their language co_author assistant_name assistant_email assistant_signing_key assistant_github analyst analyst_github assistant_style analyst_style coder coder_name coder_email coder_signing_key coder_github committer committer_name committer_email committer_signing_key complete_approved_prs any_committer_key team_github", keys, " ")
 			for (k = 1; k <= n; k++) known[keys[k]] = 1
 			depth = 0
 			hidden = 0
