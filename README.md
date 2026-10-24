@@ -678,8 +678,12 @@ unless its security-sensitive D-Bus API is enabled.
 costs nothing) at most every 60 seconds, or less often when GitHub's `X-Poll-Interval` asks,
 and prints one line, `KIND REPOSITORY#NUMBER URL`, per change: a new assignment, a comment of
 your login in a thread the member takes part in, and, for the developer, an approving review
-of her pull request and a task assigned to her that becomes Ready (in the Ready column of one
-of your project boards, else labelled `status:ready`). It prints nothing otherwise and writes
+of her pull request, and a specification that enters Ready, or an issue with no
+specification that enters a Ready column, once. The boards read are those of your account
+and of the owner of every repository with an open issue assigned to the developer, an
+organization included; a specification on no board of its owner counts when labelled
+`status:ready`. It never looks for tasks: the `next-task` skill chooses one. A lookup that
+fails changes nothing and is tried again on the next check. It prints nothing otherwise and writes
 nothing to GitHub. The member's account comes from the profile (`analyst_github`,
 `coder_github`, `assistant_github`), your login from `gh config get user`. State is kept in
 `${XDG_STATE_HOME:-~/.local/state}/kirakit/watch-ROLE`, so a restart reports nothing twice;
