@@ -1198,7 +1198,7 @@ check 'coder model: the README says when a task runs on Opus (#131 R7)' contains
 # --- launchers: Konsole color schemes (#36 R4, R6, R7, R8, R16, R17) -----------------------
 
 claude=$tmp/launchers
-schemes=$claude-data/konsole
+schemes=$claude/konsole
 kira_profile --copy --no-analyst >/dev/null
 check 'launchers: assistant scheme installed (#36 R6)' contains "$schemes/kirakit-assistant.colorscheme" 'Color=54,49,74'
 check 'launchers: no analyst scheme without an analyst (#36 R6)' test ! -e "$schemes/kirakit-analyst.colorscheme"
@@ -1215,7 +1215,7 @@ kira --uninstall >/dev/null
 check 'launchers: uninstall removes the schemes (#36 R8)' sh -c '! ls "$1"/kirakit-* >/dev/null 2>&1' _ "$schemes"
 
 claude=$tmp/launchers-mine
-schemes=$claude-data/konsole
+schemes=$claude/konsole
 mkdir -p "$schemes"
 printf 'mine\n' >"$schemes/kirakit-assistant.colorscheme"
 printf 'other\n' >"$schemes/Other.colorscheme"
@@ -1231,16 +1231,16 @@ check 'launchers: uninstall leaves other schemes (#36 R8)' contains "$schemes/Ot
 
 claude=$tmp/launchers-dry
 kira_profile --dry-run >"$tmp/launchers-dry2.log"
-check 'launchers: dry run reports the schemes (#36 R17)' grep -q "$claude-data/konsole/kirakit-assistant.colorscheme" "$tmp/launchers-dry2.log"
-check 'launchers: dry run writes no scheme (#36 R17)' test ! -e "$claude-data"
+check 'launchers: dry run reports the schemes (#36 R17)' grep -q "$claude/konsole/kirakit-assistant.colorscheme" "$tmp/launchers-dry2.log"
+check 'launchers: dry run writes no scheme (#36 R17)' test ! -e "$claude/konsole"
 
 claude=$tmp/launchers-only
 kira_profile --only launchers >/dev/null
-check 'launchers: --only launchers (#36 R16)' test -f "$claude-data/konsole/kirakit-assistant.colorscheme"
+check 'launchers: --only launchers (#36 R16)' test -f "$claude/konsole/kirakit-assistant.colorscheme"
 check 'launchers: --only launchers installs nothing else (#36 R16)' test ! -e "$claude/output-styles"
 claude=$tmp/launchers-styles
 kira_profile --only styles >/dev/null
-check 'launchers: not with --only styles (#36 R16)' test ! -e "$claude-data"
+check 'launchers: not with --only styles (#36 R16)' test ! -e "$claude/konsole"
 
 # --- launchers: assistant and analyst (#36 R1, R2, R4, R5, R7–R11, R15, R17) ---------------
 
@@ -1308,7 +1308,7 @@ kira --uninstall >/dev/null
 check 'members: uninstall removes the launchers (#36 R8)' sh -c '! ls "$1"/* >/dev/null 2>&1' _ "$tmp/members-bin2"
 
 claude=$tmp/members-mine
-bin=$claude-home/.local/bin
+bin=$claude/bin
 mkdir -p "$bin"
 printf 'mine\n' >"$bin/assistant"
 kira_profile --dry-run >"$tmp/members-dry.log"
@@ -1316,7 +1316,7 @@ check 'members: dry run reports the launchers (#36 R17)' grep -q "backup: $bin/a
 check 'members: dry run changes nothing (#36 R17)' contains "$bin/assistant" 'mine'
 check 'members: dry run installs no helper (#36 R17)' test ! -e "$bin/kirakit-session"
 kira_profile >/dev/null
-check 'members: ~/.local/bin by default, linked (#36 R5)' test -L "$bin/assistant"
+check 'members: bin/ of the configuration directory by default, linked (#36 R5, #169 R4)' test -L "$bin/assistant"
 check 'members: an existing launcher is backed up (#36 R7)' sh -c 'grep -rqx mine "$1/.kirakit-backups"' _ "$claude"
 kira --uninstall >/dev/null
 check 'members: uninstall restores it (#36 R7)' contains "$bin/assistant" 'mine'
@@ -1354,7 +1354,7 @@ check 'color schemes: a leading ~/ is expanded (#169 R1)' sh -c 'test -f "$1/col
 claude=$tmp/schemes-fresh
 kira_profile --copy >/dev/null
 check 'launcher locations: a fresh run saves neither default (#169 R3)' sh -c '! grep -q "^bin_dir=\|^color_scheme_dir=" "$1"' _ "$claude/.kirakit-profile"
-check 'launcher locations: the defaults still used (#169 R3)' sh -c 'test -e "$1/.local/bin/assistant" && test -f "$2/konsole/kirakit-assistant.colorscheme"' _ "$claude-home" "$claude-data"
+check 'launcher locations: the fallback under the configuration directory used (#169 R3, R4)' sh -c 'test -e "$1/bin/assistant" && test -f "$1/konsole/kirakit-assistant.colorscheme"' _ "$claude"
 check 'color schemes: in the help (#169 R10)' sh -c '$1 "$2/get-kira.sh" --help | grep -q "^  --color-scheme-dir DIR     Where the Konsole color schemes go"' _ "$shell" "$root"
 check 'color schemes: in the README (#169 R10)' grep -q '^| `--color-scheme-dir DIR` | Where the Konsole color schemes go, an absolute path' "$root/README.md"
 
@@ -1473,11 +1473,74 @@ mv "$teambin/konsole" "$tmp/konsole"
 check 'team: fails without Konsole (#36 R14)' team_fails 'Konsole is not installed' "$duo" "$workdir"
 mv "$tmp/konsole" "$teambin/konsole"
 
-# The shell is split on purpose, to allow options.
+# --- launchers: location with a non-default configuration directory (#169 R4 to R7) --------
+
+# launchers_run CONFIG HOME LOG [ENV...]: install the launchers with CONFIG as the configuration
+# directory ("-" for none), under a scratch HOME.
+launchers_run() {
+	lr_config=$1 lr_home=$2 lr_log=$3
+	shift 3
+	if [ "$lr_config" = - ]; then
+		# The shell is split on purpose, to allow options.
+		# shellcheck disable=SC2086
+		env -u CLAUDE_CONFIG_DIR HOME="$lr_home" "$@" $shell "$root/get-kira.sh" \
+			--name Alex --gender female --language auto --no-co-author --only launchers </dev/null >"$lr_log"
+	else
+		# shellcheck disable=SC2086
+		env CLAUDE_CONFIG_DIR="$lr_config" HOME="$lr_home" "$@" $shell "$root/get-kira.sh" \
+			--name Alex --gender female --language auto --no-co-author --only launchers </dev/null >"$lr_log"
+	fi
+}
+
+# R6: no configuration directory set, the default locations.
+launchers_run - "$tmp/home-unset" "$tmp/launchers-unset.log" XDG_DATA_HOME="$tmp/data-unset"
+check 'launchers: ~/.local/bin by default, without a configuration directory (#169 R6)' \
+	test -x "$tmp/home-unset/.local/bin/assistant"
+check 'launchers: XDG_DATA_HOME/konsole by default, without a configuration directory (#169 R6)' \
+	test -f "$tmp/data-unset/konsole/kirakit-assistant.colorscheme"
+launchers_run - "$tmp/home-unset2" "$tmp/launchers-unset2.log" XDG_DATA_HOME=
+check 'launchers: ~/.local/share/konsole without XDG_DATA_HOME (#36 R6, #169 R6)' \
+	test -f "$tmp/home-unset2/.local/share/konsole/kirakit-assistant.colorscheme"
+mkdir -p "$tmp/home-default/.claude"
+launchers_run "$tmp/home-default/.claude" "$tmp/home-default" "$tmp/launchers-default.log" XDG_DATA_HOME="$tmp/data-default"
+check 'launchers: ~/.claude as the configuration directory keeps the defaults (#169 R6)' \
+	test -x "$tmp/home-default/.local/bin/assistant" -a -f "$tmp/data-default/konsole/kirakit-assistant.colorscheme"
+
+# R4, R7: a non-default configuration directory, XDG_DATA_HOME set.
+scratch=$tmp/launchers-scratch
+launchers_run "$scratch" "$tmp/home-scratch" "$tmp/launchers-scratch.log" XDG_DATA_HOME="$tmp/data-scratch"
+check 'launchers: in bin/ of a non-default configuration directory (#169 R4)' test -x "$scratch/bin/assistant"
+check 'launchers: color schemes in konsole/ of it, whatever XDG_DATA_HOME (#169 R4)' \
+	test -f "$scratch/konsole/kirakit-assistant.colorscheme"
+check 'launchers: nothing in the default locations (#169 R4)' \
+	test ! -e "$tmp/home-scratch/.local" -a ! -e "$tmp/data-scratch"
+check 'launchers: the launcher directory is logged (#169 R7)' grep -qxF "kirakit: launchers: $scratch/bin" "$tmp/launchers-scratch.log"
+check 'launchers: the color scheme directory is logged (#169 R7)' \
+	grep -qxF "kirakit: color schemes: $scratch/konsole" "$tmp/launchers-scratch.log"
+check 'launchers: the PATH warning stays (#169 R7)' grep -qF "warning: $scratch/bin is not on your PATH" "$tmp/launchers-scratch.log"
+
+# R5: a manifest that lists files in the default locations is left alone by install, reinstall
+# and --uninstall.
+guarded=$tmp/launchers-guarded
+guard_home=$tmp/home-guarded
+guard_data=$tmp/data-guarded
+mkdir -p "$guarded" "$guard_home/.local/bin" "$guard_data/konsole"
+printf 'real launcher\n' >"$guard_home/.local/bin/team"
+printf 'real scheme\n' >"$guard_data/konsole/kirakit-assistant.colorscheme"
+printf '%s\n%s\n' "$guard_home/.local/bin/team" "$guard_data/konsole/kirakit-assistant.colorscheme" >"$guarded/.kirakit-manifest"
+launchers_run "$guarded" "$guard_home" "$tmp/launchers-guarded.log" XDG_DATA_HOME="$guard_data"
+launchers_run "$guarded" "$guard_home" "$tmp/launchers-guarded2.log" XDG_DATA_HOME="$guard_data"
 # shellcheck disable=SC2086
-env -u XDG_DATA_HOME HOME="$tmp/home" CLAUDE_CONFIG_DIR="$tmp/launchers-home" $shell "$root/get-kira.sh" \
-	--name Alex --gender female --language auto --no-co-author --only launchers </dev/null >/dev/null
-check 'launchers: ~/.local/share/konsole by default (#36 R6)' test -f "$tmp/home/.local/share/konsole/kirakit-assistant.colorscheme"
+env CLAUDE_CONFIG_DIR="$guarded" HOME="$guard_home" XDG_DATA_HOME="$guard_data" $shell "$root/get-kira.sh" --uninstall \
+	</dev/null >"$tmp/launchers-guarded3.log"
+check 'launchers: install, reinstall and uninstall leave a default bin directory unchanged (#169 R5)' \
+	test "$(cat "$guard_home/.local/bin/team")" = 'real launcher' -a "$(ls "$guard_home/.local/bin")" = team
+check 'launchers: nor the default color scheme directory (#169 R5)' \
+	test "$(cat "$guard_data/konsole/kirakit-assistant.colorscheme")" = 'real scheme' -a "$(ls "$guard_data/konsole")" = kirakit-assistant.colorscheme
+check 'launchers: the skipped paths are logged (#169 R5)' \
+	grep -qF "skip (default launcher location): $guard_home/.local/bin/team" "$tmp/launchers-guarded.log"
+check 'launchers: uninstall logs the skipped paths (#169 R5)' \
+	grep -qF "skip (default launcher location): $guard_data/konsole/kirakit-assistant.colorscheme" "$tmp/launchers-guarded3.log"
 
 # --- completing approved pull requests (#122 R1, R2, R11) ----------------------------------
 

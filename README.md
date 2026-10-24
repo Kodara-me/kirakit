@@ -71,9 +71,9 @@ Outside it, on Linux and macOS (see [Launchers](#launchers)):
 
 | Path | Component |
 | --- | --- |
-| `assistant`, `team`, `kirakit-session`, `kirakit-watch` in `~/.local/bin` (or `--bin-dir`) | `launchers` |
+| `assistant`, `team`, `kirakit-session`, `kirakit-watch` in `~/.local/bin` (or `--bin-dir`; `$CLAUDE_CONFIG_DIR/bin` with a non-default configuration directory) | `launchers` |
 | `analyst` in the same directory, with an analyst | `launchers` |
-| `kirakit-assistant.colorscheme` in `$XDG_DATA_HOME/konsole` (default: `~/.local/share/konsole`; or `--color-scheme-dir`) | `launchers` |
+| `kirakit-assistant.colorscheme` in `$XDG_DATA_HOME/konsole` (default: `~/.local/share/konsole`; or `--color-scheme-dir`; `$CLAUDE_CONFIG_DIR/konsole` with a non-default configuration directory) | `launchers` |
 | `kirakit-analyst.colorscheme` in the same directory, with an analyst | `launchers` |
 
 The `github` component is installed only on request (`--only github`), into a repository's
@@ -110,8 +110,8 @@ a pull request template, Copilot instructions, and a workflow that checks pull r
 | `--no-complete-approved-prs` | Every pull request waits for your review (default; saved in the profile) |
 | `--default-style PERSONA` | Style selected in `settings.json` (default: `kira-cozy`) |
 | `--assistant-style PERSONA` | Style of the `assistant` launcher (default: the default style) |
-| `--bin-dir DIR` | Where the launchers go, an absolute path (default: `~/.local/bin`; saved in the profile) |
-| `--color-scheme-dir DIR` | Where the Konsole color schemes go, an absolute path (default: `konsole/` in `XDG_DATA_HOME`; saved in the profile) |
+| `--bin-dir DIR` | Where the launchers go, an absolute path (default: `~/.local/bin`, or `bin/` in a non-default configuration directory; saved in the profile) |
+| `--color-scheme-dir DIR` | Where the Konsole color schemes go, an absolute path (default: `konsole/` in `XDG_DATA_HOME`, or `konsole/` in a non-default configuration directory; saved in the profile) |
 | `--reconfigure` | Ask all profile questions again |
 | `--persona NAME` | Install only this persona (repeatable; default: all) |
 | `--only COMPONENT` | `styles`, `claude`, `launchers` or `github`; default: `styles`, `claude` and `launchers` |
@@ -123,7 +123,7 @@ Environment variables:
 
 - `CLAUDE_CONFIG_DIR` — Claude Code configuration directory (default: `~/.claude`)
 - `XDG_DATA_HOME` — where the Konsole color schemes go without `--color-scheme-dir`, in
-  `konsole/` (default: `~/.local/share`)
+  `konsole/` (default: `~/.local/share`); ignored when `CLAUDE_CONFIG_DIR` is not `~/.claude`
 - `KIRAKIT_REPO`, `KIRAKIT_REF` — repository and branch or tag fetched without a clone
   (default: the release the installer comes from, otherwise the latest `vX.Y.Z` tag; set
   `KIRAKIT_REF=main` for unreleased changes)
@@ -161,6 +161,14 @@ values default to empty, and trailers to yes when there is an assistant. The lau
 locations (`bin_dir`, `color_scheme_dir`) are saved only when passed with `--bin-dir` or
 `--color-scheme-dir`, never as their default; later runs use a saved one, `--uninstall`
 included.
+
+With a `CLAUDE_CONFIG_DIR` other than `~/.claude`, and no saved or passed location, the
+launchers go in `$CLAUDE_CONFIG_DIR/bin` and the color schemes in `$CLAUDE_CONFIG_DIR/konsole`
+(`XDG_DATA_HOME` is ignored), so that a run aimed at a scratch directory never touches your own
+launchers; cleaning up and `--uninstall` skip, and log, any manifest path in `~/.local/bin` or
+the default color scheme directory in that case. Every run that installs launchers logs both
+directories. With `CLAUDE_CONFIG_DIR` unset, the defaults are `~/.local/bin` and
+`${XDG_DATA_HOME:-~/.local/share}/konsole`.
 
 ### Who commits
 
