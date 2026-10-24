@@ -94,7 +94,7 @@ guard_list() {
 		[ -d "$guard_dir" ] || continue
 		find "$guard_dir" ! -type d | sort | while IFS= read -r guard_file; do
 			printf '%s\t%s\t%s\n' "$guard_file" "$(cksum <"$guard_file" 2>/dev/null || echo -)" \
-				"$(ls -ld "$guard_file" | awk '{ print $6, $7, $8 }')"
+				"$(find "$guard_file" -prune -exec ls -ld {} + | awk '{ print $6, $7, $8 }')"
 		done
 	done
 }
