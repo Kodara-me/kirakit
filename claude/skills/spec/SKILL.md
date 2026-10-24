@@ -179,11 +179,15 @@ raised, and sort each one:
   experience), when the choice is hard to reverse (public interface, data, accounts,
   permissions, security, release), or when it goes beyond the idea.
 
-Ask those questions all at once, in a single comment on the issue (`gh issue comment <n>
---body-file <file>`) that mentions the user (`@<login>`, from `gh config get user -h github.com`):
-each question with its options and your recommendation, most important first, ending with
-a short question such as "Can I go on?". In the conversation, show only one line with the
-comment's link. Without an issue yet, ask them in the conversation instead.
+Ask those questions all at once, in a single comment of their own on the issue (`gh issue
+comment <n> --body-file <file>`) that mentions the user (`@<login>`, from `gh config get user
+-h github.com`) and holds only the questions: each one with its options and your
+recommendation, most important first, ending with a short question such as "Can I go on?".
+When you also post what you understood or the questions you settled, post that first, in a
+separate comment that does not mention the user and keeps its usual level of detail, so
+that the comment mentioning him is the later of the two (`rules/git.md`). In the
+conversation, show only one line with the comment's link. Without an issue yet, ask them in
+the conversation instead.
 {{#analyst}}
 When running in the background for the lead, without an issue yet, return them to the lead
 instead, with their options and your recommendation: the lead asks the user and relays the
@@ -287,8 +291,10 @@ development order. Then:
 - With no questions for the user, post it without mentioning the user and ask nothing:
   moving it to Ready is the user's choice of timing, and the board already shows it in
   Specified. End with "Ready for you: move it to Ready when you want the team to start."
-- With questions for the user, mention the user (`@<login>`), list them with their options
-  and your recommendation, and end with a short question, as in step 2.
+- With questions for the user, post the summary comment above without mentioning the user,
+  then the questions in a second comment of their own that mentions the user (`@<login>`),
+  lists them with their options and your recommendation, and ends with a short question,
+  as in step 2.
 
 End with the parent's URL, the list of sub-issues (number and title) if any, "Questions for
 the user: none." or the list of questions, and the next phase to write if the specification

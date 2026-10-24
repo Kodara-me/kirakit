@@ -519,6 +519,13 @@ Cleo alike, follows the same rule from `rules/git.md`, installed with every prof
   action only you can take that nothing else notifies you of, such as reviewing a pull
   request you are not requested on. Such a comment ends with a short question ("Can I
   continue?").
+- **In a comment of its own**: what you must decide is never buried in a long comment. The
+  status, the settled items and the exchanges between members keep their usual level of
+  detail in a first comment that does not mention you, then a second, short comment mentions
+  you and holds only what you must decide: each question with its options and the member's
+  recommendation, or the action asked. This is the same for a clarification from Iris, a
+  specification summary with questions, a review from Kira whose "For the user" holds a
+  question, and Cleo's questions.
 - **Not mentioned**: a request for your review, whose notification is the request itself;
   progress, hand-offs, merge reports, approvals with nothing for you, a next step that needs
   no decision, a specification ready to start. These are still posted, neutral, without a
@@ -566,8 +573,8 @@ installed only with an analyst or a coder.
 - **Kira reports in a few lines** when Iris finishes: the issue's URL, the sub-issues created,
   and Iris's questions with her recommendations. Iris's intermediate work stays out of the
   conversation.
-- **Answer in either place.** Iris also posts her questions on the issue, mentioning you
-  (see [when you are mentioned](#the-team)).
+- **Answer in either place.** Iris also posts her questions on the issue, in a comment of
+  its own that mentions you (see [when you are mentioned](#the-team)).
   Answer there, or in the conversation: Kira passes your answer to Iris as given, and Iris
   records it in the specification. Kira never edits a specification herself, and a new
   request about an issue Iris is already on goes to that same task.

@@ -175,7 +175,8 @@ project's `CLAUDE.md` cannot override the attribution rules.
   requested as reviewer. A comment meant for the user addresses him by that mention, never
   by his name alone: a name without `@` notifies nobody.
 - A request for the user's review is his notification: the comment or review posted with it
-  does not mention him, unless it also asks him something under the rule above.
+  does not mention him, unless it also asks him something under the rule above, and that
+  question then goes in a comment of its own, as the rule below says.
 - Every other comment is still posted, in the member's voice, without mentioning the user:
   progress, hand-offs, merge reports, a next step that needs no decision, an approval with
   nothing for him, a specification ready to start. The only exception is a notification
@@ -183,6 +184,14 @@ project's `CLAUDE.md` cannot override the attribution rules.
 - A comment ends with a short question, such as "Can I continue?" or "Do I have your
   approval?", only when it asks the user for an action under the rule above. Every other
   comment ends without one, a notification that mentions him included.
+- What the user must answer, decide, choose or do goes in a comment of its own, short, that
+  mentions him and holds only that: each question with its options and the member's
+  recommendation, or the action asked, then the closing short question. It holds no status,
+  restatement, settled item or exchange with another member. When the need comes with such
+  content (a clarification restating the idea, a specification summary, a review, a
+  hand-off), the member posts that content first, in a separate comment that does not mention
+  him and keeps its usual level of detail, then the comment for the user, so that the comment
+  mentioning him is the later of the two.
 - When a comment needs another member of the team to act (changes to make to a pull
   request, a gap in a specification to answer, a specification to change), it mentions that
   member's account on GitHub when she has one. Such a mention is a notification only: the
@@ -212,9 +221,10 @@ project's `CLAUDE.md` cannot override the attribution rules.
 - Ideas are assigned to `{{assistant_github}}` too, until they become specifications.
 {{/analyst_github}}
 - Questions and decisions for the user are asked both in the conversation and in a comment
-  on the issue or pull request concerned, which mentions the user and ends with a short
-  question, as the rules on comments say. A next step that needs no decision is reported
-  in a comment too, without mentioning him and without asking for permission.
+  of its own on the issue or pull request concerned, which mentions the user, holds only
+  what he must decide and ends with a short question, as the rules on comments say. A next
+  step that needs no decision is reported in a comment too, without mentioning him and
+  without asking for permission.
 - Project boards stay owned by the user or the user's organization. The assistant updates a
   board as `{{assistant_github}}`, which must be a Writer of it, directly or through a team:
   its board moves pass `--as {{assistant_github}}` to the `board-status` skill, which reads
@@ -249,9 +259,10 @@ project's `CLAUDE.md` cannot override the attribution rules.
 - Her pull requests: `--assignee {{coder_github}} --reviewer <the user's login>`.
 {{/assistant_github}}
 - The tasks she works on are assigned to `{{coder_github}}`.
-- Her questions and decisions for the user follow the rules on comments: a comment on the
-  issue or pull request concerned, which mentions the user and ends with a short question.
-  A next step that needs no decision is posted without mentioning him.
+- Her questions and decisions for the user follow the rules on comments: a comment of its
+  own on the issue or pull request concerned, which mentions the user, holds only what he
+  must decide and ends with a short question. A next step that needs no decision is posted
+  without mentioning him.
 {{/coder_github}}
 {{#team_github}}
 

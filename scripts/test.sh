@@ -85,6 +85,14 @@ no_placeholder() {
 contains() {
 	grep -qF -- "$2" "$1"
 }
+# flat_has FILE TEXT...: whether FILE, on one line with the spaces squeezed, holds every TEXT.
+flat_has() {
+	flat=$(tr '\n' ' ' <"$1" | tr -s ' ')
+	shift
+	for wanted in "$@"; do
+		printf '%s\n' "$flat" | grep -qF -- "$wanted" || return 1
+	done
+}
 
 # --- build ---------------------------------------------------------------------------------
 
@@ -110,7 +118,7 @@ check 'voice: idea comments follow the voice (R11)' contains "$tmp/build2/skills
 spec_skill=$tmp/build2/skills/spec/SKILL.md
 check 'spec: settles what has a good answer (#51 R2)' contains "$spec_skill" 'the code, an existing convention, the text of'
 check 'spec: asks only about real trade-offs (#51 R3)' contains "$spec_skill" 'when the choice is hard to reverse (public interface, data, accounts,'
-check 'spec: questions in a single comment (#51 R4)' contains "$spec_skill" 'in a single comment on the issue'
+check 'spec: questions in a single comment (#51 R4)' flat_has "$spec_skill" 'in a single comment of their own on the issue'
 check 'spec: one line in the chat (#51 R4)' contains "$spec_skill" 'show only one line with the'
 check 'spec: resumes from the answers on the issue (#51 R5)' contains "$spec_skill" 'When the user answered a'
 check 'spec: written in one pass (#51 R6)' sh -c 'grep -q "in one pass, without stopping for approval" "$1" && ! grep -q "one phase at a time" "$1"' _ "$spec_skill"
@@ -121,7 +129,7 @@ check 'spec: tasks not marked Ready (#89 R10)' sh -c 'grep -q -- "--label type:t
 check 'spec: parent moved to Specified (#89 R10)' contains "$spec_skill" '`board-status <parent> Specified`'
 check 'spec: no Specified option reported (#89 R15)' contains "$spec_skill" 'When the board has no Specified option, say so'
 check 'spec: no question without questions (#89 R10)' contains "$spec_skill" 'Ready for you: move it to Ready when you want'
-check 'spec: questions still end with a question (#89 R2)' contains "$spec_skill" 'end with a short question, as in step 2'
+check 'spec: questions still end with a question (#89 R2)' flat_has "$spec_skill" 'ends with a short question, as in step 2'
 check 'spec: closing lines on questions (#89 R3)' contains "$spec_skill" 'Questions for'
 check 'spec: no assignee without an assistant account (#51 R8)' sh -c '! grep -q -- "--assignee" "$1"' _ "$spec_skill"
 check 'spec: summary comment (#51 R9)' contains "$spec_skill" 'Once the tasks are published, post a summary comment on the parent:'
@@ -875,9 +883,9 @@ for build in build2 build3 commit-coder-solo iris-build mention-full; do
 done
 full=$tmp/mention-full/rules/git.md
 check 'mention: the assistant asks the user with a mention (R1, R4)' bullet_has "$full" 'Questions and decisions for the user are asked' \
-	'which mentions the user and ends with a short question' 'without mentioning him and without asking for permission'
+	'which mentions the user, holds only what he must decide and ends with a short question' 'without mentioning him and without asking for permission'
 check 'mention: the coder asks the user with a mention (R1, R4)' bullet_has "$full" 'Her questions and decisions for the user' \
-	'which mentions the user and ends with a short question' 'is posted without mentioning him'
+	'which mentions the user, holds only what he must decide and ends with a short question' 'is posted without mentioning him'
 for build in mention-full iris-build commit-coder analyst-no-login; do
 	rules=$tmp/$build/rules/git.md
 	check "mention: the assistant's gap does not mention the user, $build (R6)" \
@@ -893,15 +901,48 @@ check 'mention: without an analyst, the gap goes to the user (R6)' bullet_has "$
 	'she asks the user in a comment on that issue, mentioning the user'
 team=$tmp/mention-full/rules/team.md
 check 'mention: the review request notifies the user, in the lead rules (R2)' contains "$team" "The review request is the user's"
-check 'mention: a "For the user" question makes the review mention him (R1, R2)' contains "$team" 'user" item is a question for him, and then ends with a short question'
-check 'mention: a security-sensitive change alone calls for no mention (R2)' contains "$team" 'security-sensitive change alone calls for no mention'
+check 'mention: the review does not mention him, a "For the user" question goes in a comment of its own (R1, R2)' \
+	sh -c 'grep -qF -- "notification (\`rules/git.md\`): the review it posts does not mention him. When a \"For" "$1" && grep -qF -- "the user\" item is a question for him, the assistant asks it in a comment of its own," "$1" && grep -qF -- "posted after the review, that mentions him, holds only the question with its options" "$1" && grep -qF -- "and recommendation, and ends with a short question" "$1"' _ "$team"
+check 'mention: a security-sensitive change alone calls for no mention (R2)' flat_has "$team" 'security-sensitive change alone calls for no mention'
 check 'mention: README says when the user is mentioned (R9)' sh -c 'grep -q "^You are mentioned on GitHub only when you must answer or act" "$1" && grep -q "^- \*\*Not mentioned\*\*: a request for your review" "$1" && grep -q "^- \*\*Between members\*\*" "$1"' _ "$root/README.md"
 check 'mention: spec summary mentions the user only with questions (R8)' sh -c '! grep -q "summary comment on the parent that mentions the user" "$1"' _ "$tmp/mention-full/skills/spec/SKILL.md"
 check 'mention: spec summary without questions is not a mention (R4, R8)' bullet_has "$tmp/mention-full/skills/spec/SKILL.md" 'With no questions for the user, post it' \
 	'without mentioning the user' '"Ready for you: move it to Ready when you want the team to start."' 'and ask nothing'
-check 'mention: spec summary with questions mentions the user (R4, R8)' bullet_has "$tmp/mention-full/skills/spec/SKILL.md" 'With questions for the user, mention the user' \
-	'(`@<login>`)' 'end with a short question, as in step 2'
-check 'mention: spec questions comment unchanged (R8)' contains "$tmp/mention-full/skills/spec/SKILL.md" '--body-file <file>`) that mentions the user (`@<login>`, from `gh config get user -h github.com`):'
+check 'mention: spec summary with questions mentions the user in a second comment (R4, R8, #185 R2)' bullet_has "$tmp/mention-full/skills/spec/SKILL.md" 'With questions for the user, post the summary comment' \
+	'without mentioning the user' 'then the questions in a second comment of their own that mentions the user' \
+	'(`@<login>`)' 'ends with a short question, as in step 2'
+
+# --- what the user must decide goes in a comment of its own (#185 R1–R3) ---------------------
+
+for build in build2 build3 commit-coder-solo iris-build mention-full; do
+	rules=$tmp/$build/rules/git.md
+	check "comment of its own: what he must decide, with options and recommendation, alone (#185 R1, $build)" bullet_has "$rules" \
+		'What the user must answer, decide, choose or do goes in a comment of its own' \
+		'that mentions him and holds only that' "each question with its options and the member's recommendation" \
+		'or the action asked, then the closing short question' \
+		'It holds no status, restatement, settled item or exchange with another member'
+	check "comment of its own: status and exchanges first, without a mention, then his comment (#185 R2, $build)" bullet_has "$rules" \
+		'What the user must answer, decide, choose or do goes in a comment of its own' \
+		'a clarification restating the idea, a specification summary, a review, a hand-off' \
+		'separate comment that does not mention him and keeps its usual level of detail' \
+		'the comment mentioning him is the later of the two'
+	check "comment of its own: a request for his review with a question splits it, $build (#185 R2)" bullet_has "$rules" \
+		"A request for the user's review is his notification" 'and that question then goes in a comment of its own'
+	check "comment of its own: a comment that needs nothing stays as today, $build (#185 R3)" bullet_has "$rules" 'Every other comment is still posted' \
+		"in the member's voice, without mentioning the user" 'progress, hand-offs, merge reports'
+done
+check "comment of its own: the assistant's account points to it (#185 R1, R2)" bullet_has "$full" 'Questions and decisions for the user are asked' \
+	'in a comment of its own' 'holds only what he must decide'
+check "comment of its own: the coder's account points to it (#185 R1, R2)" bullet_has "$full" 'Her questions and decisions for the user' \
+	'a comment of its own' 'holds only what he must decide'
+check 'comment of its own: the spec skill splits the clarification and the questions (#185 R2)' flat_has "$tmp/mention-full/skills/spec/SKILL.md" \
+	'in a single comment of their own on the issue' 'and holds only the questions' \
+	'post that first, in a separate comment that does not mention the user' \
+	'so that the comment mentioning him is the later of the two'
+check 'comment of its own: the review posted without a mention, then his question (#185 R2)' flat_has "$team" \
+	'the review it posts does not mention him' 'asks it in a comment of its own, posted after the review, that mentions him'
+check 'comment of its own: README describes the separate decision comment (#185 R1, R2)' sh -c 'grep -q "^- \*\*In a comment of its own\*\*: what you must decide is never buried" "$1" && grep -q "a first comment that does not mention you, then a second, short comment mentions" "$1"' _ "$root/README.md"
+check 'mention: spec questions comment mentions the user and holds only the questions (R8, #185 R1)' flat_has "$tmp/mention-full/skills/spec/SKILL.md" '--body-file <file>`) that mentions the user (`@<login>`, from `gh config get user -h github.com`) and holds only the questions'
 
 # --- owners of ideas and specifications (#127 R1–R7) ---------------------------------------
 
