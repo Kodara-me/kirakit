@@ -2179,11 +2179,10 @@ notification() {
 }
 # watch_start ROLE: a first round with no notification, which only starts the clock.
 watch_start() {
-	local saved
-	saved=$(cat "$watch_dir/notifications.json")
+	watch_saved=$(cat "$watch_dir/notifications.json")
 	echo '[]' >"$watch_dir/notifications.json"
 	watch "$1" >/dev/null
-	printf '%s\n' "$saved" >"$watch_dir/notifications.json"
+	printf '%s\n' "$watch_saved" >"$watch_dir/notifications.json"
 }
 # comment THREAD ID LOGIN: a comment on this thread (Kodara-me_kirakit-N).
 comment() {
