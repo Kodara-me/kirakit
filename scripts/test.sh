@@ -2105,6 +2105,7 @@ check 'fetch: an unknown ref installs nothing (#86 R3)' test ! -e "$tmp/unknown"
 #   issue-REPO-N.json    the issue itself (assignees)
 #   pr-N.json            `gh pr view N`
 #   assigned.json        `gh search issues --assignee` (the repositories of the member's issues)
+#   commenter.json       `gh search issues --commenter` (the threads the member commented in)
 #   search-OWNER.json    `gh search issues --owner OWNER` (labelled specifications)
 #   projects-OWNER.json, items-OWNER-N.json   `gh project list` and `gh project item-list`
 #   parent-REPO-N.json   `gh issue view N --repo REPO --json parent` (default: no parent);
@@ -2127,6 +2128,7 @@ search)
 	while [ $# -gt 0 ]; do
 		case $1 in
 		--assignee) file=assigned ;;
+		--commenter) file=commenter ;;
 		--owner) owner=$2 ;;
 		esac
 		shift
@@ -2221,6 +2223,19 @@ comment() {
 		'[{id: ($id | tonumber), user: {login: $login}, html_url: "https://github.com/Kodara-me/kirakit/issues/7#issuecomment-\($id)"}]' \
 		>"$watch_dir/comments-$1.json"
 }
+
+# add_comment THREAD ID LOGIN AT [BODY]: append a comment to this thread.
+add_comment() {
+	local f=$watch_dir/comments-$1.json
+	[ -f "$f" ] || echo '[]' >"$f"
+	jq --arg id "$2" --arg login "$3" --arg at "$4" --arg body "${5-}" \
+		'. + [{id: ($id | tonumber), user: {login: $login}, created_at: $at, body: $body,
+			html_url: "https://github.com/Kodara-me/kirakit/issues/7#issuecomment-\($id)"}]' "$f" >"$f.tmp" &&
+		mv "$f.tmp" "$f"
+}
+marker='text
+
+<!-- kirakit:assistant -->'
 
 watch_reset
 check 'watch: no change, no output (#41 R6)' test -z "$(watch developer)"
@@ -2372,8 +2387,8 @@ check 'watch: since is a timestamp (#41 R5)' sh -c 'printf "%s" "$1" | grep -Eq 
 # The first check reads only the comments from its start on (#41 R5).
 watch_reset
 notification mention Issue 7
-watch analyst >/dev/null
-check 'watch: the first check asks for comments since its start (#41 R5)' grep -q 'issues/7/comments?since=' "$watch_dir/paths"
+add_comment Kodara-me_kirakit-7 1 jonathan 2000-01-01T00:00:00Z 'older than the watch'
+check 'watch: a comment older than the first check gives nothing (#41 R5)' test -z "$(watch analyst)"
 
 # An assignment hidden by a later comment is found from the issue (#41 R5).
 watch_reset
@@ -2495,6 +2510,71 @@ jq -n '[{id: "2", reason: "mention", subject: {type: "Issue", url: "https://api.
 comment jonathan_other-3 200 jonathan
 check 'watch: a repository other than the current directory is watched (#41 R8)' \
 	test "$(cd "$tmp" && watch analyst)" = 'comment jonathan/other#3 https://github.com/Kodara-me/kirakit/issues/7#issuecomment-200'
+
+# --- kirakit-watch: replies posted from a team account (#78, #38 R2, R3, R4) ----------------
+
+watch_team() { KIRAKIT_WATCH_TEAM='kira-kodara iris-kodara cleo-kodara' watch "$@"; }
+url7() { echo "comment Kodara-me/kirakit#7 https://github.com/Kodara-me/kirakit/issues/7#issuecomment-$1"; }
+
+watch_reset
+notification mention Issue 7
+add_comment Kodara-me_kirakit-7 1 kira-kodara 2999-10-23T10:00:00Z "$marker"
+add_comment Kodara-me_kirakit-7 2 kira-kodara 2999-10-23T10:05:00Z 'reply from the phone'
+check "watch: an unmarked comment of another team account after a marked one gives one line (#38 R2, R4)" \
+	test "$(watch_team analyst)" = "$(url7 2)"
+
+watch_reset
+notification mention Issue 7
+add_comment Kodara-me_kirakit-7 1 cleo-kodara 2999-10-23T10:00:00Z "$marker"
+add_comment Kodara-me_kirakit-7 2 cleo-kodara 2999-10-23T10:05:00Z 'reply from her own account'
+check "watch: an unmarked comment of the member's own account after her marked one gives one line (#38 R4)" \
+	test "$(watch_team developer)" = "$(url7 2)"
+
+watch_reset
+notification mention Issue 7
+add_comment Kodara-me_kirakit-7 1 kira-kodara 2999-10-23T10:00:00Z "$marker"
+add_comment Kodara-me_kirakit-7 2 iris-kodara 2999-10-23T10:05:00Z "$marker"
+check 'watch: a marked comment of a team account gives nothing (#38 R2)' test -z "$(watch_team developer)"
+
+watch_reset
+notification mention Issue 7
+add_comment Kodara-me_kirakit-7 1 kira-kodara 2999-10-23T10:00:00Z 'written before the marker existed'
+add_comment Kodara-me_kirakit-7 2 iris-kodara 2999-10-23T10:05:00Z 'unmarked too'
+check 'watch: an unmarked team comment with no marked comment before it gives nothing (#38 R2)' \
+	test -z "$(watch_team developer)"
+
+watch_reset
+notification mention Issue 7
+add_comment Kodara-me_kirakit-7 1 kira-kodara 2999-10-23T10:00:00Z "$marker"
+add_comment Kodara-me_kirakit-7 2 iris-kodara 2999-10-23T09:00:00Z 'before the marked comment'
+check 'watch: an unmarked team comment older than the latest marked one gives nothing (#38 R2)' \
+	test -z "$(watch_team developer)"
+
+watch_reset
+notification mention Issue 7
+add_comment Kodara-me_kirakit-7 1 kira-kodara 2999-10-23T10:00:00Z "$marker"
+add_comment Kodara-me_kirakit-7 2 someone-else 2999-10-23T10:05:00Z 'unmarked'
+add_comment Kodara-me_kirakit-7 3 someone-else 2999-10-23T10:06:00Z "$marker"
+check 'watch: a comment of an outside account gives nothing, marked or not (#38 R3)' \
+	test -z "$(watch_team developer)"
+
+watch_reset
+notification mention Issue 7
+add_comment Kodara-me_kirakit-7 1 kira-kodara 2999-10-23T10:00:00Z "$marker"
+add_comment Kodara-me_kirakit-7 2 jonathan 2999-10-23T10:05:00Z 'his own reply'
+check "watch: the user's comment still gives one line (#38 R2)" test "$(watch_team analyst)" = "$(url7 2)"
+
+# The threads the member commented in are read too: no notification reaches her for them.
+watch_reset
+watch_start developer
+echo '[{"repository": {"nameWithOwner": "Kodara-me/kirakit"}, "number": 7, "isPullRequest": false}]' >"$watch_dir/commenter.json"
+add_comment Kodara-me_kirakit-7 1 cleo-kodara 2999-10-23T10:00:00Z "$marker"
+add_comment Kodara-me_kirakit-7 2 cleo-kodara 2999-10-23T10:05:00Z 'reply from her own account'
+check "watch: a thread the member commented in is read without a notification (#38 D6)" \
+	test "$(watch_team developer)" = "$(url7 2)"
+check 'watch: and reported once (#38 D6)' test -z "$(watch_team developer)"
+check 'watch: it is found by a search on the member account (#38 D6)' \
+	grep -q 'search issues --commenter cleo-kodara --updated' "$watch_dir/calls"
 
 unset XDG_STATE_HOME
 

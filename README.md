@@ -676,13 +676,17 @@ unless its security-sensitive D-Bus API is enabled.
 `kirakit-watch ROLE [--once]` is the background check of a member (`assistant`, `analyst` or
 `developer`). It reads the member account's notifications with `If-Modified-Since` (a `304`
 costs nothing) at most every 60 seconds, or less often when GitHub's `X-Poll-Interval` asks,
-and prints one line, `KIND REPOSITORY#NUMBER URL`, per change: a new assignment, a comment of
-your login in a thread the member takes part in, and, for the developer, an approving review
+and prints one line, `KIND REPOSITORY#NUMBER URL`, per change: a new assignment, a reply of
+yours in a thread the member takes part in (a comment of your login, or an unmarked comment of
+a team account posted after the latest marked comment of the thread, see the session marker
+above; never a comment of another account), and, for the developer, an approving review
 of her pull request, and a specification that enters Ready, or an issue with no
 specification that enters a Ready column, once. The boards read are those of your account
 and of the owner of every repository with an open issue assigned to the developer, an
 organization included; a specification on no board of its owner counts when labelled
-`status:ready`. It never looks for tasks: the `next-task` skill chooses one. A lookup that
+`status:ready`. It never looks for tasks: the `next-task` skill chooses one. GitHub does not
+notify an account of its own comments, so the check also reads the threads the member's account
+commented in that changed since the last check (`gh search issues --commenter`). A lookup that
 fails changes nothing and is tried again on the next check. It prints nothing otherwise and writes
 nothing to GitHub. The member's account comes from the profile (`analyst_github`,
 `coder_github`, `assistant_github`), your login from `gh config get user`. State is kept in

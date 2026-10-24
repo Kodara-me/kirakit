@@ -10,7 +10,11 @@
 # Sources:
 #   - the account's notifications (participating threads), read with If-Modified-Since, so a
 #     304 costs nothing, and paced by X-Poll-Interval: assignments, comments that wake the
-#     member (see wake_comment) and, for the developer, approving reviews of her pull requests;
+#     member (the user's replies, see wake_items) and, for the developer, approving reviews of
+#     her pull requests;
+#   - the threads the member's account commented in that changed since the last check, because
+#     GitHub does not notify an account of its own comments (a reply posted from her own
+#     account would never show up in her notifications);
 #   - for the developer only, the specifications that enter Ready, and the issues with no
 #     specification that enter a Ready column, on the boards of the user and of the owner of
 #     each repository where an open issue is assigned to her; a specification on no board of
@@ -82,6 +86,18 @@ mkdir -p "$state" || exit 1
 poll_interval=$min_interval
 notifications_status=
 first_round=
+round_threads=
+
+# The team accounts: the profile's three GitHub logins, plus KIRAKIT_WATCH_TEAM (space
+# separated) for tests, and the member's own account.
+team="$account"
+for key in assistant_github analyst_github coder_github; do
+	if [ -f "$config_dir/.kirakit-profile" ]; then
+		login=$(sed -n "s/^${key}=//p" "$config_dir/.kirakit-profile" | head -n 1)
+		[ -z "$login" ] || team="$team $login"
+	fi
+done
+team="$team ${KIRAKIT_WATCH_TEAM-}"
 
 # seen KEY: whether KEY was reported; remember KEY: record it.
 seen() { grep -qxF -- "$1" "$state/seen" 2>/dev/null; }
@@ -92,12 +108,6 @@ report() {
 	printf '%s %s#%s %s\n' "$1" "$2" "$3" "$4"
 }
 
-# wake_comment REPOSITORY NUMBER COMMENT_JSON: whether a comment wakes the member. This is the
-# one place that decides it: for now, only a comment written by the user's login.
-wake_comment() {
-	[ "$(printf '%s' "$3" | jq -r '.user.login // ""')" = "$user" ]
-}
-
 # api_get PATH: the headers and body of a GET, the status line first. A 304 makes gh fail, but
 # still prints the response.
 api_get() {
@@ -106,44 +116,64 @@ api_get() {
 	gh api -i ${headers[@]+"${headers[@]}"} "$1" 2>/dev/null
 }
 
-# wake_item KIND REPOSITORY NUMBER ID JSON: report an item (a comment, a review comment or a
-# review) once, when it wakes the member. JSON has user.login and html_url.
-wake_item() {
-	local key=$1:$4
-	seen "$key" && return 0
-	wake_comment "$2" "$3" "$5" || return 0
-	remember "$key"
-	report "$1" "$2" "$3" "$(printf '%s' "$5" | jq -r '.html_url')"
-}
-
 # each_item PATH: the elements of a (paginated) list of the API, one JSON per line.
 each_item() {
 	gh api --paginate "$1" 2>/dev/null | jq -c '.[]?' 2>/dev/null
 }
 
+# wake_items: read the normalized items of a thread (a JSON array, on stdin) and print
+# "KIND ID URL" for each one that counts as the user's reply and is new. The rule (#38 R2, R3):
+# a comment counts when its author is the user's account, or when its author is a team
+# account, it carries no session marker (<!-- kirakit:ROLE -->), and it was posted after the
+# latest comment carrying one in the same thread. An account outside the team never counts.
+# Items have kind, id, login, body, at (a timestamp, possibly empty) and state, url. A review
+# of a team account counts by its body only; an approval of the developer's own pull request is
+# check_approvals' business (OWN set). Items older than SINCE are skipped.
+wake_items() {
+	jq -r --arg user "$user" --arg team "$team" --arg since "$1" --arg own "$2" '
+		def marked: (.body // "") | test("<!-- kirakit:(assistant|analyst|coder) -->");
+		($team | split(" ") | map(select(. != ""))) as $members
+		| ([.[] | select(marked) | .at // ""] | max // null) as $latest
+		| .[]
+		| (.login // "") as $login
+		| select(($since == "" or (.at // "") == "" or .at >= $since)
+			and ($own == "" or .kind != "review" or .state != "APPROVED")
+			and (.kind != "review" or (.body // "") != ""
+				or .state == "CHANGES_REQUESTED" or .state == "APPROVED")
+			and ($login == $user
+				or (($members | index($login)) != null and (marked | not)
+					and (.kind != "review" or (.body // "") != "")
+					and ($latest != null) and (.at // "") != "" and .at > $latest)))
+		| "\(.kind) \(.id) \(.url)"'
+}
+
 # check_comments REPOSITORY NUMBER TYPE [OWN]: report the new comments of a thread that wake
 # the member: the comments of the issue or pull request and, on a pull request, its review
 # comments and the bodies of its reviews. OWN is set for a pull request of the developer,
-# whose approvals check_approvals reports instead.
+# whose approvals check_approvals reports instead. The whole thread is read, since the latest
+# marked comment may be older than the last check.
 check_comments() {
-	local repo=$1 number=$2 type=$3 own=${4-} item since
+	local repo=$1 number=$2 type=$3 own=${4-} since items='' list kind id url
 	since=$(cat "$state/since" 2>/dev/null || true)
-	while IFS= read -r item; do
-		wake_item comment "$repo" "$number" "$(printf '%s' "$item" | jq -r '.id')" "$item"
-	done < <(each_item "repos/$repo/issues/$number/comments${since:+?since=$since}")
-	[ "$type" = PullRequest ] || return 0
-	while IFS= read -r item; do
-		wake_item review-comment "$repo" "$number" "$(printf '%s' "$item" | jq -r '.id')" "$item"
-	done < <(each_item "repos/$repo/pulls/$number/comments${since:+?since=$since}")
-	# A review counts by its body, or by its verdict when it has none (the inline comments of a
-	# review without a body are the review comments above).
-	while IFS= read -r item; do
-		wake_item review "$repo" "$number" "$(printf '%s' "$item" | jq -r '.id')" "$item"
-	done < <(each_item "repos/$repo/pulls/$number/reviews" |
-		jq -c --arg since "$since" --arg own "$own" 'select(.state != "PENDING"
-			and ($since == "" or (.submitted_at // "") >= $since)
-			and ($own == "" or .state != "APPROVED")
-			and ((.body // "") != "" or .state == "CHANGES_REQUESTED" or .state == "APPROVED"))')
+	list=$(each_item "repos/$repo/issues/$number/comments" |
+		jq -c '{kind: "comment", id, login: (.user.login // ""), body, at: (.created_at // ""), url: .html_url}')
+	items=$list
+	if [ "$type" = PullRequest ]; then
+		list=$(each_item "repos/$repo/pulls/$number/comments" |
+			jq -c '{kind: "review-comment", id, login: (.user.login // ""), body, at: (.created_at // ""), url: .html_url}')
+		items+=$'\n'$list
+		list=$(each_item "repos/$repo/pulls/$number/reviews" |
+			jq -c 'select(.state != "PENDING") | {kind: "review", id, login: (.user.login // ""), body, state,
+				at: (.submitted_at // ""), url: .html_url}')
+		items+=$'\n'$list
+	fi
+	while read -r kind id url; do
+		[ -n "$kind" ] || continue
+		seen "$kind:$id" && continue
+		remember "$kind:$id"
+		report "$kind" "$repo" "$number" "$url"
+	done < <(printf '%s\n' "$items" | sed '/^$/d' | jq -s '.' 2>/dev/null |
+		wake_items "$since" "$own")
 }
 
 # check_approvals REPOSITORY NUMBER: report the new approving reviews of a pull request the
@@ -181,6 +211,34 @@ check_assignment() {
 	[ -n "$first_round" ] || report assigned "$1" "$2" "$3"
 }
 
+# check_thread REPOSITORY NUMBER TYPE: the approvals (developer only) and the comments of a
+# thread, once per round.
+check_thread() {
+	local own=
+	case " $round_threads " in *" $1#$2 "*) return 0 ;; esac
+	round_threads+=" $1#$2"
+	if [ "$role" = developer ] && [ "$3" = PullRequest ]; then
+		check_approvals "$1" "$2" && own=1
+	fi
+	check_comments "$1" "$2" "$3" "$own"
+}
+
+# check_own_threads: the threads the member's account commented in that changed since the last
+# check. GitHub does not notify an account of its own comments, so a reply the user posts from
+# the member's own account is found here instead of in the notifications. A failed search
+# changes nothing and is tried again on the next check.
+check_own_threads() {
+	local since json repo number type
+	since=$(cat "$state/since" 2>/dev/null || true)
+	[ -n "$since" ] || return 0
+	json=$(gh search issues --commenter "$account" --updated ">=$since" --limit 100 \
+		--json repository,number,isPullRequest 2>/dev/null) || return 0
+	while IFS=' ' read -r repo number type; do
+		[ -n "$repo" ] || continue
+		check_thread "$repo" "$number" "$type"
+	done < <(printf '%s' "$json" | jq -r '.[]? | "\(.repository.nameWithOwner) \(.number) \(if .isPullRequest then "PullRequest" else "Issue" end)"' 2>/dev/null)
+}
+
 # check_notifications: read the notifications, honoring If-Modified-Since and X-Poll-Interval.
 # It sets notifications_status, the HTTP status of the reply.
 check_notifications() {
@@ -203,11 +261,7 @@ check_notifications() {
 		case $type in Issue | PullRequest) ;; *) continue ;; esac
 		html=https://github.com/$repo/$([ "$type" = PullRequest ] && echo pull || echo issues)/$number
 		check_assignment "$repo" "$number" "$html" "$reason" "$updated"
-		own=
-		if [ "$role" = developer ] && [ "$type" = PullRequest ]; then
-			check_approvals "$repo" "$number" && own=1
-		fi
-		check_comments "$repo" "$number" "$type" "$own"
+		check_thread "$repo" "$number" "$type"
 	done < <(printf '%s' "$body" | jq -c '.[]?' 2>/dev/null)
 	[ -z "$modified" ] || printf '%s\n' "$modified" >"$state/modified"
 }
@@ -297,7 +351,9 @@ check() {
 		first_round=1
 		printf '%s\n' "$started" >"$state/since"
 	fi
+	round_threads=
 	check_notifications
+	check_own_threads
 	[ "$role" != developer ] || check_ready
 	case $notifications_status in
 	200 | 304) minute_ago >"$state/since" ;;
