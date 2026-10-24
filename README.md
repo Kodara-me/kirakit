@@ -604,7 +604,9 @@ With a coder, code goes through Cleo the same way:
   verdict (`approve`, `request changes` or `not ready` while CI runs) with its comments and a
   "For the user" section, while the diff stays out of Kira's conversation. It has no tool to
   write files and writes nothing: Kira posts its verdict on GitHub as her own account, in her
-  own voice, and never approves against it. Once she approves, she
+  own voice, and never approves against it. Like the members' rules (see
+  [Permission rules](#permission-rules)), the review needs auto mode: a background agent
+  cannot ask for a permission, and in the default mode its `gh` reads are refused. Once she approves, she
   requests your review and tells you what the review flagged for you (security-sensitive
   changes, questions); changes requested, by her or by you, go back to Cleo, who makes them,
   replies to the comments and asks Kira again.
