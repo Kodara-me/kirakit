@@ -2095,6 +2095,204 @@ check 'fetch: an unknown ref shows could not fetch (#86 R3)' \
 	contains "$tmp/fetch-unknown.out" "could not fetch file://$tmp/remote"
 check 'fetch: an unknown ref installs nothing (#86 R3)' test ! -e "$tmp/unknown"
 
+# --- kirakit-watch (#41 R4, R5, R6, R8, R10) ----------------------------------------------
+
+# A fake gh that serves fixtures from $FAKE_GH_DIR, so that no request reaches GitHub:
+#   notifications.json   the notifications; notifications.status (default 200) and
+#                        notifications.interval are the status and X-Poll-Interval of the reply
+#   comments-REPO-N.json the comments of a thread (REPO with / as _)
+#   pr-N.json            `gh pr view N`
+#   search.json          `gh search issues`
+#   projects.json, items.json   `gh project list` and `gh project item-list`
+# Every call is appended to $FAKE_GH_DIR/calls.
+watchbin=$tmp/watchbin
+mkdir -p "$watchbin"
+cat >"$watchbin/gh" <<'FAKE'
+#!/bin/sh
+d=$FAKE_GH_DIR
+printf '%s\n' "$*" >>"$d/calls"
+case $1 in
+config) echo jonathan ;;
+auth) echo fake-token ;;
+search) cat "$d/search.json" 2>/dev/null || echo '[]' ;;
+project)
+	case $2 in
+	list) cat "$d/projects.json" 2>/dev/null || echo '{"projects":[]}' ;;
+	item-list) cat "$d/items.json" 2>/dev/null || echo '{"items":[]}' ;;
+	esac ;;
+pr)
+	n=$3
+	n=${n##*/}
+	cat "$d/pr-$n.json" ;;
+api)
+	if [ "$2" = -i ]; then
+		status=$(cat "$d/notifications.status" 2>/dev/null || echo 200)
+		case $status in 304) text='Not Modified' ;; *) text=OK ;; esac
+		printf 'HTTP/2.0 %s %s\r\n' "$status" "$text"
+		[ ! -f "$d/notifications.interval" ] || printf 'X-Poll-Interval: %s\r\n' "$(cat "$d/notifications.interval")"
+		printf 'Last-Modified: Fri, 23 Oct 2026 10:00:00 GMT\r\n\r\n'
+		if [ "$status" = 200 ]; then cat "$d/notifications.json"; else exit 1; fi
+	else
+		path=${2%%\?*}
+		file=$(printf '%s' "$path" | sed 's#^repos/##; s#/issues/#-#; s#/comments$##; s#/#_#g')
+		cat "$d/comments-$file.json" 2>/dev/null || echo '[]'
+	fi ;;
+esac
+FAKE
+chmod +x "$watchbin/gh"
+for tool in bash cat date dirname grep head jq mkdir printf rm sed sort tr; do
+	ln -sf "$(command -v "$tool")" "$watchbin/$tool"
+done
+
+watch_dir=$tmp/watch
+XDG_STATE_HOME=$tmp/watch-state
+export XDG_STATE_HOME
+# watch_reset: empty fixtures and state.
+watch_reset() {
+	rm -rf "$watch_dir" "$XDG_STATE_HOME"
+	mkdir -p "$watch_dir"
+	echo '[]' >"$watch_dir/notifications.json"
+}
+# watch ROLE [ARGS...]: a single check, with the fake gh only.
+watch() {
+	env PATH="$watchbin" FAKE_GH_DIR="$watch_dir" KIRAKIT_WATCH_ACCOUNT=cleo-kodara KIRAKIT_USER=jonathan \
+		"$root/launchers/kirakit-watch" "$@" --once 2>/dev/null
+}
+# notification REASON TYPE NUMBER: a notification of Kodara-me/kirakit.
+notification() {
+	jq -n --arg reason "$1" --arg type "$2" --arg number "$3" \
+		'[{id: "1", reason: $reason, subject: {type: $type, url: "https://api.github.com/repos/Kodara-me/kirakit/issues/\($number)"},
+			repository: {full_name: "Kodara-me/kirakit"}}]' >"$watch_dir/notifications.json"
+}
+# comment THREAD ID LOGIN: a comment on this thread (Kodara-me_kirakit-N).
+comment() {
+	jq -n --arg id "$2" --arg login "$3" \
+		'[{id: ($id | tonumber), user: {login: $login}, html_url: "https://github.com/Kodara-me/kirakit/issues/7#issuecomment-\($id)"}]' \
+		>"$watch_dir/comments-$1.json"
+}
+
+watch_reset
+check 'watch: no change, no output (#41 R6)' test -z "$(watch developer)"
+check 'watch: an unknown role is refused' sh -c '! "$@" >/dev/null 2>&1' _ \
+	env PATH="$watchbin" FAKE_GH_DIR="$watch_dir" "$root/launchers/kirakit-watch" nobody --once
+
+watch_reset
+echo 304 >"$watch_dir/notifications.status"
+check 'watch: a 304 gives no output (#41 R4, R6)' test -z "$(watch developer)"
+
+watch_reset
+notification mention Issue 7
+comment Kodara-me_kirakit-7 100 jonathan
+check "watch: the user's comment gives one line (#41 R5)" \
+	test "$(watch analyst)" = 'comment Kodara-me/kirakit#7 https://github.com/Kodara-me/kirakit/issues/7#issuecomment-100'
+check 'watch: a restart gives no duplicate line (#41 R5)' test -z "$(watch analyst)"
+check 'watch: the state is kept in XDG_STATE_HOME (#41 R5)' test -d "$XDG_STATE_HOME/kirakit/watch-analyst"
+
+watch_reset
+notification mention Issue 7
+comment Kodara-me_kirakit-7 101 cleo-kodara
+check "watch: the member's own comment gives nothing (#41 R5)" test -z "$(watch developer)"
+comment Kodara-me_kirakit-7 102 someone-else
+check "watch: another account's comment gives nothing (#41 R5)" test -z "$(watch developer)"
+
+watch_reset
+notification assign Issue 8
+check 'watch: a new assignment gives one line (#41 R5)' \
+	test "$(watch analyst)" = 'assigned Kodara-me/kirakit#8 https://github.com/Kodara-me/kirakit/issues/8'
+check 'watch: the assignment is not reported twice (#41 R5)' test -z "$(watch analyst)"
+
+# The comment filter and the state are per role.
+watch_reset
+notification mention Issue 7
+comment Kodara-me_kirakit-7 100 jonathan
+watch analyst >/dev/null
+check 'watch: the state is per role (#41 R5)' test -n "$(watch assistant)"
+
+# If-Modified-Since is sent once the first reply gave a Last-Modified.
+watch_reset
+watch analyst >/dev/null
+watch analyst >/dev/null
+check 'watch: If-Modified-Since is sent after the first check (#41 R4)' \
+	grep -q 'If-Modified-Since: Fri, 23 Oct 2026 10:00:00 GMT' "$watch_dir/calls"
+check 'watch: the notifications are read with the account token (#41 R4)' \
+	grep -q 'auth token --user cleo-kodara' "$watch_dir/calls"
+
+# The loop waits 60 seconds, or the X-Poll-Interval when longer.
+fakesleep=$tmp/fakesleep
+printf '%s\n' '#!/bin/sh' 'echo "$1" >>"$FAKE_SLEEP_LOG"' 'exit 1' >"$fakesleep"
+chmod +x "$fakesleep"
+watch_loop() {
+	rm -f "$tmp/sleep-log"
+	env PATH="$watchbin" FAKE_GH_DIR="$watch_dir" KIRAKIT_WATCH_ACCOUNT=cleo-kodara KIRAKIT_USER=jonathan \
+		KIRAKIT_WATCH_SLEEP="$fakesleep" FAKE_SLEEP_LOG="$tmp/sleep-log" \
+		"$root/launchers/kirakit-watch" analyst >/dev/null 2>&1
+	cat "$tmp/sleep-log"
+}
+watch_reset
+check 'watch: waits 60 seconds between checks (#41 R4)' test "$(watch_loop)" = 60
+echo 10 >"$watch_dir/notifications.interval"
+check 'watch: never waits less than 60 seconds (#41 R4)' test "$(watch_loop)" = 60
+echo 180 >"$watch_dir/notifications.interval"
+check 'watch: waits as long as X-Poll-Interval asks (#41 R4)' test "$(watch_loop)" = 180
+
+# Approving reviews of the developer's pull requests.
+watch_reset
+notification author PullRequest 9
+echo '{"number": 9, "url": "https://github.com/Kodara-me/kirakit/pull/9", "reviews": [{"id": "R1", "state": "APPROVED"}]}' \
+	>"$watch_dir/pr-9.json"
+check "watch: an approving review of the developer's pull request gives one line (#41 R5)" \
+	test "$(watch developer)" = 'approved Kodara-me/kirakit#9 https://github.com/Kodara-me/kirakit/pull/9'
+check 'watch: the review is not reported twice (#41 R5)' test -z "$(watch developer)"
+watch_reset
+notification author PullRequest 9
+echo '{"number": 9, "url": "https://github.com/Kodara-me/kirakit/pull/9", "reviews": [{"id": "R1", "state": "COMMENTED"}]}' \
+	>"$watch_dir/pr-9.json"
+check 'watch: a review that does not approve gives nothing (#41 R5)' test -z "$(watch developer)"
+watch_reset
+notification author PullRequest 9
+echo '{"number": 9, "url": "https://github.com/Kodara-me/kirakit/pull/9", "reviews": [{"id": "R1", "state": "APPROVED"}]}' \
+	>"$watch_dir/pr-9.json"
+check 'watch: approvals concern the developer only (#41 R5)' test -z "$(watch analyst)"
+
+# Ready tasks (#41 R10): by label, or in the Ready column of a board.
+watch_reset
+echo '[{"repository": {"nameWithOwner": "Kodara-me/kirakit"}, "number": 12, "url": "https://github.com/Kodara-me/kirakit/issues/12"}]' \
+	>"$watch_dir/search.json"
+check 'watch: a task labelled status:ready gives one line, for the developer (#41 R10)' \
+	test "$(watch developer)" = 'ready Kodara-me/kirakit#12 https://github.com/Kodara-me/kirakit/issues/12'
+check 'watch: a Ready task is not reported twice (#41 R10)' test -z "$(watch developer)"
+echo '[]' >"$watch_dir/search.json"
+check 'watch: a task leaving Ready gives nothing (#41 R10)' test -z "$(watch developer)"
+echo '[{"repository": {"nameWithOwner": "Kodara-me/kirakit"}, "number": 12, "url": "https://github.com/Kodara-me/kirakit/issues/12"}]' \
+	>"$watch_dir/search.json"
+check 'watch: a task back in Ready is reported again (#41 R10)' test -n "$(watch developer)"
+
+watch_reset
+echo '[{"repository": {"nameWithOwner": "Kodara-me/kirakit"}, "number": 12, "url": "https://github.com/Kodara-me/kirakit/issues/12"}]' \
+	>"$watch_dir/search.json"
+check 'watch: a Ready task gives nothing to the analyst (#41 R10)' test -z "$(watch analyst)"
+check 'watch: a Ready task gives nothing to the assistant (#41 R10)' test -z "$(watch assistant)"
+
+watch_reset
+echo '{"projects": [{"number": 1}]}' >"$watch_dir/projects.json"
+echo '{"items": [
+	{"status": "Ready", "assignees": ["cleo-kodara"], "content": {"type": "Issue", "repository": "Kodara-me/kirakit", "number": 13, "url": "https://github.com/Kodara-me/kirakit/issues/13"}},
+	{"status": "Ready", "assignees": ["iris-kodara"], "content": {"type": "Issue", "repository": "Kodara-me/kirakit", "number": 14, "url": "https://github.com/Kodara-me/kirakit/issues/14"}},
+	{"status": "In progress", "assignees": ["cleo-kodara"], "content": {"type": "Issue", "repository": "Kodara-me/kirakit", "number": 15, "url": "https://github.com/Kodara-me/kirakit/issues/15"}}]}' \
+	>"$watch_dir/items.json"
+check "watch: only the developer's task in the Ready column gives a line (#41 R10)" \
+	test "$(watch developer)" = 'ready Kodara-me/kirakit#13 https://github.com/Kodara-me/kirakit/issues/13'
+
+# Every repository of the notifications is watched, not only the current directory's (#41 R8).
+watch_reset
+jq -n '[{id: "2", reason: "mention", subject: {type: "Issue", url: "https://api.github.com/repos/jonathan/other/issues/3"},
+	repository: {full_name: "jonathan/other"}}]' >"$watch_dir/notifications.json"
+comment jonathan_other-3 200 jonathan
+check 'watch: a repository other than the current directory is watched (#41 R8)' \
+	test "$(cd "$tmp" && watch analyst)" = 'comment jonathan/other#3 https://github.com/Kodara-me/kirakit/issues/7#issuecomment-200'
+
+unset XDG_STATE_HOME
+
 # --- the clone -----------------------------------------------------------------------------
 
 check "clone: dist/ unchanged" test "$(dist_fingerprint)" = "$dist_before"

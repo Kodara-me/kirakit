@@ -1121,7 +1121,7 @@ uninstall_all() {
 		'') continue ;;
 		*/../* | */..) log "skip: $path" && continue ;;
 		"$CLAUDE_DIR"/* | "$konsole_dir"/kirakit-*.colorscheme) ;;
-		"$bin_dir"/assistant | "$bin_dir"/analyst | "$bin_dir"/team | "$bin_dir"/kirakit-session) ;;
+		"$bin_dir"/assistant | "$bin_dir"/analyst | "$bin_dir"/team | "$bin_dir"/kirakit-session | "$bin_dir"/kirakit-watch) ;;
 		*) log "skip (outside $CLAUDE_DIR): $path" && continue ;;
 		esac
 		remove_installed "$path"

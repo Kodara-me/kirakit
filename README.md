@@ -71,7 +71,7 @@ Outside it, on Linux and macOS (see [Launchers](#launchers)):
 
 | Path | Component |
 | --- | --- |
-| `assistant`, `team`, `kirakit-session` in `~/.local/bin` (or `--bin-dir`) | `launchers` |
+| `assistant`, `team`, `kirakit-session`, `kirakit-watch` in `~/.local/bin` (or `--bin-dir`) | `launchers` |
 | `analyst` in the same directory, with an analyst | `launchers` |
 | `kirakit-assistant.colorscheme` in `$XDG_DATA_HOME/konsole` (default: `~/.local/share/konsole`; or `--color-scheme-dir`) | `launchers` |
 | `kirakit-analyst.colorscheme` in the same directory, with an analyst | `launchers` |
@@ -672,6 +672,18 @@ changes; the color sequences go to the terminal, never to redirected output.
 `team` needs Konsole. It writes a temporary layout with one pane per member and opens it with
 `konsole --separate --layout`. It uses no D-Bus: Konsole refuses to run commands over D-Bus
 unless its security-sensitive D-Bus API is enabled.
+
+`kirakit-watch ROLE [--once]` is the background check of a member (`assistant`, `analyst` or
+`developer`). It reads the member account's notifications with `If-Modified-Since` (a `304`
+costs nothing) at most every 60 seconds, or less often when GitHub's `X-Poll-Interval` asks,
+and prints one line, `KIND REPOSITORY#NUMBER URL`, per change: a new assignment, a comment of
+your login in a thread the member takes part in, and, for the developer, an approving review
+of her pull request and a task assigned to her that becomes Ready (in the Ready column of one
+of your project boards, else labelled `status:ready`). It prints nothing otherwise and writes
+nothing to GitHub. The member's account comes from the profile (`analyst_github`,
+`coder_github`, `assistant_github`), your login from `gh config get user`. State is kept in
+`${XDG_STATE_HOME:-~/.local/state}/kirakit/watch-ROLE`, so a restart reports nothing twice;
+`--once` checks a single time and exits. It needs `jq`.
 
 The installer warns when the bin directory is not on your `PATH`, and when another command
 with a launcher's name comes first in it. A shell function or alias of the same name, such
