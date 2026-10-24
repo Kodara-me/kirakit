@@ -14,6 +14,8 @@ $failures = 0
 # writes outside its configuration directory changes nothing real.
 $scratchHome = Join-Path $tmp 'home'
 $scratchData = Join-Path $tmp 'data'
+# PowerShell's own caches (XDG_CACHE_HOME on Linux, LOCALAPPDATA on Windows) live outside the home
+# the guard watches: they are not the installer's writes.
 $scratchCache = Join-Path $tmp 'cache'
 New-Item -ItemType Directory -Path $scratchHome, $scratchData, $scratchCache | Out-Null
 $guardFailures = @()
@@ -83,7 +85,7 @@ Copy-Item -LiteralPath (Join-Path $root 'get-kira.ps1') -Destination $installer
 function Invoke-Installer([string]$ConfigDir, [string]$Ref, [string]$Locale, [string[]]$Arguments) {
     $saved = @{}
     $vars = @{ CLAUDE_CONFIG_DIR = $ConfigDir; KIRAKIT_REPO = $remoteUrl; KIRAKIT_REF = $Ref; LANG = $Locale; LC_ALL = $Locale
-        HOME = $scratchHome; USERPROFILE = $scratchHome; XDG_DATA_HOME = $scratchData; XDG_CACHE_HOME = $scratchCache }
+        HOME = $scratchHome; USERPROFILE = $scratchHome; XDG_DATA_HOME = $scratchData; XDG_CACHE_HOME = $scratchCache; LOCALAPPDATA = $scratchCache }
     # A run given a launcher location, as an option or saved in the profile, is out of the guard.
     $profilePath = Join-Path $ConfigDir '.kirakit-profile'
     $given = ($Arguments -match '^-(BinDir|ColorSchemeDir)') -or ((Test-Path -LiteralPath $profilePath) -and
