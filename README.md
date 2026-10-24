@@ -637,8 +637,10 @@ no longer waits for you when it holds nothing for you to decide:
 - **You object on the issue, or on the board.** The decisions and the verdict are on the
   issue, without mentioning you. Comment on a specification in Ready or In progress to
   object: no new task of it starts while your comment has no answer from a member after
-  it, and Kira hands it to Iris, who answers or changes the specification. This needs the
-  members' own GitHub accounts, so that their comments can be told from yours. Moving the
+  it, and Kira hands it to Iris, who answers or changes the specification. This needs all
+  three members' own GitHub accounts (`--assistant-github`, `--analyst-github` and
+  `--coder-github`), so that their comments can be told from yours: without one of them, no
+  specification is paused by a comment. Moving the
   specification out of Ready and In progress still stops it, and pull requests, tags and
   releases keep their own rules (`--complete-approved-prs` decides whether you review a
   pull request).

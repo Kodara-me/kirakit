@@ -1883,8 +1883,25 @@ check 'verified: on, next-task tells the user'"'"'s comments by the marker (R16)
 	flat_has "$on_next" 'or a comment of a team account without a session marker posted after the latest comment that carries one'
 check 'verified: on, next-task says it in its answer (R16)' \
 	contains "$on_next" 'paused by a comment of the user'
-check 'verified: on, no pause without team accounts (R16)' \
-	flat_has "$tmp/verified-on-noaccount/skills/next-task/SKILL.md" 'their comments cannot be told from his. No specification is skipped this way.'
+# no_pause DIR: whether the build in DIR pauses no specification on a comment of the user.
+no_pause() {
+	flat_has "$1/skills/next-task/SKILL.md" 'No specification is paused by a comment of the user: not every member has a GitHub account' &&
+		! grep -qF 'Then skip a specification that waits for a comment of the user' "$1/skills/next-task/SKILL.md" &&
+		! grep -qF 'start no further task of it either' "$1/CLAUDE.md"
+}
+check 'verified: on, no pause without team accounts (R16, D18)' no_pause "$tmp/verified-on-noaccount"
+# A partial team: a member without her own account comments as the user's account (D18).
+verified_build "$tmp/verified-on-nolead" --analyst --analyst-github iris-bot \
+	--coder 'Cleo <cleo@example.com>' --coder-github cleo-bot --start-verified-specs --assistant-github ''
+verified_build "$tmp/verified-on-noanalystaccount" --analyst \
+	--coder 'Cleo <cleo@example.com>' --coder-github cleo-bot --start-verified-specs
+verified_build "$tmp/verified-on-nocoderaccount" --analyst --analyst-github iris-bot \
+	--coder 'Cleo <cleo@example.com>' --start-verified-specs
+for build in nolead noanalystaccount nocoderaccount; do
+	check "verified: on, no pause with a partial team, $build (R16, D18)" no_pause "$tmp/verified-on-$build"
+done
+check 'verified: on, the pause with all three accounts (R16, D18)' \
+	sh -c '! grep -qF "No specification is paused by a comment" "$1"' _ "$on_next"
 check 'verified: on, the lead hands the comment to the analyst (R16)' \
 	flat_has "$on_team" 'paused by a comment of the user, the assistant hands that comment to the analyst'
 check 'verified: on, CLAUDE.md starts no task of a paused specification (R16)' \
@@ -1939,6 +1956,8 @@ check 'verified: README lists the security questions (R18)' \
 	flat_has "$root/README.md" 'A security question is an open choice about credentials, tokens or signing keys; permission rules or `allowed-tools`; Git identity or signing; network downloads or remote scripts that are executed; files written or deleted outside the project; CI workflows; accounts and their access rights; or data exposed outside your machine or to other people.'
 check 'verified: README says how to object (R18)' \
 	flat_has "$root/README.md" '**You object on the issue, or on the board.**' 'Comment on a specification in Ready or In progress to object'
+check 'verified: README says the pause needs all three accounts (R18, D18)' \
+	flat_has "$root/README.md" 'This needs all three members'"'"' own GitHub accounts' 'without one of them, no specification is paused by a comment.'
 
 # --- dry run -------------------------------------------------------------------------------
 

@@ -48,37 +48,43 @@ A task is workable only while its specification is in **Ready** or **In progress
 - No board: the open issues with both `type:feature` and `status:ready`
   (`gh issue list --label type:feature --label status:ready --state open`), oldest first.
 {{#start_verified_specs}}
+{{#assistant_github}}
+{{#analyst_github}}
+{{#coder_github}}
 
 Then skip a specification that waits for a comment of the user: one whose comments
 (`gh issue view <n> --json comments`) hold a comment of the user with no comment of a team
 member after it. The user objects that way to a specification the lead moved to Ready; the
 lead hands the comment to the analyst, whose answer ends the pause.
-{{#team_github}}
 
 - The user's login comes from `gh config get user -h github.com`, which calls no API: run it
   without the `GH_TOKEN` prefix.
-- The team's accounts:
-{{#assistant_github}}
-  `{{assistant_github}}` (the lead),
-{{/assistant_github}}
-{{#analyst_github}}
-  `{{analyst_github}}` (the analyst),
-{{/analyst_github}}
-{{#coder_github}}
-  `{{coder_github}}` (the coder),
-{{/coder_github}}
-  as the session marker rule of `rules/git.md` names them.
+- The team's accounts: `{{assistant_github}}` (the lead), `{{analyst_github}}` (the
+  analyst) and `{{coder_github}}` (the coder), as the session marker rule of `rules/git.md`
+  names them.
 - A team member's comment is a comment of a team account that ends with a session marker
   (`<!-- kirakit:` followed by the member's role).
 - The user's comment is a comment of the user's login, or a comment of a team account
   without a session marker posted after the latest comment that carries one. A comment of
   any other account is neither: ignore it.
-{{/team_github}}
-{{^team_github}}
+{{/coder_github}}
+{{^coder_github}}
 
-No member has a GitHub account of her own: the members comment as the user's account, and
-their comments cannot be told from his. No specification is skipped this way.
-{{/team_github}}
+No specification is paused by a comment of the user: not every member has a GitHub account
+of her own, and a member who comments as the user's account cannot be told from him.
+{{/coder_github}}
+{{/analyst_github}}
+{{^analyst_github}}
+
+No specification is paused by a comment of the user: not every member has a GitHub account
+of her own, and a member who comments as the user's account cannot be told from him.
+{{/analyst_github}}
+{{/assistant_github}}
+{{^assistant_github}}
+
+No specification is paused by a comment of the user: not every member has a GitHub account
+of her own, and a member who comments as the user's account cannot be told from him.
+{{/assistant_github}}
 {{/start_verified_specs}}
 
 ## 2. Their tasks, in order

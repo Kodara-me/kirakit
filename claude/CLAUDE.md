@@ -85,9 +85,15 @@ Pull requests are opened with the `pull-request` skill.
 - When the user moves a specification out of Ready and In progress, start no further task
   of it. A task already started goes on until its pull request is opened.
 {{#start_verified_specs}}
+{{#assistant_github}}
+{{#analyst_github}}
+{{#coder_github}}
 - While the user's latest comment on a specification in Ready or In progress has no comment
   of a team member after it, start no further task of it either: the lead hands the comment
   to the analyst, who answers it or changes the specification.
+{{/coder_github}}
+{{/analyst_github}}
+{{/assistant_github}}
 {{/start_verified_specs}}
 - Never create, edit or close an issue without asking first. The one exception is the
   analyst's own work: an idea she was asked to capture or specify, its specification and its
