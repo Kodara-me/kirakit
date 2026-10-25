@@ -482,6 +482,10 @@ replaced.
 Requirements: `git`, and a POSIX shell with standard utilities (`awk`, `sed`, `cmp`, `diff`,
 `mktemp`) or PowerShell 5+. The launchers need `bash`; `team` and the colors need Konsole.
 
+`CLAUDE.md`, `rules/`, `skills/`, `agents/` and `output-styles/` in `$CLAUDE_CONFIG_DIR` are
+built from the repository, so an edit made to them in place is not kept by the next install.
+Make the change in the repository, then install again.
+
 ## Personas
 
 All personas are Kira: she introduces herself as Kira and does not sign her messages. Only
