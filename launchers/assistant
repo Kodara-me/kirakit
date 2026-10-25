@@ -1,8 +1,13 @@
 #!/bin/sh
 # Start Claude Code as {{assistant_name}}, the team's developer, with the style {{assistant_style}}.
 {{#assistant_github}}
-# The session starts the lead's watch of GitHub (#37 R17).
-exec "$(dirname -- "$0")/kirakit-session" '{{assistant_name}}' '{"outputStyle":"{{assistant_style}}"}' kirakit-assistant /watch "$@"
+# The session starts the lead's watch of GitHub (#37 R17), unless it only prints an answer
+# (-p, --print), whose own prompt would then be a second one.
+watch=/watch
+for arg in "$@"; do
+	case $arg in -p | --print) watch= ;; esac
+done
+exec "$(dirname -- "$0")/kirakit-session" '{{assistant_name}}' '{"outputStyle":"{{assistant_style}}"}' kirakit-assistant ${watch:+"$watch"} "$@"
 {{/assistant_github}}
 {{^assistant_github}}
 exec "$(dirname -- "$0")/kirakit-session" '{{assistant_name}}' '{"outputStyle":"{{assistant_style}}"}' kirakit-assistant "$@"

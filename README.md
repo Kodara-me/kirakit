@@ -769,7 +769,7 @@ The `launchers` component installs one command per team member, and one for the 
 
 | Command | What it does |
 | --- | --- |
-| `assistant [ARGS…]` | Starts Claude Code as the assistant: a session named after it (Kira without a git identity), in its style. With the assistant's GitHub account, the session starts with `/watch`, the lead's watch of GitHub |
+| `assistant [ARGS…]` | Starts Claude Code as the assistant: a session named after it (Kira without a git identity), in its style. With the assistant's GitHub account, the session starts with `/watch`, the lead's watch of GitHub, except with `-p` or `--print` |
 | `analyst [ARGS…]` | The same for Iris, with an analyst, in a restricted session that starts no watch (see [The analyst's session](#the-analysts-session)) |
 | `team [DIR]` | Opens a new Konsole window with every member side by side (the assistant on the left), each running its command in `DIR` (default: the current directory); the watch starts in the assistant's pane only |
 

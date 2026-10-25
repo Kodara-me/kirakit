@@ -1488,6 +1488,8 @@ kira --name Alex --gender female --language auto --assistant 'Kira <kira@example
 	--assistant-github kira-bot --analyst-github iris-bot --no-co-author --copy >/dev/null
 check 'members: the assistant starts the watch (#37 R17)' \
 	test "$(started "$bin/assistant" --resume 'a b')" = "$(expected -n Kira --settings '{"outputStyle":"Kira (cozy)"}' /watch --resume 'a b')"
+check 'members: no watch when the assistant only prints (#37 R17)' \
+	sh -c 'test "$(PATH="$1:$PATH" FAKE_CLAUDE_ARGS="$2" "$3/assistant" -p hi >/dev/null; cat "$2")" = "$(printf "%s\n" -n Kira --settings "{\"outputStyle\":\"Kira (cozy)\"}" -p hi)" && test "$(PATH="$1:$PATH" FAKE_CLAUDE_ARGS="$2" "$3/assistant" --print hi >/dev/null; grep -c /watch "$2")" = 0' _ "$fakebin" "$args" "$bin"
 check "members: no watch without the assistant's account, no watch skill to start (#37 R17)" \
 	sh -c '! grep -q /watch "$1"' _ "$tmp/members-noid-bin/assistant"
 check 'members: the analyst gets her settings file, no other settings source, dontAsk, her plugin and prompt file, no watch (#37 R15, R17, D20, D26, D29)' \
@@ -1535,6 +1537,12 @@ kira --name Alex --gender female --language auto --assistant 'Kira <kira@example
 check "members: the analyst's settings linked in link mode (#37 D28)" test -L "$claude/bin/kirakit-analyst.json"
 check "members: the analyst's plugin and prompt file linked in link mode (#37 D29)" \
 	sh -c 'test -L "$1/kirakit-analyst" && test -L "$1/kirakit-analyst.md"' _ "$claude/bin"
+kira --no-analyst >/dev/null
+check "members: --no-analyst in link mode leaves no analyst file linked (#37 D28, D29)" \
+	sh -c '! ls "$1"/kirakit-analyst* >/dev/null 2>&1 && ! grep -q "/bin/kirakit-analyst" "$2"' _ "$claude/bin" "$claude/.kirakit-manifest"
+kira --analyst >/dev/null
+check "members: the analyst's files linked again with the analyst (#37 D29)" \
+	sh -c 'test -L "$1/kirakit-analyst.json" && test -L "$1/kirakit-analyst" && test -L "$1/kirakit-analyst.md"' _ "$claude/bin"
 kira --uninstall >/dev/null
 check "members: uninstall removes the links (#37 D28, D29)" sh -c '! ls "$1"/kirakit-analyst* >/dev/null 2>&1' _ "$claude/bin"
 

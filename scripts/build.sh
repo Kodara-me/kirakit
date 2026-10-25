@@ -564,8 +564,9 @@ done
 # style and skills as a plugin, and CLAUDE.md and the rules as a prompt file (#37 D29). The
 # skills lose their allowed-tools: the settings file stays the session's only source of
 # permissions (#37 D32).
+plugin=$out_dir/settings/kirakit-analyst
 if [ -f "$out_dir/settings/analyst.json" ]; then
-	plugin=$out_dir/settings/kirakit-analyst
+	rm -rf "$plugin"
 	mkdir -p "$plugin/.claude-plugin" "$plugin/output-styles"
 	printf '%s\n' '{' '  "name": "kirakit-analyst",' \
 		'  "description": "The analyst'"'"'s style and skills, for the session of the analyst launcher",' \
@@ -587,6 +588,9 @@ if [ -f "$out_dir/settings/analyst.json" ]; then
 			cat "$file"
 		done
 	} >"$out_dir/settings/kirakit-analyst.md"
+else
+	# Without an analyst, nothing of an earlier build stays to be installed.
+	rm -rf "$plugin" "$out_dir/settings/kirakit-analyst.md"
 fi
 for file in "$root"/launchers/konsole/*.colorscheme; do
 	[ -f "$file" ] || continue
