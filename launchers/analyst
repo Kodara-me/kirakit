@@ -1,5 +1,15 @@
 {{#analyst}}
 #!/bin/sh
-# Start Claude Code as {{analyst_style}}, the team's analyst.
-exec "$(dirname -- "$0")/kirakit-session" '{{analyst_style}}' '{{analyst_style}}' kirakit-analyst "$@"
+# Start Claude Code as {{analyst_style}}, the team's analyst, in a session restricted by her
+# settings file (#37 R15, R16, R21): no user, project or local settings merge into it, and
+# anything the file does not allow is refused without a prompt. Without the file, no session
+# starts (#37 R22).
+dir=$(dirname -- "$0")
+settings=$dir/kirakit-analyst.json
+if [ ! -f "$settings" ]; then
+	printf 'analyst: missing %s; no session started\n' "$settings" >&2
+	exit 1
+fi
+exec "$dir/kirakit-session" '{{analyst_style}}' "$settings" kirakit-analyst \
+	--setting-sources= --permission-mode dontAsk "$@"
 {{/analyst}}

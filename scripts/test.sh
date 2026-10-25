@@ -1128,7 +1128,16 @@ for skill in idea spec; do
 	check "marker: $skill marks its comments as the analyst (#38 R1)" sh -c 'grep -qF "Every comment this skill posts, its comment files included, ends with the" "$1" && grep -qF "analyst'"'"'s session marker, alone on its last line: \`<!-- kirakit:analyst -->\`" "$1" && ! grep -q "kirakit:assistant" "$1"' _ "$tmp/mention-full/skills/$skill/SKILL.md"
 	check "marker: $skill marks its comments as the assistant (#38 R1)" sh -c 'grep -qF "with the assistant'"'"'s session marker, alone on its last line: \`<!-- kirakit:assistant -->\`" "$1" && ! grep -q "kirakit:analyst" "$1"' _ "$tmp/build3/skills/$skill/SKILL.md"
 done
-check 'marker: the idea closed with a marked comment (#38 R1)' contains "$tmp/mention-full/skills/spec/SKILL.md" "Specified in #<new>.\\n\\n<!-- kirakit:analyst -->"
+check 'marker: the idea closed with a marked comment (#38 R1, #37 D25)' sh -c 'grep -qF "gh issue comment <idea> --body-file <file>" "$1" && grep -qF "the file holding \`Specified in #<new>.\`" "$1" && grep -qF "the marker \`<!-- kirakit:analyst -->\`; then \`gh issue close <idea>\`, with" "$1"' _ "$tmp/mention-full/skills/spec/SKILL.md"
+for skill in idea spec; do
+	check "analyst bodies: $skill writes them under her temporary directory (#37 D25)" \
+		contains "$tmp/mention-full/skills/$skill/SKILL.md" 'under `~/.cache/kirakit/analyst/`'
+	check "analyst bodies: $skill never posts an inline body (#37 D25)" \
+		contains "$tmp/mention-full/skills/$skill/SKILL.md" 'never an inline `--body`, `--comment` or `$(…)`'
+	check "analyst bodies: $skill unchanged without an analyst (#37 D25)" \
+		sh -c '! grep -q "kirakit/analyst" "$1"' _ "$tmp/build/skills/$skill/SKILL.md"
+done
+check 'marker: the idea closed without an inline comment (#37 D25)' sh -c '! grep -q -e "close <idea> --comment" -e "printf .Specified" "$1"' _ "$tmp/mention-full/skills/spec/SKILL.md"
 check "marker: spec reads the user's answers by the rule (#38 R2)" sh -c 'grep -qF "A comment is the user'"'"'s answer under the rule of \`rules/git.md\` (\"Session marker and" "$1" && grep -qF "without a session marker after the latest marked comment of the issue, never by" "$1"' _ "$tmp/mention-full/skills/spec/SKILL.md"
 readme_marker() {
 	awk '/^### Answering from a team account$/ { found = 1; next } found && /^#/ { exit } found' "$root/README.md"
@@ -1417,7 +1426,7 @@ check 'members: warns when the bin directory is not on PATH (#36 R15)' \
 kira --copy --analyst >/dev/null
 check 'members: bin directory reused (#36 R5)' test -x "$bin/analyst"
 check 'members: analyst with her style and name (#36 R11)' \
-	test "$(started "$bin/analyst" -p hi)" = "$(expected -n Iris --settings '{"outputStyle":"Iris"}' -p hi)"
+	test "$(started "$bin/analyst" -p hi)" = "$(expected -n Iris --settings "$bin/kirakit-analyst.json" --setting-sources= --permission-mode dontAsk -p hi)"
 kira --copy --assistant-style kira-focus >/dev/null
 check 'members: --assistant-style (#36 R9)' \
 	test "$(started "$bin/assistant")" = "$(expected -n Kira --settings '{"outputStyle":"Kira (focus)"}')"
@@ -1470,6 +1479,66 @@ claude=$tmp/members-noid
 kira --copy --name Alex --gender female --language auto --no-co-author --bin-dir "$claude-bin" >/dev/null
 check 'members: the assistant is Kira without a git identity (#36 R10)' \
 	test "$(started "$claude-bin/assistant")" = "$(expected -n Kira --settings '{"outputStyle":"Kira (cozy)"}')"
+
+# --- launchers: the watch and the analyst's session (#37 R15–R17, R21, R22, D20, D26, D28) --
+
+claude=$tmp/members-team
+bin=$claude/bin
+kira --name Alex --gender female --language auto --assistant 'Kira <kira@example.com>' \
+	--assistant-github kira-bot --analyst-github iris-bot --no-co-author --copy >/dev/null
+check 'members: the assistant starts the watch (#37 R17)' \
+	test "$(started "$bin/assistant" --resume 'a b')" = "$(expected -n Kira --settings '{"outputStyle":"Kira (cozy)"}' /watch --resume 'a b')"
+check "members: no watch without the assistant's account, no watch skill to start (#37 R17)" \
+	sh -c '! grep -q /watch "$1"' _ "$tmp/members-noid-bin/assistant"
+check 'members: the analyst gets her settings file, no other settings source and dontAsk, no watch (#37 R15, R17, D20, D26)' \
+	test "$(started "$bin/analyst" -p hi)" = "$(expected -n Iris --settings "$bin/kirakit-analyst.json" --setting-sources= --permission-mode dontAsk -p hi)"
+check 'members: team starts no watch of its own, only through the assistant launcher (#37 R17)' \
+	sh -c '! grep -q watch "$1"' _ "$bin/team"
+check "members: the analyst's settings beside the launchers (#37 R22, D28)" test -f "$bin/kirakit-analyst.json"
+check "members: the analyst's settings are not executable (#37 D28)" test ! -x "$bin/kirakit-analyst.json"
+check "members: the analyst's settings hold her output style (#37 D26)" contains "$bin/kirakit-analyst.json" '"outputStyle": "Iris"'
+check "members: the analyst's settings hold the secret-read denial (#37 R21)" contains "$bin/kirakit-analyst.json" '"Read(~/.ssh/**)"'
+check "members: the analyst's settings recorded in the manifest (#37 D28)" grep -qxF "$bin/kirakit-analyst.json" "$claude/.kirakit-manifest"
+check "members: never in the real ~/.local/bin with a scratch configuration directory (#37 D28)" \
+	test ! -e "$claude-home/.local/bin/kirakit-analyst.json"
+check 'members: a plain claude session is unchanged (#37 R17)' \
+	sh -c '! grep -q -e dontAsk -e "\"deny\"" -e "setting-sources" -e "outputStyle\": \"Iris" "$1"' _ "$claude/settings.json"
+rm -f "$bin/kirakit-analyst.json" "$args"
+check 'members: without its settings, the analyst launcher fails (#37 R22)' \
+	sh -c 'PATH="$1:$PATH" FAKE_CLAUDE_ARGS="$2" "$3/analyst" 2>"$4"; test $? -ne 0' _ "$fakebin" "$args" "$bin" "$tmp/analyst-missing.err"
+check 'members: and says so in one line naming the file (#37 R22)' \
+	sh -c '[ "$(wc -l <"$1")" -eq 1 ] && grep -qF "$2" "$1"' _ "$tmp/analyst-missing.err" "$bin/kirakit-analyst.json"
+check 'members: and starts no claude (#37 R22)' test ! -e "$args"
+kira --copy >/dev/null
+check "members: a rerun puts the analyst's settings back (#37 D28)" test -f "$bin/kirakit-analyst.json"
+kira --copy --no-analyst >/dev/null
+check "members: the analyst's settings removed with the analyst (#37 D28)" test ! -e "$bin/kirakit-analyst.json"
+kira --copy --analyst >/dev/null
+kira --copy --bin-dir "$claude-bin1" >/dev/null
+kira --copy --bin-dir "$claude-bin2" >/dev/null
+check "members: the analyst's settings follow the bin directory (#37 D28)" \
+	sh -c 'test -f "$1/kirakit-analyst.json" && test ! -e "$2/kirakit-analyst.json"' _ "$claude-bin2" "$claude-bin1"
+kira --uninstall >/dev/null
+check "members: uninstall removes the analyst's settings (#37 D28)" test ! -e "$claude-bin2/kirakit-analyst.json"
+
+claude=$tmp/members-team-link
+kira --name Alex --gender female --language auto --assistant 'Kira <kira@example.com>' \
+	--assistant-github kira-bot --analyst-github iris-bot --no-co-author >/dev/null
+check "members: the analyst's settings linked in link mode (#37 D28)" test -L "$claude/bin/kirakit-analyst.json"
+kira --uninstall >/dev/null
+check "members: uninstall removes the link (#37 D28)" sh -c '! test -e "$1" && ! test -L "$1"' _ "$claude/bin/kirakit-analyst.json"
+
+readme_analyst=$(awk '/^### The analyst.s session$/ { found = 1; next } found && /^#/ { exit } found' "$root/README.md")
+check "README: the analyst's session has its section (#37 D24)" sh -c 'test -n "$1"' _ "$readme_analyst"
+for text in '**What the session can do.**' '**What it cannot do.**' '**Secret files.**' \
+	'`~/.ssh/`, `~/.gnupg/`, `~/.git-credentials`' 'for `git --no-index`' \
+	"**What \`--setting-sources=\`" 'hooks, model, plugins' '`.git/index`' '`~/.local/state/gh/`' \
+	'The analyst'"'"'s token is the account'"'"'s own' '**Unattended sessions.**' 'it starts no session'; do
+	check "README: the analyst's session documents $text (#37 R15, R21, R22, D20, D23)" \
+		sh -c 'printf "%s\n" "$1" | grep -qF -- "$2"' _ "$readme_analyst" "$text"
+done
+check 'README: Windows has no restricted analyst session (#37 D24)' \
+	contains "$root/README.md" "so the analyst's restricted session and the watch are not available there either."
 
 # --- launcher locations: --color-scheme-dir and what the profile keeps (#169 R1, R2, R3, R10) -
 
@@ -2224,6 +2293,17 @@ analyst_settings() {
 	done
 	check "analyst settings $3: exactly 6 gh project rules (R16, D16)" sh -c '[ "$(grep -c "gh project " "$1")" -eq 6 ]' _ "$1"
 	check "analyst settings $3: no gh project * (R16, D16)" sh -c '! grep -qF "gh project *" "$1"' _ "$1"
+	check "analyst settings $3: her output style in the same file (D26)" contains "$1" '"outputStyle": "Iris"'
+	for rule in 'Read(~/.ssh/**)' 'Read(~/.gnupg/**)' 'Read(~/.git-credentials)' 'Read(~/.netrc)' \
+		'Read(~/.config/gh/hosts.yml)' 'Read(~/.claude/.credentials.json)' 'Read(~/.local/share/keyrings/**)' \
+		'Bash(*.ssh*)' 'Bash(*.gnupg*)' 'Bash(*.git-credentials*)' 'Bash(*.netrc*)' 'Bash(*hosts.yml*)' \
+		'Bash(*.credentials.json*)' 'Bash(*keyrings*)' 'Bash(git *--no-index*)'; do
+		check "analyst settings $3: $rule denied (R21, D22)" in_deny "$1" "$rule"
+	done
+}
+# in_deny FILE RULE: whether RULE is in the deny list of the settings FILE.
+in_deny() {
+	sed -n '/"deny"/,/\]/p' "$1" | grep -qF "\"$2\""
 }
 $shell "$root/scripts/build.sh" -o "$tmp/analyst-settings" --analyst --analyst-github iris-test >/dev/null
 $shell "$root/scripts/build.sh" -o "$tmp/analyst-settings-local" --analyst >/dev/null

@@ -251,8 +251,10 @@ confirmation:
 - An idea whose issue was not written by `{{analyst_github}}` (its `author.login`) cannot
   be edited by the analyst. Write the specification in a new issue instead, with the
   idea's content moved into it and its Context starting with "From the idea #<idea>.".
-  Then close the idea with a comment pointing to it, ending with the marker:
-  `gh issue close <idea> --comment "$(printf 'Specified in #<new>.\n\n<!-- kirakit:analyst -->')"`.
+  Then close the idea with a comment pointing to it, in two steps: post the comment from a
+  file, `gh issue comment <idea> --body-file <file>`, the file holding `Specified in #<new>.`,
+  an empty line and the marker `<!-- kirakit:analyst -->`; then `gh issue close <idea>`, with
+  no `--comment`.
 {{/analyst_github}}
 {{#assistant_github}}
 - Assign the parent to `{{assistant_github}}`, the owner of specifications, when it is first
@@ -293,7 +295,16 @@ confirmation:
 {{/assistant_github}}
 - Before adding a label, check it with `gh label list`, and create a missing one without
   asking (`gh label create`).
+{{#analyst}}
+- Write every body and comment to a file under `~/.cache/kirakit/analyst/`, with the Write
+  tool, and post it with `--body-file <file>`:
+  never an inline `--body`, `--comment` or `$(…)`. The analyst's own session refuses the
+  others (an inline body naming a protected path, or a `$(…)` checked as a command of its
+  own), and the same files serve the lead's `iris` agent. Never into the working tree.
+{{/analyst}}
+{{^analyst}}
 - Write bodies to temporary files outside the repository, never into the working tree.
+{{/analyst}}
 - Once the tasks are published, move the parent to Specified with the `board-status` skill
   (`board-status <parent> Specified`). A parent on no board is left as it is: its
   `status:specified` label marks it. When the board has no Specified option, say so in one

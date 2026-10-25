@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# kirakit-session NAME STYLE SCHEME [ARGS...]: start Claude Code as a team member, in a session
-# named NAME with the output style STYLE, pass ARGS through, and exit with Claude Code's
-# status. In Konsole, the pane shows the color scheme SCHEME meanwhile, and gets the scheme of
-# its profile back on exit, interruption included.
+# kirakit-session NAME SETTINGS SCHEME [ARGS...]: start Claude Code as a team member, in a
+# session named NAME with the settings SETTINGS (a JSON object, such as the output style, or
+# the path of a settings file), pass ARGS through, and exit with Claude Code's status. In
+# Konsole, the pane shows the color scheme SCHEME meanwhile, and gets the scheme of its
+# profile back on exit, interruption included.
 set -u
 
 if [ $# -lt 3 ]; then
-	printf 'usage: kirakit-session NAME STYLE SCHEME [ARGS...]\n' >&2
+	printf 'usage: kirakit-session NAME SETTINGS SCHEME [ARGS...]\n' >&2
 	exit 2
 fi
 name=$1
-style=$2
+settings=$2
 scheme=$3
 shift 3
 
@@ -55,4 +56,4 @@ if [ -n "${KONSOLE_DBUS_SESSION-}" ]; then
 	set_scheme "$scheme"
 fi
 
-claude -n "$name" --settings "{\"outputStyle\":\"$style\"}" "$@"
+claude -n "$name" --settings "$settings" "$@"

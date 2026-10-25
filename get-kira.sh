@@ -665,6 +665,9 @@ install_launchers() {
 		install_built "bin/$launcher" "$bin_dir/$launcher"
 		[ ! -e "$build_dir/bin/$launcher" ] || launchers="$launchers $launcher"
 	done
+	# The analyst launcher's settings, beside it, so that it follows every launcher location
+	# (#37 R22, D28). Not executable.
+	install_built settings/analyst.json "$bin_dir/kirakit-analyst.json"
 	# Launchers an earlier run put in another bin directory.
 	if [ -f "$manifest" ]; then
 		while IFS= read -r path; do
@@ -673,7 +676,8 @@ install_launchers() {
 				log "skip (default launcher location): $path"
 				continue
 			fi
-			[ -f "$src/launchers/${path##*/}" ] || [ -f "$src/launchers/konsole/${path##*/}" ] || continue
+			[ -f "$src/launchers/${path##*/}" ] || [ -f "$src/launchers/konsole/${path##*/}" ] ||
+				[ "${path##*/}" = kirakit-analyst.json ] || continue
 			remove_installed "$path"
 			removed="$removed$path$nl"
 		done <"$manifest"
@@ -1162,7 +1166,7 @@ uninstall_all() {
 		'') continue ;;
 		*/../* | */..) log "skip: $path" && continue ;;
 		"$CLAUDE_DIR"/* | "$konsole_dir"/kirakit-*.colorscheme) ;;
-		"$bin_dir"/assistant | "$bin_dir"/analyst | "$bin_dir"/team | "$bin_dir"/kirakit-session | "$bin_dir"/kirakit-watch) ;;
+		"$bin_dir"/assistant | "$bin_dir"/analyst | "$bin_dir"/team | "$bin_dir"/kirakit-session | "$bin_dir"/kirakit-watch | "$bin_dir"/kirakit-analyst.json) ;;
 		*)
 			if in_default_launcher_location "$path"; then
 				log "skip (default launcher location): $path"

@@ -73,6 +73,7 @@ Outside it, on Linux and macOS (see [Launchers](#launchers)):
 | --- | --- |
 | `assistant`, `team`, `kirakit-session`, `kirakit-watch` in `~/.local/bin` (or `--bin-dir`; `$CLAUDE_CONFIG_DIR/bin` with a non-default configuration directory) | `launchers` |
 | `analyst` in the same directory, with an analyst | `launchers` |
+| `kirakit-analyst.json` in the same directory, with an analyst: the settings of the analyst's session (see [The analyst's session](#the-analysts-session)), not executable | `launchers` |
 | `kirakit-assistant.colorscheme` in `$XDG_DATA_HOME/konsole` (default: `~/.local/share/konsole`; or `--color-scheme-dir`; `$CLAUDE_CONFIG_DIR/konsole` with a non-default configuration directory) | `launchers` |
 | `kirakit-analyst.colorscheme` in the same directory, with an analyst | `launchers` |
 
@@ -742,7 +743,8 @@ persona, under her own rules and on her agent's model, without leaving the conve
 
 ### Talking to Iris directly
 
-The lead setup changes nothing for a direct conversation with Iris:
+The lead setup changes nothing for a direct conversation with Iris, except that her session
+is restricted (see [The analyst's session](#the-analysts-session)):
 
 - **Talk to her** with the `analyst` command, or open the whole team side by side with
   `team` (see [Launchers](#launchers)). You can also switch the session's output style to
@@ -767,9 +769,9 @@ The `launchers` component installs one command per team member, and one for the 
 
 | Command | What it does |
 | --- | --- |
-| `assistant [ARGS…]` | Starts Claude Code as the assistant: a session named after it (Kira without a git identity), in its style |
-| `analyst [ARGS…]` | The same for Iris, with an analyst |
-| `team [DIR]` | Opens a new Konsole window with every member side by side (the assistant on the left), each running its command in `DIR` (default: the current directory) |
+| `assistant [ARGS…]` | Starts Claude Code as the assistant: a session named after it (Kira without a git identity), in its style. With the assistant's GitHub account, the session starts with `/watch`, the lead's watch of GitHub |
+| `analyst [ARGS…]` | The same for Iris, with an analyst, in a restricted session that starts no watch (see [The analyst's session](#the-analysts-session)) |
+| `team [DIR]` | Opens a new Konsole window with every member side by side (the assistant on the left), each running its command in `DIR` (default: the current directory); the watch starts in the assistant's pane only |
 
 `assistant` and `analyst` pass their arguments to Claude Code (`assistant --resume`,
 `analyst -p "…"`) and exit with its status. The assistant's style is the default style, or
@@ -814,7 +816,61 @@ with a launcher's name comes first in it. A shell function or alias of the same 
 as a hand-written `team` fish function, also wins over the launcher, and the installer
 cannot see it: remove it once the launchers are installed.
 
-The launchers are not supported on Windows: `get-kira.ps1` prints a notice and installs none.
+The launchers are not supported on Windows: `get-kira.ps1` prints a notice and installs none,
+so the analyst's restricted session and the watch are not available there either.
+
+### The analyst's session
+
+`analyst` starts Iris's session with her settings file, `kirakit-analyst.json`, beside the
+launchers, as the only `--settings`, together with `--setting-sources=` and
+`--permission-mode dontAsk`. When the file is missing, it starts no session: it prints one line
+naming the file on standard error and exits with a non-zero status. A plain `claude` session,
+the assistant's and the lead's background agents (`iris` included) are not restricted this way.
+
+**What the session can do.** Only what the `idea`, `spec` and `board-status` skills run:
+`Read`, `Grep` and `Glob`; `gh issue view`, `list`, `status`, `create`, `edit`, `comment`,
+`close` and `reopen`; `gh pr view` and `list`; `gh search`; `gh project list`, `view`,
+`field-list`, `item-list`, `item-add` and `item-edit`; `gh label list` and `create`;
+`gh repo view`; `gh config get user`; read-only `git log`, `show`, `diff` and `status`; and
+`Write` and `Edit` under `~/.cache/kirakit/analyst/`, her temporary directory. With the
+analyst's account, each `gh` rule carries the `GH_TOKEN=$(gh auth token --user LOGIN)` prefix,
+and `gh auth token --user LOGIN` is allowed on its own. The skills write every body and comment
+to a file in that directory and post it with `--body-file`.
+
+**What it cannot do.** Anything else is refused without a prompt: writing, changing or
+deleting a file outside her temporary directory, whatever the tool or command (`sed -i`, a
+redirection, `git diff --output`, …); `git push`; `gh api`, so no commit or merge through the
+API; `gh issue develop`, `delete` or `transfer`; creating, editing or deleting a board.
+
+**Secret files.** The session cannot read `~/.ssh/`, `~/.gnupg/`, `~/.git-credentials`,
+`~/.netrc`, `~/.config/gh/hosts.yml`, `~/.claude/.credentials.json` and
+`~/.local/share/keyrings/`: `Read` deny rules for each path, and `Bash` deny rules for any
+command naming one of them and for `git --no-index`, which close commands that read a file,
+such as `gh issue comment --body-file ~/.ssh/id_ed25519`. `gh auth token` keeps working: `gh`
+reads its own configuration itself.
+
+**What `--setting-sources=` drops.** No user, project or local settings merge into the
+session, so none of your own rules can widen it. It also drops, in that session only, your own
+hooks, model, plugins and the other settings of `settings.json`, and kirakit's permission rules
+(see [Permission rules](#permission-rules)). Your `CLAUDE.md`, `rules/`, skills and the
+analyst's output style still load.
+
+**Limits.**
+
+- A command an allowed rule runs may keep files for itself: `git status` refreshes
+  `.git/index`, and `gh` writes its own configuration and state under `~/.config/gh/` and
+  `~/.local/state/gh/`.
+- The analyst's token is the account's own: used outside the session, it can do whatever the
+  account's role allows. A role that GitHub enforces needs a repository in an organization
+  (see [Repositories in an organization](#repositories-in-an-organization-optional)).
+- Arguments given to `analyst` are passed to Claude Code as they are: an option that widens
+  permissions, such as `--dangerously-skip-permissions` or `--allowedTools`, widens the
+  session.
+
+**Unattended sessions.** A session that runs on its own, such as the lead's with its watch,
+cannot wait on permission prompts: it needs the rules of [Permission rules](#permission-rules)
+for each member's account. The analyst's session does not use them: its settings file holds
+its own.
 
 ## Skills
 
