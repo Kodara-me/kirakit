@@ -2131,6 +2131,103 @@ check 'verified: README says how to object (R18)' \
 check 'verified: README says the pause needs all three accounts (R18, D18)' \
 	flat_has "$root/README.md" 'This needs all three members'"'"' own GitHub accounts' 'without one of them, no specification is paused by a comment.'
 
+# --- soft rules (#199) ---------------------------------------------------------------------
+
+# R1: off by default, saved by its option, kept by a later run, turned off by its no option; never asked.
+claude=$tmp/soft
+verified_team >"$tmp/soft.log"
+check 'soft: off by default (R1)' profile_has 'soft_rules=no'
+check 'soft: never asked (R1)' sh -c '! grep -q "no terminal to ask for:.*soft" "$1"' _ "$tmp/soft.log"
+check 'soft: off, completion and verified specs stay off (R1)' \
+	sh -c 'grep -qxF complete_approved_prs=no "$1" && grep -qxF start_verified_specs=no "$1"' _ "$claude/.kirakit-profile"
+# R19: with the soft rules off, the installed files are the build without the option.
+verified_build "$tmp/soft-off-build" --analyst --analyst-github iris-bot \
+	--coder 'Cleo <cleo@example.com>' --coder-github cleo-bot
+for path in rules CLAUDE.md skills agents; do
+	check "soft: off, $path as the build without the option (R19)" \
+		diff -r "$tmp/soft-off-build/$path" "$claude/$path"
+done
+check 'soft: off, nothing mentions the soft rules (R19)' \
+	sh -c 'cd "$1" && ! grep -rqiF -e "soft rules" -e "Decided without you" rules CLAUDE.md agents skills' _ "$claude"
+verified_team --soft-rules >/dev/null
+check 'soft: turned on and saved by the option (R1)' profile_has 'soft_rules=yes'
+check 'soft: kept by a later run without the option (R1)' unchanged verified_team
+check 'soft: still on after the later run (R1)' profile_has 'soft_rules=yes'
+# R2: with a coder, the completion of pull requests; with an analyst and a coder, verified specs.
+check 'soft: on, completion of pull requests turned on (R2)' profile_has 'complete_approved_prs=yes'
+check 'soft: on, verified specifications turned on (R2)' profile_has 'start_verified_specs=yes'
+check 'soft: on, review-spec installed (R2)' test -f "$claude/skills/review-spec/SKILL.md"
+verified_team --no-soft-rules >/dev/null
+check 'soft: turned off by the no option (R1)' profile_has 'soft_rules=no'
+check 'soft: off again, no mention of the soft rules (R19)' \
+	sh -c 'cd "$1" && ! grep -rqiF -e "soft rules" -e "Decided without you" rules CLAUDE.md agents skills' _ "$claude"
+# R2: without them the options stay off.
+claude=$tmp/soft-coder
+kira_profile --assistant 'Kira <kira@example.com>' --assistant-github kira-bot \
+	--coder 'Cleo <cleo@example.com>' --coder-github cleo-bot --copy --soft-rules >/dev/null
+check 'soft: with a coder alone, completion turned on (R2)' profile_has 'complete_approved_prs=yes'
+check 'soft: with a coder alone, no verified specifications (R2)' profile_has 'start_verified_specs=no'
+claude=$tmp/soft-nocoder
+kira_profile --assistant 'Kira <kira@example.com>' --assistant-github kira-bot --analyst-github iris-bot \
+	--copy --soft-rules >/dev/null
+check 'soft: without a coder, saved (R1)' profile_has 'soft_rules=yes'
+check 'soft: without a coder, completion stays off (R2)' profile_has 'complete_approved_prs=no'
+check 'soft: without a coder, no verified specifications (R2)' profile_has 'start_verified_specs=no'
+# A profile saved before the setting reads as off, and nothing is asked.
+claude=$tmp/soft-earlier
+mkdir -p "$claude"
+printf 'name=Alex\ngender=female\nlanguage=auto\nassistant_name=Kira\nassistant_email=kira@example.com\nassistant_signing_key=\nassistant_github=\nco_author_trailer=yes\nanalyst=yes\nanalyst_github=\ncoder=Cleo <cleo@example.com>\ncoder_signing_key=\ncoder_github=\nallow_releases=no\ncomplete_approved_prs=no\nstart_verified_specs=no\nstyle=kira-cozy\n' \
+	>"$claude/.kirakit-profile"
+kira --copy >"$tmp/soft-earlier.log"
+check 'soft: earlier profile reads as off (R19)' profile_has 'soft_rules=no'
+check 'soft: earlier profile not asked (R19)' sh -c '! grep -q "no terminal to ask for" "$1"' _ "$tmp/soft-earlier.log"
+
+# R20: the no options of what the soft rules include are a conflict, named in the error.
+soft_conflict() {
+	expected=$1
+	shift
+	claude=$tmp/soft-conflict
+	out=$(verified_team "$@" 2>&1) && return 1
+	printf '%s\n' "$out" | grep -qF -- "$expected"
+}
+check 'soft: --soft-rules --no-complete-approved-prs fails naming the conflict (R20)' \
+	soft_conflict '--no-complete-approved-prs' --soft-rules --no-complete-approved-prs
+check 'soft: --soft-rules --no-start-verified-specs fails naming the conflict (R20)' \
+	soft_conflict '--no-start-verified-specs' --soft-rules --no-start-verified-specs
+
+# R3 to R6: the built rules with the soft rules on.
+verified_build "$tmp/soft-on" --analyst --analyst-github iris-bot --coder 'Cleo <cleo@example.com>' \
+	--coder-github cleo-bot --complete-approved-prs --start-verified-specs --soft-rules
+check 'soft: on, no placeholder left (R3)' no_placeholder "$tmp/soft-on"
+soft_team_rules=$tmp/soft-on/rules/team.md
+check 'soft: R3, a question that is not a security question gets the recommendation, recorded and reported' \
+	flat_has "$soft_team_rules" 'applies her own recommendation, records the choice and its reason in a comment' 'that does not mention the user' 'under "Decided without you"'
+check 'soft: R3, the analyst and the coder record and report it too' \
+	sh -c 'grep -qF "Decided without you" "$1/agents/iris.md" && grep -qF "Decided without you" "$1/agents/cleo.md"' _ "$tmp/soft-on"
+check 'soft: R4, security questions still reach the user' \
+	flat_has "$soft_team_rules" 'It always goes to the user, as without the soft rules' 'A pull request with a security-sensitive change still goes to the user'"'"'s review'
+check 'soft: R4, CLAUDE.md stops only for a security question' \
+	flat_has "$tmp/soft-on/CLAUDE.md" 'there is a security question for the user'
+check 'soft: R5, the completion needs no "Nothing." from the review' \
+	flat_has "$soft_team_rules" 'holds no question and no security-sensitive change' 'its other items go in the assistant'"'"'s report'
+check 'soft: R5, the strict "Nothing." condition is gone' sh -c '! grep -qF "part says \`Nothing.\`" "$1"' _ "$soft_team_rules"
+check 'soft: R6, issues for bugs and follow-ups, and labels, without asking' \
+	flat_has "$soft_team_rules" 'create an issue for a bug or a follow-up idea found during the team'"'"'s work' 'add or remove labels on the team'"'"'s issues, without asking first'
+check 'soft: R6, CLAUDE.md names the exception' \
+	flat_has "$tmp/soft-on/CLAUDE.md" 'an issue for a bug or a follow-up idea found during its work' 'which need no asking and are reported'
+check 'soft: closing and deleting issues keep their rules (R6)' \
+	sh -c 'grep -qF "Closing and deleting issues keep their rules." "$1" && grep -qF "Never edit, close or delete an issue without asking first" "$2"' _ "$soft_team_rules" "$tmp/soft-on/CLAUDE.md"
+check 'soft: the guards stay (D5)' \
+	flat_has "$soft_team_rules" 'the escalation to the user after two verifications that request changes' 'tags and releases, only on an explicit request' 'the user'"'"'s own approval of the pull requests the assistant wrote itself'
+
+# R18: the README documents the options, the profile key and what the soft rules relax.
+check 'soft: README lists the option (R18)' contains "$root/README.md" '| `--soft-rules` |'
+check 'soft: README lists the no option (R18)' contains "$root/README.md" '| `--no-soft-rules` |'
+check 'soft: README lists the profile key and default (R18)' \
+	flat_has "$root/README.md" '`soft_rules` (`yes` or `no`, default `no`)'
+check 'soft: README describes what they relax and what always reaches the user (R18)' \
+	flat_has "$root/README.md" '#### Soft rules' 'What the soft rules relax' 'What always reaches you: every security question' '"Decided without you"'
+
 # --- dry run -------------------------------------------------------------------------------
 
 claude=$tmp/dry

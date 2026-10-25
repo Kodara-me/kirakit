@@ -45,6 +45,9 @@
 #   {{start_verified_specs}}  "yes" when the lead verifies the analyst's specifications and moves
 #                             the verified ones to Ready without the user, or nothing; set only
 #                             when the team has both an analyst and a coder
+#   {{soft_rules}}            "yes" when the soft rules are on: the team applies its own
+#                             recommendations to questions that are not security questions, or
+#                             nothing. The installer turns on the options it includes.
 # In the launchers, {{assistant_name}} is "Kira" when the assistant has no git identity.
 # A line holding only a placeholder that expands to nothing is removed.
 #
@@ -58,7 +61,7 @@
 #                 [--assistant-signing-key PATH] [--assistant-github LOGIN]
 #                 [--analyst] [--analyst-github LOGIN] [--assistant-style PERSONA]
 #                 [--coder "NAME <EMAIL>"] [--coder-signing-key PATH] [--coder-github LOGIN]
-#                 [--complete-approved-prs] [--start-verified-specs] [PERSONA...]
+#                 [--complete-approved-prs] [--start-verified-specs] [--soft-rules] [PERSONA...]
 set -eu
 
 root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
@@ -80,6 +83,7 @@ coder_signing_key=
 coder_github=
 complete_approved_prs=
 start_verified_specs=
+soft_rules=
 assistant_style=kira-cozy
 nl='
 '
@@ -96,7 +100,7 @@ Usage: build.sh [-o DIR] [--name NAME] [--gender GENDER] [--language LANGUAGE]
                 [--assistant-signing-key PATH] [--assistant-github LOGIN]
                 [--analyst] [--analyst-github LOGIN] [--assistant-style PERSONA]
                 [--coder "NAME <EMAIL>"] [--coder-signing-key PATH] [--coder-github LOGIN]
-                [--complete-approved-prs] [--start-verified-specs] [PERSONA...]
+                [--complete-approved-prs] [--start-verified-specs] [--soft-rules] [PERSONA...]
 
 Build output styles, skills, agents, rules, CLAUDE.md and the launchers into DIR
 (default: dist).
@@ -123,6 +127,9 @@ With no PERSONA, build every overlay in personas/. Skills are always all built.
   --start-verified-specs     With an analyst and a coder, the lead verifies the analyst's
                              specifications and moves the verified ones to Ready without the
                              user (default: no)
+  --soft-rules               The team applies its own recommendations to questions that are not
+                             security questions, and reports them (default: no). The two options
+                             above are separate: get-kira.sh turns them on with this one.
 EOF
 }
 
@@ -159,6 +166,10 @@ while [ $# -gt 0 ]; do
 		;;
 	--start-verified-specs)
 		start_verified_specs=yes
+		shift
+		;;
+	--soft-rules)
+		soft_rules=yes
 		shift
 		;;
 	-h | --help)
@@ -282,7 +293,7 @@ export KIRA_USER="$user" KIRA_THEY="$they" KIRA_THEM="$them" KIRA_THEIR="$their"
 	KIRA_COMMITTER="$committer" KIRA_COMMITTER_NAME="$committer_name" KIRA_COMMITTER_EMAIL="$committer_email" \
 	KIRA_COMMITTER_SIGNING_KEY="$committer_signing_key" KIRA_COMPLETE_APPROVED_PRS="$complete_approved_prs" \
 	KIRA_ANY_COMMITTER_KEY="$any_committer_key" KIRA_TEAM_GITHUB="$team_github" \
-	KIRA_START_VERIFIED_SPECS="$start_verified_specs"
+	KIRA_START_VERIFIED_SPECS="$start_verified_specs" KIRA_SOFT_RULES="$soft_rules"
 
 # render FILE [ORIGIN]: print FILE with its placeholders filled and its blocks resolved;
 # errors name ORIGIN (default: FILE).
@@ -303,7 +314,7 @@ render() {
 			exit 1
 		}
 		BEGIN {
-			n = split("user they them their language co_author assistant_name assistant_email assistant_signing_key assistant_github analyst analyst_github assistant_style analyst_style coder coder_name coder_email coder_signing_key coder_github committer committer_name committer_email committer_signing_key complete_approved_prs start_verified_specs any_committer_key team_github", keys, " ")
+			n = split("user they them their language co_author assistant_name assistant_email assistant_signing_key assistant_github analyst analyst_github assistant_style analyst_style coder coder_name coder_email coder_signing_key coder_github committer committer_name committer_email committer_signing_key complete_approved_prs start_verified_specs soft_rules any_committer_key team_github", keys, " ")
 			for (k = 1; k <= n; k++) known[keys[k]] = 1
 			depth = 0
 			hidden = 0

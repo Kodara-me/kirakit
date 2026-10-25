@@ -85,6 +85,11 @@ Options:
                              analyst's specifications and move the verified ones to Ready
                              without you; only security questions are asked
   --no-start-verified-specs  Every specification waits in Specified for you (default)
+  --soft-rules               Take you out of the loop for what is not a security question:
+                             the team applies its own recommendations and reports them, and
+                             --complete-approved-prs (with a coder) and --start-verified-specs
+                             (with an analyst and a coder) are turned on
+  --no-soft-rules            Strict rules: the team asks you its questions (default)
   --default-style PERSONA    Output style selected in settings.json (default: kira-cozy)
   --assistant-style PERSONA  Style of the assistant launcher (default: the default style)
   --bin-dir DIR              Where the launchers go (default: ~/.local/bin, or bin/ in a
@@ -424,6 +429,7 @@ load_profile() {
 		allow_releases) saved_allow_releases=$value ;;
 		complete_approved_prs) saved_complete_approved_prs=$value ;;
 		start_verified_specs) saved_start_verified_specs=$value ;;
+		soft_rules) saved_soft_rules=$value ;;
 		style) saved_style=$value ;;
 		assistant_style) saved_assistant_style=$value ;;
 		bin_dir) saved_bin_dir=$value ;;
@@ -489,6 +495,14 @@ setup_profile() {
 	# Specifications wait for the user unless asked; not a question, an option.
 	start_verified_specs=${opt_start_verified_specs-${saved_start_verified_specs:-no}}
 	[ "$start_verified_specs" = yes ] || start_verified_specs=no
+	# The soft rules are off unless asked; not a question, an option. They include the two options
+	# above, so asking them off with the soft rules on is a conflict (R20).
+	soft_rules=${opt_soft_rules-${saved_soft_rules:-no}}
+	[ "$soft_rules" = yes ] || soft_rules=no
+	if [ "$soft_rules" = yes ]; then
+		[ "${opt_complete_approved_prs-}" != no ] || die "--soft-rules turns on --complete-approved-prs: remove --no-complete-approved-prs, or use --no-soft-rules"
+		[ "${opt_start_verified_specs-}" != no ] || die "--soft-rules turns on --start-verified-specs: remove --no-start-verified-specs, or use --no-soft-rules"
+	fi
 	if [ -n "$assistant" ]; then default_trailer=yes; else default_trailer=no; fi
 	co_author_trailer=${opt_co_author_trailer-${saved_co_author_trailer-$default_trailer}}
 	default_style=${opt_style-${saved_style:-kira-cozy}}
@@ -556,6 +570,12 @@ setup_profile() {
 	assistant_signing_key=$(expand_home "$assistant_signing_key")
 	[ -n "$coder" ] || coder_signing_key='' coder_github=''
 	coder_signing_key=$(expand_home "$coder_signing_key")
+	# R2: the soft rules turn on the completion of the coder's pull requests with a coder, and the
+	# start of verified specifications with an analyst and a coder; without them the options stay as they are.
+	if [ "$soft_rules" = yes ]; then
+		[ -z "$coder" ] || complete_approved_prs=yes
+		{ [ "$analyst" = yes ] && [ -n "$coder" ]; } && start_verified_specs=yes
+	fi
 	if [ -n "$assistant" ]; then
 		assistant_name=${assistant% <*}
 		assistant_email=${assistant##*<}
@@ -565,7 +585,7 @@ setup_profile() {
 	fi
 
 	[ -z "${no_save-}" ] || return 0
-	profile_text="name=$user_name${nl}gender=$user_gender${nl}language=$user_language${nl}assistant_name=$assistant_name${nl}assistant_email=$assistant_email${nl}assistant_signing_key=$assistant_signing_key${nl}assistant_github=$assistant_github${nl}co_author_trailer=$co_author_trailer${nl}analyst=$analyst${nl}analyst_github=$analyst_github${nl}coder=$coder${nl}coder_signing_key=$coder_signing_key${nl}coder_github=$coder_github${nl}allow_releases=$allow_releases${nl}complete_approved_prs=$complete_approved_prs${nl}start_verified_specs=$start_verified_specs${nl}style=$default_style${nl}assistant_style=$assistant_style"
+	profile_text="name=$user_name${nl}gender=$user_gender${nl}language=$user_language${nl}assistant_name=$assistant_name${nl}assistant_email=$assistant_email${nl}assistant_signing_key=$assistant_signing_key${nl}assistant_github=$assistant_github${nl}co_author_trailer=$co_author_trailer${nl}analyst=$analyst${nl}analyst_github=$analyst_github${nl}coder=$coder${nl}coder_signing_key=$coder_signing_key${nl}coder_github=$coder_github${nl}allow_releases=$allow_releases${nl}complete_approved_prs=$complete_approved_prs${nl}start_verified_specs=$start_verified_specs${nl}soft_rules=$soft_rules${nl}style=$default_style${nl}assistant_style=$assistant_style"
 	# Only a location given on this run or saved earlier, never the computed default.
 	[ -z "$given_bin_dir" ] || profile_text="$profile_text${nl}bin_dir=$given_bin_dir"
 	[ -z "$given_color_scheme_dir" ] || profile_text="$profile_text${nl}color_scheme_dir=$given_color_scheme_dir"
@@ -604,15 +624,16 @@ build() {
 	if [ "$co_author_trailer" = yes ]; then co_author=$assistant; else co_author=; fi
 	if [ "$analyst" = yes ]; then analyst_flag=--analyst; else analyst_flag=; fi
 	if [ "$complete_approved_prs" = yes ]; then complete_flag=--complete-approved-prs; else complete_flag=; fi
+	if [ "$soft_rules" = yes ]; then soft_flag=--soft-rules; else soft_flag=; fi
 	# The build drops the setting without an analyst or without a coder.
 	if [ "$start_verified_specs" = yes ]; then verified_flag=--start-verified-specs; else verified_flag=; fi
-	# shellcheck disable=SC2086 # analyst_flag, complete_flag and verified_flag are empty or one word
+	# shellcheck disable=SC2086 # analyst_flag, complete_flag, verified_flag and soft_flag are empty or one word
 	sh "$src/scripts/build.sh" -o "$build_dir" --name "$user_name" --gender "$user_gender" \
 		--language "$user_language" --co-author "$co_author" --assistant "$assistant" \
 		--assistant-signing-key "$assistant_signing_key" --assistant-github "$assistant_github" \
 		$analyst_flag --analyst-github "$analyst_github" --assistant-style "${assistant_style:-$default_style}" \
 		--coder "$coder" --coder-signing-key "$coder_signing_key" --coder-github "$coder_github" \
-		$complete_flag $verified_flag >/dev/null || exit 1
+		$complete_flag $verified_flag $soft_flag >/dev/null || exit 1
 }
 
 # built PATH: where an installed file comes from; symlinks always point into the clone.
@@ -1273,6 +1294,8 @@ while [ $# -gt 0 ]; do
 	--no-complete-approved-prs) opt_complete_approved_prs=no ;;
 	--start-verified-specs) opt_start_verified_specs=yes ;;
 	--no-start-verified-specs) opt_start_verified_specs=no ;;
+	--soft-rules) opt_soft_rules=yes ;;
+	--no-soft-rules) opt_soft_rules=no ;;
 	--analyst) opt_analyst=yes ;;
 	--no-analyst) opt_analyst=no ;;
 	--reconfigure) reconfigure=1 ;;

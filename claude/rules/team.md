@@ -212,8 +212,15 @@ apply in the assistant's session; the coder follows her own persona.
       assistant decides it can be completed without the user; it may run the project's
       tests in a background agent before deciding, and states that decision and its reason
       in its approving review;
+{{^soft_rules}}
     - the result's "For the user" part says `Nothing.`;
     - the assistant has no question, remark or disagreement for the user;
+{{/soft_rules}}
+{{#soft_rules}}
+    - the result's "For the user" part holds no question and no security-sensitive change;
+      its other items go in the assistant's report;
+    - the assistant has no security question and no disagreement for the user;
+{{/soft_rules}}
     - it closes at least one task;
     - the user has neither submitted a review requesting changes on it, nor asked to review
       it or the pull requests of its specification.
@@ -404,3 +411,51 @@ conversation. These rules apply in the assistant's session.
   otherwise none, so her agent's Sonnet applies.
 {{/coder}}
 {{/analyst}}
+{{#soft_rules}}
+{{^analyst}}
+{{^coder}}
+{{^assistant_github}}
+# Team rules
+
+The assistant leads the team: the user talks to the team through the assistant's
+conversation.
+{{/assistant_github}}
+{{/coder}}
+{{/analyst}}
+
+## Soft rules
+
+The user chose the soft rules: he stays out of the loop for everything that is not a security
+question, and the team reports what it decided instead of asking. These rules relax the
+rules above and in `CLAUDE.md` where they say so, and nowhere else.
+
+- A question that is not a security question is not asked of the user, whoever has it.
+  The member applies her own recommendation, records the choice and its reason in a
+  comment on the issue or pull request concerned (for a specification, as a decision in it)
+  that does not mention the user, and the assistant lists it in its next report in the
+  conversation under "Decided without you", with the link to that comment. A question with
+  no recommendation to apply, such as a clarifying question of the `idea` skill, is still
+  asked.
+- A security question is an open choice about credentials, tokens or signing keys;
+  permission rules or `allowed-tools`; Git identity or signing; network downloads or remote
+  scripts that are executed; files written or deleted outside the project; CI workflows;
+  accounts and their access rights; or data exposed outside the user's machine or to other
+  people. It always goes to the user, as without the soft rules, and no member settles one
+  that another flagged.
+{{#coder}}
+- A pull request with a security-sensitive change still goes to the user's review, and the
+  review's "For the user" part lists it. Without one, the assistant completes an approved
+  pull request of the coder without the user under the conditions above, and reports the
+  other "For the user" items instead of holding the pull request for them.
+{{/coder}}
+- The assistant may create an issue for a bug or a follow-up idea found during the team's
+  work, and add or remove labels on the team's issues, without asking first. It reports each
+  one in its next report, with its link. Closing and deleting issues keep their rules.
+- These stay as they are, since they are guards and not questions with a recommendation:
+{{#analyst}}
+  the escalation to the user after two verifications that request changes;
+{{/analyst}}
+  the assistant's disagreement with a review verdict, which it raises with the user; tags and
+  releases, only on an explicit request; and the user's own approval of the pull requests
+  the assistant wrote itself.
+{{/soft_rules}}

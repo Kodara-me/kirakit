@@ -66,6 +66,10 @@ Every pull request waits for the user's review (default).
 With an analyst and a coder, let the assistant verify the analyst's specifications and move the verified ones to Ready without the user; only security questions are asked.
 .PARAMETER NoStartVerifiedSpecs
 Every specification waits in Specified for the user (default).
+.PARAMETER SoftRules
+Take the user out of the loop for what is not a security question: the team applies its own recommendations and reports them, and -CompleteApprovedPrs (with a coder) and -StartVerifiedSpecs (with an analyst and a coder) are turned on.
+.PARAMETER NoSoftRules
+Strict rules: the team asks the user its questions (default).
 .PARAMETER DefaultStyle
 Output style selected in settings.json (default: kira-cozy).
 .PARAMETER Reconfigure
@@ -116,6 +120,8 @@ param(
     [switch]$NoCompleteApprovedPrs,
     [switch]$StartVerifiedSpecs,
     [switch]$NoStartVerifiedSpecs,
+    [switch]$SoftRules,
+    [switch]$NoSoftRules,
     [string]$DefaultStyle,
     [switch]$Reconfigure,
     [string]$BinDir,
@@ -151,7 +157,7 @@ $PermissionsPath = Join-Path $ClaudeDir '.kirakit-permissions'
 $PlaceholderKeys = @('user', 'they', 'them', 'their', 'language', 'co_author', 'assistant_name', 'assistant_email',
     'assistant_signing_key', 'assistant_github', 'analyst', 'analyst_github', 'coder', 'coder_name', 'coder_email',
     'coder_signing_key', 'coder_github', 'committer', 'committer_name', 'committer_email', 'committer_signing_key',
-    'complete_approved_prs', 'start_verified_specs', 'any_committer_key', 'team_github')
+    'complete_approved_prs', 'start_verified_specs', 'soft_rules', 'any_committer_key', 'team_github')
 
 $script:Work = $null
 $script:BackupDir = $null
@@ -483,6 +489,13 @@ function Get-KiraProfile {
     $result.complete_approved_prs = if ($CompleteApprovedPrs) { 'yes' } elseif ($NoCompleteApprovedPrs) { 'no' } elseif ($saved.ContainsKey('complete_approved_prs') -and $saved.complete_approved_prs -eq 'yes') { 'yes' } else { 'no' }
     # Specifications wait for the user unless asked; not a question, an option.
     $result.start_verified_specs = if ($StartVerifiedSpecs) { 'yes' } elseif ($NoStartVerifiedSpecs) { 'no' } elseif ($saved.ContainsKey('start_verified_specs') -and $saved.start_verified_specs -eq 'yes') { 'yes' } else { 'no' }
+    # The soft rules are off unless asked; not a question, an option. They include the two options above,
+    # so asking them off with the soft rules on is a conflict (R20).
+    $result.soft_rules = if ($SoftRules) { 'yes' } elseif ($NoSoftRules) { 'no' } elseif ($saved.ContainsKey('soft_rules') -and $saved.soft_rules -eq 'yes') { 'yes' } else { 'no' }
+    if ($result.soft_rules -eq 'yes') {
+        if ($NoCompleteApprovedPrs) { throw '-SoftRules turns on -CompleteApprovedPrs: remove -NoCompleteApprovedPrs, or use -NoSoftRules' }
+        if ($NoStartVerifiedSpecs) { throw '-SoftRules turns on -StartVerifiedSpecs: remove -NoStartVerifiedSpecs, or use -NoSoftRules' }
+    }
     $defaultTrailer = if ($result.assistant) { 'yes' } else { 'no' }
     $result.co_author_trailer = if ($NoCoAuthor) { 'no' } elseif ($Bound.ContainsKey('CoAuthor')) { 'yes' } elseif ($saved.ContainsKey('co_author_trailer')) { $saved.co_author_trailer } else { $defaultTrailer }
 
@@ -549,6 +562,12 @@ function Get-KiraProfile {
         $result.coder_github = ''
     }
     $result.coder_signing_key = Expand-KiraHome $result.coder_signing_key
+    # R2: the soft rules turn on the completion of the coder's pull requests with a coder, and the start of
+    # verified specifications with an analyst and a coder; without them the options stay as they are.
+    if ($result.soft_rules -eq 'yes') {
+        if ($result.coder) { $result.complete_approved_prs = 'yes' }
+        if ($result.analyst -eq 'yes' -and $result.coder) { $result.start_verified_specs = 'yes' }
+    }
     $result.co_author = if ($result.co_author_trailer -eq 'yes') { $result.assistant } else { '' }
     if ($result.assistant -match '^(.+) <(.+)>$') {
         $assistantName = $Matches[1]; $assistantEmail = $Matches[2]
@@ -590,7 +609,7 @@ function Get-KiraProfile {
         "analyst_github=$($result.analyst_github)${Nl}coder=$($result.coder)${Nl}" +
         "coder_signing_key=$($result.coder_signing_key)${Nl}coder_github=$($result.coder_github)${Nl}" +
         "allow_releases=$($result.allow_releases)${Nl}complete_approved_prs=$($result.complete_approved_prs)${Nl}" +
-        "start_verified_specs=$($result.start_verified_specs)${Nl}style=$($result.style)${Nl}" +
+        "start_verified_specs=$($result.start_verified_specs)${Nl}soft_rules=$($result.soft_rules)${Nl}style=$($result.style)${Nl}" +
         "assistant_style=$assistantStyle$Nl" + $launcherDirs
     $current = if (Test-Path -LiteralPath $ProfilePath) { Read-KiraText $ProfilePath } else { $null }
     if ($current -ne $text) {
@@ -685,6 +704,7 @@ function Get-KiraValue($UserProfile) {
         # Verified specifications start without the user only with both an analyst, who writes
         # them, and a coder, whose team has the lead's kira agent that verifies them.
         start_verified_specs = if ($UserProfile['start_verified_specs'] -eq 'yes' -and $analystValue -and $coderValue) { 'yes' } else { '' }
+        soft_rules = if ($UserProfile['soft_rules'] -eq 'yes') { 'yes' } else { '' }
         # The team's accounts: the members' sessions mark what they write as these accounts.
         team_github = if ($github -or $analystGithub -or $coderGithub) { 'yes' } else { '' }
     }

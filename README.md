@@ -116,6 +116,8 @@ color schemes and writes nothing in either directory.
 | `--no-complete-approved-prs` | Every pull request waits for your review (default; saved in the profile) |
 | `--start-verified-specs` | With an analyst and a coder, let the assistant verify the analyst's specifications and move the verified ones to Ready without you; you are asked only security questions (saved in the profile) |
 | `--no-start-verified-specs` | Every specification waits in Specified for you (default; saved in the profile) |
+| `--soft-rules` | Keep you out of the loop for what is not a security question: the team applies its own recommendations and reports them; turns on `--complete-approved-prs` with a coder and `--start-verified-specs` with an analyst and a coder (saved in the profile) |
+| `--no-soft-rules` | Strict rules: the team asks you its questions (default; saved in the profile) |
 | `--default-style PERSONA` | Style selected in `settings.json` (default: `kira-cozy`) |
 | `--assistant-style PERSONA` | Style of the `assistant` launcher (default: the default style) |
 | `--bin-dir DIR` | Where the launchers go, an absolute path (default: `~/.local/bin`, or `bin/` in a non-default configuration directory; saved in the profile) |
@@ -163,7 +165,10 @@ reads as `no`. `--start-verified-specs` is not asked either: it is saved as
 `start_verified_specs` (`yes` or `no`, default `no`) and kept until
 `--no-start-verified-specs`. It applies only with both an analyst and a coder (otherwise the
 installed files are those of an install without it), and a profile saved before it reads as
-`no`.
+`no`. `--soft-rules` is not asked either: it is saved as `soft_rules` (`yes` or `no`, default
+`no`) and kept until `--no-soft-rules`, and a profile saved before it reads as `no`. Giving
+`--no-complete-approved-prs` or `--no-start-verified-specs` with the soft rules on is an
+error, since they include both.
 
 The answers are saved in `$CLAUDE_CONFIG_DIR/.kirakit-profile` and reused by later runs; only
 questions that are not answered yet are asked. Options override the saved values, and
@@ -628,6 +633,32 @@ installed only with an analyst or a coder.
   searches run in a background agent that returns only its conclusion.
 - On GitHub, Iris's work is still written as her account (see
   [Give the analyst a GitHub account](#give-the-analyst-a-github-account)).
+
+#### Soft rules
+
+With `--soft-rules` (off by default, saved in the profile as `soft_rules`), the team stops
+asking you what it can decide itself. The installer turns on `--complete-approved-prs` when
+the profile has a coder, and `--start-verified-specs` when it has both an analyst and a coder;
+without them those stay as they are. With the soft rules off, the installed files are those of
+an install without the option.
+
+What the soft rules relax:
+
+- **Questions that are not security questions.** Whoever has one, Kira, Iris or Cleo, applies
+  her own recommendation instead of asking you, records the choice and its reason in a comment
+  on the issue or pull request (in the specification, for Iris) that does not mention you, and
+  Kira lists it in her next report under "Decided without you". A clarifying question with no
+  recommendation to apply is still asked.
+- **The review of a pull request of the coder.** Kira completes an approved pull request
+  without your review when its "For the user" items are neither questions nor security-sensitive
+  changes, the other conditions of `--complete-approved-prs` holding; those items go in her report.
+- **Issues.** Kira may create an issue for a bug or a follow-up idea found during the team's
+  work, and add or remove labels on the team's issues, without asking, and reports each one.
+
+What always reaches you: every security question (see below), every pull request with a
+security-sensitive change, the escalation after two verifications requesting changes, Kira's
+disagreement with a review verdict, closing and deleting issues, tags and releases, and your
+approval of the pull requests Kira writes herself.
 
 #### Verified specifications
 

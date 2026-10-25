@@ -46,7 +46,12 @@ Pull requests are opened with the `pull-request` skill.
   line (`rules/team.md`). When nothing is workable, say so in one line and wait.
 {{/coder}}
 - Stop and wait for the user only when:
+{{^soft_rules}}
   - there is a question for the user, or solutions for the user to choose from;
+{{/soft_rules}}
+{{#soft_rules}}
+  - there is a security question for the user (`rules/team.md`);
+{{/soft_rules}}
 {{^coder}}
   - a pull request waits for the user's review;
 {{/coder}}
@@ -82,6 +87,10 @@ Pull requests are opened with the `pull-request` skill.
 {{/complete_approved_prs}}
 {{/coder}}
   - no task is workable.
+{{#soft_rules}}
+  Any other question is answered by the member's own recommendation, recorded and reported
+  (`rules/team.md`, "Soft rules").
+{{/soft_rules}}
 - When the user moves a specification out of Ready and In progress, start no further task
   of it. A task already started goes on until its pull request is opened.
 {{#start_verified_specs}}
@@ -95,9 +104,19 @@ Pull requests are opened with the `pull-request` skill.
 {{/analyst_github}}
 {{/assistant_github}}
 {{/start_verified_specs}}
+{{^soft_rules}}
 - Never create, edit or close an issue without asking first. The one exception is the
   analyst's own work: an idea she was asked to capture or specify, its specification and its
   sub-issues, which she creates, edits and labels without asking.
+{{/soft_rules}}
+{{#soft_rules}}
+- Never edit, close or delete an issue without asking first, and never create one outside the
+  cases below. The exceptions are the analyst's own work: an idea she was asked to capture or
+  specify, its specification and its sub-issues, which she creates, edits and labels without
+  asking; and, for the whole team, an issue for a bug or a follow-up idea found during its
+  work, and labels added or removed on its issues, which need no asking and are reported
+  (`rules/team.md`, "Soft rules").
+{{/soft_rules}}
 
 ## Language
 

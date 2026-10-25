@@ -260,6 +260,27 @@ foreach ($path in @('CLAUDE.md', (Join-Path 'rules' 'team.md'), (Join-Path (Join
 Test-Check 'verified: on without a coder, the files without the setting (#185 R4)' $same
 
 function Get-RunText($Run) { return (($Run.Lines | ForEach-Object { "$_" }) -join "`n") }
+
+# #199 R1, R2, R20: the soft rules are off by default, saved by their option, kept by a later run
+# without it and turned off by their no option; they turn on the completion of pull requests, and
+# conflict with the no options of what they include.
+$soft = Join-Path $tmp 'soft'
+$steps = @(
+    @{ Name = 'off by default'; Arguments = @(); Expected = 'soft_rules=no'; Complete = 'complete_approved_prs=no' },
+    @{ Name = 'turned on and saved by -SoftRules'; Arguments = @('-SoftRules'); Expected = 'soft_rules=yes'; Complete = 'complete_approved_prs=yes' },
+    @{ Name = 'kept by a later run without the option'; Arguments = @(); Expected = 'soft_rules=yes'; Complete = 'complete_approved_prs=yes' },
+    @{ Name = 'turned off by -NoSoftRules'; Arguments = @('-NoSoftRules'); Expected = 'soft_rules=no'; Complete = 'complete_approved_prs=yes' }
+)
+foreach ($step in $steps) {
+    $run = Invoke-Installer $soft 'main' 'C' (@('-Copy', '-Assistant', 'Kira <kira@example.com>', '-Analyst', '-Coder', 'Cleo <cleo@example.com>') + $step.Arguments)
+    Test-Check "soft: $($step.Name) (#199 R1)" ($run.Status -eq 0 -and (Test-ProfileLine $soft $step.Expected)) (Get-RunText $run)
+    Test-Check "soft: $($step.Name), completion of pull requests (#199 R2)" (Test-ProfileLine $soft $step.Complete)
+}
+$softConflict = Join-Path $tmp 'soft-conflict'
+$run = Invoke-Installer $softConflict 'main' 'C' @('-Copy', '-Assistant', 'Kira <kira@example.com>', '-Coder', 'Cleo <cleo@example.com>', '-SoftRules', '-NoCompleteApprovedPrs')
+Test-Check 'soft: -SoftRules with -NoCompleteApprovedPrs fails naming the conflict (#199 R20)' ($run.Status -ne 0 -and (Get-RunText $run) -match 'NoCompleteApprovedPrs') (Get-RunText $run)
+$run = Invoke-Installer $softConflict 'main' 'C' @('-Copy', '-Assistant', 'Kira <kira@example.com>', '-Analyst', '-Coder', 'Cleo <cleo@example.com>', '-SoftRules', '-NoStartVerifiedSpecs')
+Test-Check 'soft: -SoftRules with -NoStartVerifiedSpecs fails naming the conflict (#199 R20)' ($run.Status -ne 0 -and (Get-RunText $run) -match 'NoStartVerifiedSpecs') (Get-RunText $run)
 # #172 R3, R8: the launcher locations are saved only when given, kept by a later run, checked
 # as absolute paths, and nothing is installed in them.
 function Get-ProfileText([string]$ConfigDir) {
