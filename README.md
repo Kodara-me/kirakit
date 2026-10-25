@@ -73,7 +73,7 @@ Outside it, on Linux and macOS (see [Launchers](#launchers)):
 | --- | --- |
 | `assistant`, `team`, `kirakit-session`, `kirakit-watch` in `~/.local/bin` (or `--bin-dir`; `$CLAUDE_CONFIG_DIR/bin` with a non-default configuration directory) | `launchers` |
 | `analyst` in the same directory, with an analyst | `launchers` |
-| `kirakit-analyst.json` in the same directory, with an analyst: the settings of the analyst's session (see [The analyst's session](#the-analysts-session)), not executable | `launchers` |
+| `kirakit-analyst.json`, the `kirakit-analyst/` plugin and `kirakit-analyst.md` in the same directory, with an analyst: the settings, style, skills and prompt of the analyst's session (see [The analyst's session](#the-analysts-session)), not executable | `launchers` |
 | `kirakit-assistant.colorscheme` in `$XDG_DATA_HOME/konsole` (default: `~/.local/share/konsole`; or `--color-scheme-dir`; `$CLAUDE_CONFIG_DIR/konsole` with a non-default configuration directory) | `launchers` |
 | `kirakit-analyst.colorscheme` in the same directory, with an analyst | `launchers` |
 
@@ -823,11 +823,20 @@ so the analyst's restricted session and the watch are not available there either
 
 `analyst` starts Iris's session with her settings file, `kirakit-analyst.json`, beside the
 launchers, as the only `--settings`, together with `--setting-sources=` and
-`--permission-mode dontAsk`. When the file is missing, it starts no session: it prints one line
-naming the file on standard error and exits with a non-zero status. A plain `claude` session,
+`--permission-mode dontAsk`. Since no user settings load, it also passes her plugin,
+`kirakit-analyst/` (her output style and the `idea`, `spec` and `board-status` skills), with
+`--plugin-dir`, and her prompt file, `kirakit-analyst.md` (the built `CLAUDE.md` and
+`rules/*.md`), with `--append-system-prompt-file`. All three are built from the profile and
+installed beside the launchers. The plugin's skills have no `allowed-tools`, so the settings
+file is the session's only source of permissions. When the settings file is missing, it starts
+no session: it prints one line naming the file on standard error and exits with a non-zero
+status. A plain `claude` session,
 the assistant's and the lead's background agents (`iris` included) are not restricted this way.
 
 **What the session can do.** Only what the `idea`, `spec` and `board-status` skills run:
+those three skills (`Skill(kirakit-analyst:idea)`, `spec` and `board-status`); Claude Code's
+bundled skills that would run without a rule (`dataviz`, `simplify`, `code-review`,
+`workflow-authoring`, `run` and `plugin-authoring`) are denied by name;
 `Read`, `Grep` and `Glob`; `gh issue view`, `list`, `status`, `create`, `edit`, `comment`,
 `close` and `reopen`; `gh pr view` and `list`; `gh search`; `gh project list`, `view`,
 `field-list`, `item-list`, `item-add` and `item-edit`; `gh label list` and `create`;
@@ -835,7 +844,7 @@ the assistant's and the lead's background agents (`iris` included) are not restr
 `Write` and `Edit` under `~/.cache/kirakit/analyst/`, her temporary directory. With the
 analyst's account, each `gh` rule carries the `GH_TOKEN=$(gh auth token --user LOGIN)` prefix,
 and `gh auth token --user LOGIN` is allowed on its own. The skills write every body and comment
-to a file in that directory and post it with `--body-file`.
+to a file in that directory and post it with `--body-file`, last on the command line.
 
 **What it cannot do.** Anything else is refused without a prompt: writing, changing or
 deleting a file outside her temporary directory, whatever the tool or command (`sed -i`, a
@@ -846,14 +855,20 @@ API; `gh issue develop`, `delete` or `transfer`; creating, editing or deleting a
 `~/.netrc`, `~/.config/gh/hosts.yml`, `~/.claude/.credentials.json` and
 `~/.local/share/keyrings/`: `Read` deny rules for each path, and `Bash` deny rules for any
 command naming one of them and for `git --no-index`, which close commands that read a file,
-such as `gh issue comment --body-file ~/.ssh/id_ed25519`. `gh auth token` keeps working: `gh`
-reads its own configuration itself.
+such as `gh issue comment --body-file ~/.ssh/id_ed25519`. A glob that hides the name, such as
+`--body-file ~/.ss?/id_ed25519`, is refused too: no `?`, `[` or `*` may follow `--body-file` or
+`-F`. `gh issue create --recover`, which also reads a file, is refused. `gh auth token` keeps
+working: `gh` reads its own configuration itself.
 
 **What `--setting-sources=` drops.** No user, project or local settings merge into the
 session, so none of your own rules can widen it. It also drops, in that session only, your own
 hooks, model, plugins and the other settings of `settings.json`, and kirakit's permission rules
-(see [Permission rules](#permission-rules)). Your `CLAUDE.md`, `rules/`, skills and the
-analyst's output style still load.
+(see [Permission rules](#permission-rules)). Your `~/.claude/CLAUDE.md`, `rules/`, skills and
+output styles do not load either: the session gets kirakit's own from the plugin and the prompt
+file, so your own edits to `~/.claude/CLAUDE.md` do not reach it, nor does a project's
+`CLAUDE.md` (such as one in a parent directory). Her settings file turns automatic memory off
+(`"autoMemoryEnabled": false`), so the memory index does not load either. She can still `Read`
+them.
 
 **Limits.**
 

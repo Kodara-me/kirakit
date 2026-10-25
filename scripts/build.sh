@@ -560,6 +560,34 @@ for file in "$claude_dir"/settings/*.json; do
 	[ -f "$file" ] || continue
 	build_file "$file" "$out_dir/settings/$(basename "$file")"
 done
+# The analyst's session loads no user settings (--setting-sources=), so her launcher brings her
+# style and skills as a plugin, and CLAUDE.md and the rules as a prompt file (#37 D29). The
+# skills lose their allowed-tools: the settings file stays the session's only source of
+# permissions (#37 D32).
+if [ -f "$out_dir/settings/analyst.json" ]; then
+	plugin=$out_dir/settings/kirakit-analyst
+	mkdir -p "$plugin/.claude-plugin" "$plugin/output-styles"
+	printf '%s\n' '{' '  "name": "kirakit-analyst",' \
+		'  "description": "The analyst'"'"'s style and skills, for the session of the analyst launcher",' \
+		'  "version": "1.0.0"' '}' >"$plugin/.claude-plugin/plugin.json"
+	cp "$out_dir/output-styles/iris.md" "$plugin/output-styles/iris.md"
+	for skill in idea spec board-status; do
+		mkdir -p "$plugin/skills/$skill"
+		awk 'NR == 1 && /^---$/ { front = 1; print; next }
+			front && /^---$/ { front = 0 }
+			front && /^allowed-tools:/ { skip = 1; next }
+			front && skip && /^[ \t-]/ { next }
+			{ skip = 0; print }' "$out_dir/skills/$skill/SKILL.md" >"$plugin/skills/$skill/SKILL.md"
+	done
+	{
+		cat "$out_dir/CLAUDE.md"
+		for file in "$out_dir"/rules/*.md; do
+			[ -f "$file" ] || continue
+			printf '\n'
+			cat "$file"
+		done
+	} >"$out_dir/settings/kirakit-analyst.md"
+fi
 for file in "$root"/launchers/konsole/*.colorscheme; do
 	[ -f "$file" ] || continue
 	build_file "$file" "$out_dir/konsole/$(basename "$file")"

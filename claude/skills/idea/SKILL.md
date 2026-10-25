@@ -86,13 +86,13 @@ What becomes possible or better, without prescribing the solution.
    create a missing one without asking (`gh label create`).
 4. Create the issue without asking for confirmation: `gh issue create --title "<title>"
 {{#analyst}}
-   --body-file <file> --label …`, with the body in a file under `~/.cache/kirakit/analyst/`,
+   --label … --body-file <file>`, with the body in a file under `~/.cache/kirakit/analyst/`,
    written with the Write tool. Every body and comment of this skill is posted that way, with
-   `--body-file`, never an inline `--body`, `--comment` or `$(…)`: the analyst's own session
-   refuses them.
+   `--body-file` last on the command line, after every other option (`--assignee` included),
+   never an inline `--body`, `--comment` or `$(…)`: the analyst's own session refuses them.
 {{/analyst}}
 {{^analyst}}
-   --body-file <file> --label …`, with the body in a temporary file outside the repository.
+   --label … --body-file <file>`, with the body in a temporary file outside the repository.
 {{/analyst}}
 {{#analyst_github}}
    Assign it to `{{analyst_github}}`, the owner of ideas until they become specifications:

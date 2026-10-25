@@ -191,7 +191,7 @@ check 'spec: written in one pass (#51 R6)' sh -c 'grep -q "in one pass, without 
 check 'spec: phase by phase on request (#51 R6)' contains "$spec_skill" 'When the user asks to work phase by phase'
 check 'spec: a Decisions section (#51 R7)' sh -c 'grep -qx "### Decisions" "$1" && grep -qF -- "- **D1** — <question>: <choice>. <reason>" "$1"' _ "$spec_skill"
 check 'spec: publishes without confirmation (#51 R8)' sh -c 'grep -q "Publish without asking for" "$1" && ! grep -q "ask for confirmation" "$1" && ! grep -q "the same confirmation" "$1"' _ "$spec_skill"
-check 'spec: tasks not marked Ready (#89 R10)' sh -c 'grep -q -- "--label type:task\`" "$1" && ! grep -q -- "--label status:ready" "$1"' _ "$spec_skill"
+check 'spec: tasks not marked Ready (#89 R10)' sh -c 'grep -q -- "--label type:task --body-file <file>\`" "$1" && ! grep -q -- "--label status:ready" "$1"' _ "$spec_skill"
 check 'spec: parent moved to Specified (#89 R10)' contains "$spec_skill" '`board-status <parent> Specified`'
 check 'spec: no Specified option reported (#89 R15)' contains "$spec_skill" 'When the board has no Specified option, say so'
 check 'spec: no question without questions (#89 R10)' contains "$spec_skill" 'Ready for you: move it to Ready when you want'
@@ -1426,7 +1426,7 @@ check 'members: warns when the bin directory is not on PATH (#36 R15)' \
 kira --copy --analyst >/dev/null
 check 'members: bin directory reused (#36 R5)' test -x "$bin/analyst"
 check 'members: analyst with her style and name (#36 R11)' \
-	test "$(started "$bin/analyst" -p hi)" = "$(expected -n Iris --settings "$bin/kirakit-analyst.json" --setting-sources= --permission-mode dontAsk -p hi)"
+	test "$(started "$bin/analyst" -p hi)" = "$(expected -n Iris --settings "$bin/kirakit-analyst.json" --setting-sources= --permission-mode dontAsk --plugin-dir "$bin/kirakit-analyst" --append-system-prompt-file "$bin/kirakit-analyst.md" -p hi)"
 kira --copy --assistant-style kira-focus >/dev/null
 check 'members: --assistant-style (#36 R9)' \
 	test "$(started "$bin/assistant")" = "$(expected -n Kira --settings '{"outputStyle":"Kira (focus)"}')"
@@ -1490,15 +1490,21 @@ check 'members: the assistant starts the watch (#37 R17)' \
 	test "$(started "$bin/assistant" --resume 'a b')" = "$(expected -n Kira --settings '{"outputStyle":"Kira (cozy)"}' /watch --resume 'a b')"
 check "members: no watch without the assistant's account, no watch skill to start (#37 R17)" \
 	sh -c '! grep -q /watch "$1"' _ "$tmp/members-noid-bin/assistant"
-check 'members: the analyst gets her settings file, no other settings source and dontAsk, no watch (#37 R15, R17, D20, D26)' \
-	test "$(started "$bin/analyst" -p hi)" = "$(expected -n Iris --settings "$bin/kirakit-analyst.json" --setting-sources= --permission-mode dontAsk -p hi)"
+check 'members: the analyst gets her settings file, no other settings source, dontAsk, her plugin and prompt file, no watch (#37 R15, R17, D20, D26, D29)' \
+	test "$(started "$bin/analyst" -p hi)" = "$(expected -n Iris --settings "$bin/kirakit-analyst.json" --setting-sources= --permission-mode dontAsk --plugin-dir "$bin/kirakit-analyst" --append-system-prompt-file "$bin/kirakit-analyst.md" -p hi)"
 check 'members: team starts no watch of its own, only through the assistant launcher (#37 R17)' \
 	sh -c '! grep -q watch "$1"' _ "$bin/team"
 check "members: the analyst's settings beside the launchers (#37 R22, D28)" test -f "$bin/kirakit-analyst.json"
 check "members: the analyst's settings are not executable (#37 D28)" test ! -x "$bin/kirakit-analyst.json"
-check "members: the analyst's settings hold her output style (#37 D26)" contains "$bin/kirakit-analyst.json" '"outputStyle": "Iris"'
+check "members: the analyst's settings hold her output style (#37 D26, D29)" contains "$bin/kirakit-analyst.json" '"outputStyle": "kirakit-analyst:Iris"'
 check "members: the analyst's settings hold the secret-read denial (#37 R21)" contains "$bin/kirakit-analyst.json" '"Read(~/.ssh/**)"'
 check "members: the analyst's settings recorded in the manifest (#37 D28)" grep -qxF "$bin/kirakit-analyst.json" "$claude/.kirakit-manifest"
+check "members: the analyst's plugin beside the launchers (#37 D29)" test -f "$bin/kirakit-analyst/.claude-plugin/plugin.json"
+check "members: the analyst's prompt file beside the launchers (#37 D29)" contains "$bin/kirakit-analyst.md" '# Global instructions'
+check "members: the analyst's plugin and prompt file in the manifest (#37 D29)" \
+	sh -c 'grep -qxF "$1/kirakit-analyst" "$2" && grep -qxF "$1/kirakit-analyst.md" "$2"' _ "$bin" "$claude/.kirakit-manifest"
+check "members: the assistant gets no plugin or prompt file (#37 D29)" \
+	sh -c '! grep -q -e --plugin-dir -e --append-system-prompt-file "$1"' _ "$bin/assistant"
 check "members: never in the real ~/.local/bin with a scratch configuration directory (#37 D28)" \
 	test ! -e "$claude-home/.local/bin/kirakit-analyst.json"
 check 'members: a plain claude session is unchanged (#37 R17)' \
@@ -1513,28 +1519,35 @@ kira --copy >/dev/null
 check "members: a rerun puts the analyst's settings back (#37 D28)" test -f "$bin/kirakit-analyst.json"
 kira --copy --no-analyst >/dev/null
 check "members: the analyst's settings removed with the analyst (#37 D28)" test ! -e "$bin/kirakit-analyst.json"
+check "members: the analyst's plugin and prompt file removed with the analyst (#37 D29)" \
+	sh -c '! test -e "$1/kirakit-analyst" && ! test -e "$1/kirakit-analyst.md"' _ "$bin"
 kira --copy --analyst >/dev/null
 kira --copy --bin-dir "$claude-bin1" >/dev/null
 kira --copy --bin-dir "$claude-bin2" >/dev/null
 check "members: the analyst's settings follow the bin directory (#37 D28)" \
-	sh -c 'test -f "$1/kirakit-analyst.json" && test ! -e "$2/kirakit-analyst.json"' _ "$claude-bin2" "$claude-bin1"
+	sh -c 'test -f "$1/kirakit-analyst.json" && test -d "$1/kirakit-analyst" && test -f "$1/kirakit-analyst.md" && ! ls "$2"/kirakit-analyst* >/dev/null 2>&1' _ "$claude-bin2" "$claude-bin1"
 kira --uninstall >/dev/null
-check "members: uninstall removes the analyst's settings (#37 D28)" test ! -e "$claude-bin2/kirakit-analyst.json"
+check "members: uninstall removes the analyst's settings, plugin and prompt file (#37 D28, D29)" sh -c '! ls "$1"/kirakit-analyst* >/dev/null 2>&1' _ "$claude-bin2"
 
 claude=$tmp/members-team-link
 kira --name Alex --gender female --language auto --assistant 'Kira <kira@example.com>' \
 	--assistant-github kira-bot --analyst-github iris-bot --no-co-author >/dev/null
 check "members: the analyst's settings linked in link mode (#37 D28)" test -L "$claude/bin/kirakit-analyst.json"
+check "members: the analyst's plugin and prompt file linked in link mode (#37 D29)" \
+	sh -c 'test -L "$1/kirakit-analyst" && test -L "$1/kirakit-analyst.md"' _ "$claude/bin"
 kira --uninstall >/dev/null
-check "members: uninstall removes the link (#37 D28)" sh -c '! test -e "$1" && ! test -L "$1"' _ "$claude/bin/kirakit-analyst.json"
+check "members: uninstall removes the links (#37 D28, D29)" sh -c '! ls "$1"/kirakit-analyst* >/dev/null 2>&1' _ "$claude/bin"
 
 readme_analyst=$(awk '/^### The analyst.s session$/ { found = 1; next } found && /^#/ { exit } found' "$root/README.md")
 check "README: the analyst's session has its section (#37 D24)" sh -c 'test -n "$1"' _ "$readme_analyst"
 for text in '**What the session can do.**' '**What it cannot do.**' '**Secret files.**' \
 	'`~/.ssh/`, `~/.gnupg/`, `~/.git-credentials`' 'for `git --no-index`' \
 	"**What \`--setting-sources=\`" 'hooks, model, plugins' '`.git/index`' '`~/.local/state/gh/`' \
-	'The analyst'"'"'s token is the account'"'"'s own' '**Unattended sessions.**' 'it starts no session'; do
-	check "README: the analyst's session documents $text (#37 R15, R21, R22, D20, D23)" \
+	'The analyst'"'"'s token is the account'"'"'s own' '**Unattended sessions.**' \
+	'no session: it prints one line' '`--plugin-dir`' '`--append-system-prompt-file`' 'have no `allowed-tools`' \
+	'no `?`, `[` or `*` may follow `--body-file`' '`gh issue create --recover`' '`Skill(kirakit-analyst:idea)`' \
+	'"autoMemoryEnabled": false' 'are denied by name'; do
+	check "README: the analyst's session documents $text (#37 R15, R21, R22, D20, D23, D29–D32)" \
 		sh -c 'printf "%s\n" "$1" | grep -qF -- "$2"' _ "$readme_analyst" "$text"
 done
 check 'README: Windows has no restricted analyst session (#37 D24)' \
@@ -2293,11 +2306,21 @@ analyst_settings() {
 	done
 	check "analyst settings $3: exactly 6 gh project rules (R16, D16)" sh -c '[ "$(grep -c "gh project " "$1")" -eq 6 ]' _ "$1"
 	check "analyst settings $3: no gh project * (R16, D16)" sh -c '! grep -qF "gh project *" "$1"' _ "$1"
-	check "analyst settings $3: her output style in the same file (D26)" contains "$1" '"outputStyle": "Iris"'
+	check "analyst settings $3: her plugin's output style in the same file (D26, D29)" contains "$1" '"outputStyle": "kirakit-analyst:Iris"'
+	for skill in idea spec board-status; do
+		check "analyst settings $3: Skill(kirakit-analyst:$skill) allowed (D31)" contains "$1" "\"Skill(kirakit-analyst:$skill)\""
+	done
+	check "analyst settings $3: exactly 3 Skill allow rules, none for every skill (D31)" sh -c '[ "$(sed -n "/\"allow\"/,/\]/p" "$1" | grep -c "\"Skill")" -eq 3 ]' _ "$1"
+	for skill in dataviz simplify code-review workflow-authoring run plugin-authoring; do
+		check "analyst settings $3: bundled skill $skill denied (D33)" in_deny "$1" "Skill($skill)"
+	done
+	check "analyst settings $3: no memory index loaded (D34)" contains "$1" '"autoMemoryEnabled": false'
 	for rule in 'Read(~/.ssh/**)' 'Read(~/.gnupg/**)' 'Read(~/.git-credentials)' 'Read(~/.netrc)' \
 		'Read(~/.config/gh/hosts.yml)' 'Read(~/.claude/.credentials.json)' 'Read(~/.local/share/keyrings/**)' \
 		'Bash(*.ssh*)' 'Bash(*.gnupg*)' 'Bash(*.git-credentials*)' 'Bash(*.netrc*)' 'Bash(*hosts.yml*)' \
-		'Bash(*.credentials.json*)' 'Bash(*keyrings*)' 'Bash(git *--no-index*)'; do
+		'Bash(*.credentials.json*)' 'Bash(*keyrings*)' 'Bash(git *--no-index*)' \
+		'Bash(*--body-file*\\**)' 'Bash(*--body-file*?*)' 'Bash(*--body-file*[*)' \
+		'Bash(* -F *\\**)' 'Bash(* -F *?*)' 'Bash(* -F *[*)' 'Bash(*--recover*)'; do
 		check "analyst settings $3: $rule denied (R21, D22)" in_deny "$1" "$rule"
 	done
 }
@@ -2312,6 +2335,24 @@ analyst_settings "$tmp/analyst-settings-local/settings/analyst.json" gh 'without
 check 'analyst settings: the token lookup is allowed on its own (D17)' contains "$tmp/analyst-settings/settings/analyst.json" '"Bash(gh auth token --user iris-test)"'
 check 'analyst settings: without an account, no GH_TOKEN prefix' sh -c '! grep -q GH_TOKEN "$1"' _ "$tmp/analyst-settings-local/settings/analyst.json"
 check 'analyst settings: none without an analyst' test ! -e "$tmp/build/settings/analyst.json"
+for build in analyst-settings analyst-settings-local; do
+	plugin=$tmp/$build/settings/kirakit-analyst
+	check "analyst plugin $build: a plugin named kirakit-analyst (D29)" contains "$plugin/.claude-plugin/plugin.json" '"name": "kirakit-analyst"'
+	check "analyst plugin $build: valid JSON (D29)" valid_json "$plugin/.claude-plugin/plugin.json"
+	check "analyst plugin $build: her output style (D29)" cmp -s "$plugin/output-styles/iris.md" "$tmp/$build/output-styles/iris.md"
+	check "analyst plugin $build: exactly the idea, spec and board-status skills (D29)" \
+		test "$(find "$plugin/skills" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort | tr '\n' ' ')" = 'board-status idea spec '
+	for skill in idea spec board-status; do
+		check "analyst plugin $build: $skill has no allowed-tools (D32)" sh -c '! grep -q "^allowed-tools" "$1"' _ "$plugin/skills/$skill/SKILL.md"
+		check "analyst plugin $build: $skill keeps the rest of its frontmatter and body (D32)" \
+			test "$(grep -v '^allowed-tools:' "$tmp/$build/skills/$skill/SKILL.md")" = "$(cat "$plugin/skills/$skill/SKILL.md")"
+	done
+	check "analyst plugin $build: the installed skills keep their allowed-tools (D32)" grep -q '^allowed-tools:' "$tmp/$build/skills/spec/SKILL.md"
+	check "analyst prompt $build: CLAUDE.md, then the rules (D29)" \
+		test "$(cat "$tmp/$build/settings/kirakit-analyst.md")" = "$(cat "$tmp/$build/CLAUDE.md"; for f in "$tmp/$build"/rules/*.md; do printf '\n'; cat "$f"; done)"
+done
+check 'analyst plugin: none without an analyst (D29)' \
+	sh -c '! test -e "$1/settings/kirakit-analyst" && ! test -e "$1/settings/kirakit-analyst.md"' _ "$tmp/build"
 
 claude=$tmp/permissions-missing
 kira_team --copy >/dev/null

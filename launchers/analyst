@@ -2,8 +2,9 @@
 #!/bin/sh
 # Start Claude Code as {{analyst_style}}, the team's analyst, in a session restricted by her
 # settings file (#37 R15, R16, R21): no user, project or local settings merge into it, and
-# anything the file does not allow is refused without a prompt. Without the file, no session
-# starts (#37 R22).
+# anything the file does not allow is refused without a prompt. Her style and skills come from
+# her plugin, CLAUDE.md and the rules from her prompt file (#37 D29). Without the settings
+# file, no session starts (#37 R22).
 dir=$(dirname -- "$0")
 settings=$dir/kirakit-analyst.json
 if [ ! -f "$settings" ]; then
@@ -11,5 +12,6 @@ if [ ! -f "$settings" ]; then
 	exit 1
 fi
 exec "$dir/kirakit-session" '{{analyst_style}}' "$settings" kirakit-analyst \
-	--setting-sources= --permission-mode dontAsk "$@"
+	--setting-sources= --permission-mode dontAsk \
+	--plugin-dir "$dir/kirakit-analyst" --append-system-prompt-file "$dir/kirakit-analyst.md" "$@"
 {{/analyst}}

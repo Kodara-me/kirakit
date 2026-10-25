@@ -274,7 +274,7 @@ confirmation:
   - once the tasks are published, add `status:specified` and remove
     `status:needs-clarification`.
 - Sub-issues, in the order they should be done: `gh issue create --parent <parent> --title
-  "<title>" --body-file <file> --label type:task`. An existing issue becomes a sub-issue
+  "<title>" --label type:task --body-file <file>`. An existing issue becomes a sub-issue
   with `gh issue edit <parent> --add-sub-issue <n>`, and gets the same label. Tasks stay in
   Backlog, without `status:ready`: the user starts a specification by moving it to Ready,
 {{#start_verified_specs}}
@@ -297,7 +297,8 @@ confirmation:
   asking (`gh label create`).
 {{#analyst}}
 - Write every body and comment to a file under `~/.cache/kirakit/analyst/`, with the Write
-  tool, and post it with `--body-file <file>`:
+  tool, and post it with `--body-file <file>` last on the command line, after every other
+  option (labels, assignees and the parent included):
   never an inline `--body`, `--comment` or `$(…)`. The analyst's own session refuses the
   others (an inline body naming a protected path, or a `$(…)` checked as a command of its
   own), and the same files serve the lead's `iris` agent. Never into the working tree.

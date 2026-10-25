@@ -1,12 +1,16 @@
 {{#analyst}}
 {
-  "outputStyle": "{{analyst_style}}",
+  "outputStyle": "kirakit-analyst:{{analyst_style}}",
+  "autoMemoryEnabled": false,
   "permissions": {
     "defaultMode": "dontAsk",
     "allow": [
       "Read",
       "Grep",
       "Glob",
+      "Skill(kirakit-analyst:idea)",
+      "Skill(kirakit-analyst:spec)",
+      "Skill(kirakit-analyst:board-status)",
 {{#analyst_github}}
       "Bash(gh auth token --user {{analyst_github}})",
       "Bash(GH_TOKEN=$(gh auth token --user {{analyst_github}}) gh issue view *)",
@@ -78,7 +82,20 @@
       "Bash(*.netrc*)",
       "Bash(*hosts.yml*)",
       "Bash(*.credentials.json*)",
-      "Bash(*keyrings*)"
+      "Bash(*keyrings*)",
+      "Bash(*--body-file*\\**)",
+      "Bash(*--body-file*?*)",
+      "Bash(*--body-file*[*)",
+      "Bash(* -F *\\**)",
+      "Bash(* -F *?*)",
+      "Bash(* -F *[*)",
+      "Bash(*--recover*)",
+      "Skill(dataviz)",
+      "Skill(simplify)",
+      "Skill(code-review)",
+      "Skill(workflow-authoring)",
+      "Skill(run)",
+      "Skill(plugin-authoring)"
     ]
   }
 }
