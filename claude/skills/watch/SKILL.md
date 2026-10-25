@@ -2,7 +2,7 @@
 ---
 name: watch
 description: Starts the lead's background checks of GitHub, one `kirakit-watch` per team account, and dispatches what they report to the team's members. Use only in the lead's session, at its start (the `assistant` launcher runs it) or when the checks stopped.
-model: sonnet
+model: haiku
 ---
 
 # Watch
@@ -90,10 +90,14 @@ Then dispatch by kind and role:
   (`@{{analyst_github}}`), goes to the `iris` agent, as given, as the user's answer. When an
   `iris` task is already running on that issue, send it a message instead of starting a second
   one. Nothing else goes to the analyst: a thread that is neither assigned to her nor
-  mentions her is not hers.
+  mentions her is not hers. Start the agent with `model: opus` when the comment asks for a
+  change to a specification's requirements, design, decisions or tasks, and with no `model`
+  otherwise; in that case say in its prompt that she stops and hands the work back when it
+  turns out to need such a change, and a new `iris` agent on Opus takes it (`rules/team.md`).
 - **`assigned` from `analyst`**: an idea (label `type:idea`) newly assigned to the analyst's
-  account goes to the `iris` agent to specify; the result waits in Specified for the user. An
-  assigned task or specification starts nothing: Ready is the only gate.
+  account goes to the `iris` agent to specify, started with `model: opus`; the result waits in
+  Specified for the user. An assigned task or specification starts nothing: Ready is the only
+  gate.
 {{/analyst_github}}
 - **`ready` from `assistant`**: say in one line which specification, or which issue with no
   specification, is Ready (repository, number, URL). Read the issue first: if it is no longer
@@ -101,7 +105,7 @@ Then dispatch by kind and role:
   (`--as {{assistant_github}}`) and
 {{#coder}}
   hand the task it gives to the `cleo` agent, as `rules/team.md` describes for a coder's task
-  (model included). While a coder task is running, start nothing more: `next-task` runs again
+  (no `model`: her agent runs on Sonnet). While a coder task is running, start nothing more: `next-task` runs again
   when her task ends with a pull request.
 {{/coder}}
 {{^coder}}
@@ -129,10 +133,11 @@ Then dispatch by kind and role:
   hold, merge nothing and write nothing. A pull request the lead wrote itself waits for the
   user's own approval.
 {{#coder}}
-  When the user requested changes on a pull request of the coder, hand it back to the `cleo`
-  agent as `rules/team.md` describes: count its reviews in the state `CHANGES_REQUESTED`
-  first, and from two on start a new `cleo` agent on Opus with the pull request, the task and
-  the review comments.
+  When the user requested changes on a pull request of the coder, count its reviews in the
+  state `CHANGES_REQUESTED` first, as `rules/team.md` describes: the first goes back to the
+  `cleo` agent, and from the second on, the lead continues the pull request herself in a
+  takeover agent on Opus, with the pull request, the task and the review comments. A pull
+  request the lead already took over goes to a new takeover agent, never to the coder.
 {{/coder}}
   Once a pull request is merged, run `next-task` and hand the task it gives as for a `ready`
   line.

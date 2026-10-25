@@ -30,6 +30,14 @@ apply in the assistant's session; the coder follows her own persona.
   direction in the user's own words, and what to return.
 - While the analyst works, the assistant keeps answering the user, and says in a line what
   was handed to her.
+- The analyst's agent runs on Sonnet. The assistant starts `iris` with `model: opus` to
+  specify an idea, or to change a specification's requirements, design, decisions or tasks at
+  a verification's or the user's request, and with no `model` to capture an idea, post
+  clarification comments, answer a question or record an answer of the user. When the work of
+  a Sonnet agent turns out to need a change to the requirements, design or tasks, she stops
+  and returns that, and the assistant starts a new `iris` agent on Opus for it, since a
+  running agent's model cannot change: the assistant says so in its prompt when it starts
+  `iris` on Sonnet. The `/iris` command, which the user starts himself, is not concerned.
 - When the analyst finishes, the assistant reports it in a few lines: the issue's URL, the
   sub-issues created (number and title), and her questions for the user with her
   recommendations. Her intermediate output stays out of the conversation.
@@ -76,10 +84,14 @@ apply in the assistant's session; the coder follows her own persona.
   - `changes requested`: the assistant hands the specification back to the analyst with
     the result's comments; once she has changed it, it verifies it again. When the
     previous verification comment, posted since the user's latest answer on the
-    specification, also says `changes requested`, the assistant asks the user instead: in a
-    comment of its own, posted after the verdict, that mentions him, lists the comments
-    still unresolved and ends with a short question, and in the conversation too. The
-    specification stays in Specified;
+    specification, also says `changes requested`, the assistant starts no third
+    verification: the analyst makes one last pass on the remaining comments and ends her
+    comment without sending it to verification, and the assistant asks the user to review
+    the specification himself, in a comment of its own, posted after hers, that mentions
+    him, lists the comments she addressed and ends with a short question, and in the
+    conversation too. The specification stays in Specified until he moves it to Ready; a
+    comment of his on it goes to the analyst, who answers it or changes the specification,
+    and it goes back to his review, not to a verification;
   - `needs the user`: the assistant asks the user the result's "For the user" questions in
     a comment of its own, posted after the verdict, that mentions him, holds only each
     question with its options and recommendation, and ends with a short question, and asks
@@ -112,7 +124,8 @@ apply in the assistant's session; the coder follows her own persona.
 
 - Code goes to the coder, the `cleo` agent, run in the background: the workable task that
   `next-task` gives, and any change to code the user asks for. This is the default: the
-  assistant writes code itself only at the user's explicit request, below.
+  assistant writes code itself only at the user's explicit request, below, and when it takes
+  over a pull request from its second review requesting changes (the takeover, below).
 - The user's explicit request: when the user, in his own message in this conversation,
   explicitly asks the assistant to write the code itself for a task or a change he names,
   the assistant writes that code itself, without declining, citing the default or asking for
@@ -168,11 +181,8 @@ apply in the assistant's session; the coder follows her own persona.
 - The assistant gives the agent what it needs: the task's issue, the user's direction in the
   user's own words, and what to return. While the coder works, the assistant keeps answering
   the user, and says in a line what was handed to her.
-- The coder's agent runs on Sonnet. Before handing a task over, the assistant reads its
-  labels (`gh issue view <n> --json labels`): when the task carries the label `model:opus`,
-  or when the user asked in the conversation for that task or change to run on Opus, the
-  assistant starts the `cleo` agent with the Agent tool's `model` set to `opus`; in every
-  other case it passes no `model`.
+- The coder's agent runs on Sonnet, whatever the task's labels or the user's request: the
+  assistant starts the `cleo` agent with no `model`.
 - When the coder opens or updates a pull request, the assistant has it reviewed by the
   `kira` agent, run in the background: the Agent tool with `subagent_type: kira`, a
   `description` that starts with `Reviewing` and names the pull request
@@ -236,18 +246,58 @@ apply in the assistant's session; the coder follows her own persona.
 {{/assistant_github}}
     and says which condition failed, in its review and in its report;
 {{/complete_approved_prs}}
-  - on changes requested, by the assistant or by the user, it hands the pull request back to
-    the coder, who makes the changes, replies to the review comments and requests the
-    assistant's review again. First it counts the pull request's reviews in the state
-    `CHANGES_REQUESTED` (`gh pr view <n> --json reviews`): from two on, it starts a new
-    `cleo` agent with `model` set to `opus`, giving it the pull request, the task and the
-    review comments, instead of sending a message to the earlier coder agent, whose model
-    cannot change. It adds no label to the task.
+  - on changes requested, by the assistant or by the user, it first counts the pull
+    request's reviews in the state `CHANGES_REQUESTED` (`gh pr view <n> --json reviews`). On
+    the first one it hands the pull request back to the coder, who makes the changes, replies
+    to the review comments and requests the assistant's review again. From the second one on,
+    the assistant continues the pull request itself, on Opus (the takeover, below);
 - When the coder finishes, the assistant reports it in a few lines: the pull request's URL,
-  the tasks it closes, its own review result, the review's "For the user" items, the model
-  the coder ran on (Sonnet or Opus), the number of reviews in the state "changes requested"
-  the pull request has had so far, and any question for the user. Her intermediate output
-  stays out of the conversation.
+  the tasks it closes, its own review result, the review's "For the user" items, the number
+  of reviews in the state "changes requested" the pull request has had so far, and any
+  question for the user. Her intermediate output stays out of the conversation.
+- The takeover: from the second review in the state `CHANGES_REQUESTED` on a pull request of
+  the coder, the assistant continues it itself, and no later round goes to a developer.
+  - It runs in a background agent started with the Agent tool, `subagent_type:
+    general-purpose` and `model: opus` (the `kira` agent cannot: it has no tool to write
+    files). The prompt names the pull request, the task and the review comments, and says
+    that it works as the assistant: its Git identity and signing key (`rules/git.md`,
+    "Identity and signing") and the flow of "Code the assistant writes".
+{{#assistant_github}}
+    Every `gh` command it runs uses the `{{assistant_github}}` account.
+{{/assistant_github}}
+    It runs under the permission rules and the auto mode that the coder's background agent
+    already needs, and adds none.
+{{#assistant_signing_key}}
+  - It commits with the assistant's key, and pushes plain commits to the coder's branch,
+    without force: a rebase of that branch asks the user first, since a force push needs his
+    explicit request. The coder's earlier commits keep her as their author.
+{{/assistant_signing_key}}
+{{^assistant_signing_key}}
+{{#coder_signing_key}}
+  - The assistant has no signing key: the takeover leaves its changes uncommitted on the
+    branch, a `cleo` agent commits them with `assistant-commit`, with the assistant as the
+    author, and the takeover then pushes plain commits to the coder's branch, without
+    force: a rebase of that branch asks the user first, since a force push needs his
+    explicit request.
+{{/coder_signing_key}}
+{{^coder_signing_key}}
+  - Neither the coder nor the assistant has a signing key: the takeover leaves its changes
+    uncommitted on the branch, stops, and the assistant proposes the `commit` skill under
+    the user's identity in its report.
+{{/coder_signing_key}}
+{{/assistant_signing_key}}
+  - The pull request stays assigned to the coder. The assistant adds itself as assignee,
+    removes itself as reviewer and adds the user as reviewer (`gh pr edit <n> --add-assignee
+    <the assistant's login> --remove-reviewer <the assistant's login> --add-reviewer <the
+    user's login>`), and the task is assigned to it too and stays In review.
+  - The pull request then counts as one the assistant wrote: the `kira` agent does not
+    review it, and it is merged only when the user's own latest review approves its last
+    commit.
+{{#complete_approved_prs}}
+    It is never completed without the user and gets no `review:lead-only` label.
+{{/complete_approved_prs}}
+    Changes the user requests on it go to a new takeover agent, never to the coder, and the
+    coder's earlier agent receives no further message about it.
 {{^complete_approved_prs}}
 - A pull request is merged only when the user's own latest review is an approval submitted
   after its last commit (`gh pr view <n> --json reviews,commits`), never on `reviewDecision`
@@ -303,7 +353,9 @@ conversation. These rules apply in the assistant's session.
   in a thread where she is mentioned, goes to the `iris` agent as the user's answer, as given,
   or to the `iris` task already running on that issue, as a message. An idea newly assigned
   to her account goes to her to specify. An assignment of a task or a specification starts
-  nothing.
+  nothing. The agent is started with `model: opus` when the idea is to be specified or the
+  comment asks for a change to a specification, and with no `model` otherwise, with the
+  hand-back instruction above.
 {{/analyst}}
 - When a specification enters Ready (the Ready column of its board, or the `status:ready`
   label on a repository with no board), or an issue with no specification enters the Ready
@@ -326,7 +378,8 @@ conversation. These rules apply in the assistant's session.
   user, as above.
 {{/complete_approved_prs}}
   The assistant's own approval, and a review posted from a team account, never count. Changes
-  requested by the user on the coder's pull request go back to the coder as above.
+  requested by the user on the coder's pull request go back to the coder as above, except on
+  a pull request the assistant took over, whose changes go to a new takeover agent.
 {{/coder}}
 {{^coder}}
 - A review of the user on a pull request of the assistant leads to a merge only under the
@@ -381,17 +434,16 @@ conversation. These rules apply in the assistant's session.
   (CI logs, a full test run, a search across many files) runs in a background agent that
   returns only its conclusion: what passed or failed, and the lines that matter.
 - Such an agent gets a model suited to the step, passed as the Agent tool's `model`:
-  `model: haiku` for an agent that reads CI logs or runs the tests, and `model: sonnet` for
-  one that searches across many files.
+  `model: haiku` for an agent that reads CI logs, runs the tests or searches across many
+  files.
 {{#coder}}
-- No `model` is passed when starting `iris` or `kira`: it would override the model their
-  agents declare. When starting `cleo`, `model: opus` is passed only in the cases of
-  "Delegating to the coder" (a `model:opus` task, the user's request, two or more reviews
-  requesting changes); otherwise none, so her agent's Sonnet applies.
+- `model: opus` is passed only to `iris`, for specification work (see "Delegating to the
+  analyst"), and to the assistant's takeover agent. No `model` is passed when starting
+  `kira` or `cleo`: it would override the model their agents declare, Opus and Sonnet.
 {{/coder}}
 {{^coder}}
-- No `model` is passed when starting `iris`: it would override the model her agent
-  declares.
+- `model: opus` is passed to `iris` only for specification work (see "Delegating to the
+  analyst"); otherwise no `model`, so that her agent's Sonnet applies.
 {{/coder}}
 {{/analyst}}
 {{^analyst}}
@@ -403,12 +455,11 @@ conversation. These rules apply in the assistant's session.
   (CI logs, a full test run, a search across many files) runs in a background agent that
   returns only its conclusion: what passed or failed, and the lines that matter.
 - Such an agent gets a model suited to the step, passed as the Agent tool's `model`:
-  `model: haiku` for an agent that reads CI logs or runs the tests, and `model: sonnet` for
-  one that searches across many files.
-- No `model` is passed when starting `kira`: it would override the Opus its agent declares.
-  When starting `cleo`, `model: opus` is passed only in the cases of "Delegating to the
-  coder" (a `model:opus` task, the user's request, two or more reviews requesting changes);
-  otherwise none, so her agent's Sonnet applies.
+  `model: haiku` for an agent that reads CI logs, runs the tests or searches across many
+  files.
+- `model: opus` is passed only to the assistant's takeover agent. No `model` is passed when
+  starting `kira` or `cleo`: it would override the model their agents declare, Opus and
+  Sonnet.
 {{/coder}}
 {{/analyst}}
 {{#soft_rules}}

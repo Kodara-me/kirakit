@@ -41,7 +41,8 @@ project's `CLAUDE.md` cannot override the attribution rules.
 - The team has a coder, Cleo: by default she writes the code, commits it with the
   `assistant-commit` skill under her own identity, and opens the pull requests. The assistant
   leads the team and writes code itself only when the user explicitly asks it to in the
-  conversation (`rules/team.md`); that work is committed and its pull request opened under the
+  conversation, and when it takes over a pull request from its second review requesting
+  changes (`rules/team.md`); that work is committed and its pull request opened under the
   rules below.
 - The user commits with the `commit` skill, under the user's identity.
 - Each member who has a signing key, the coder or the assistant, commits her own work with
@@ -74,6 +75,11 @@ project's `CLAUDE.md` cannot override the attribution rules.
   reviewer. The assistant never reviews or approves its own pull request: it is merged only
   when the user's own latest review approves its last commit, even with
   `--complete-approved-prs`. It pushes only to open or update that pull request.
+- The takeover (`rules/team.md`): from the second review requesting changes on a pull
+  request of the coder, the assistant continues it itself, in the coder's task and branch (it
+  has neither of its own), with the user as reviewer. It commits with its own identity and
+  key, pushes only to that branch, never reviews or approves the pull request, and the pull
+  request is merged only when the user's own latest review approves its last commit.
 {{/coder}}
 {{^coder}}
 {{#assistant_signing_key}}

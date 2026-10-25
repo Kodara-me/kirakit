@@ -335,7 +335,7 @@ function Get-Installed([string]$Path) {
 $members = Join-Path $tmp 'members'
 $run = Invoke-Installer $members 'main' 'C' @('-Copy', '-Analyst', '-Coder', 'Cleo <cleo@example.com>')
 $manifestText = Get-Installed (Join-Path $members '.kirakit-manifest')
-foreach ($member in @(@{ Name = 'iris'; Title = 'Iris'; Model = 'opus' }, @{ Name = 'cleo'; Title = 'Cleo'; Model = 'sonnet' })) {
+foreach ($member in @(@{ Name = 'iris'; Title = 'Iris'; Model = 'sonnet' }, @{ Name = 'cleo'; Title = 'Cleo'; Model = 'sonnet' })) {
     $dir = Join-Path (Join-Path $members 'skills') $member.Name
     $text = Get-Installed (Join-Path $dir 'SKILL.md')
     Test-Check "commands: /$($member.Name) built and installed (#120 R1, R10)" ($run.Status -eq 0 -and $null -ne $text) (Get-RunText $run)

@@ -181,7 +181,7 @@ jobs:
           grep -qx 'model: sonnet' "$RUNNER_TEMP/ps-coder/agents/cleo.md"
           grep -qx 'agent: iris' "$RUNNER_TEMP/ps-analyst/skills/iris/SKILL.md"
           grep -qx 'agent: cleo' "$RUNNER_TEMP/ps-coder/skills/cleo/SKILL.md"
-          grep -qx 'model: opus' "$RUNNER_TEMP/ps-analyst/agents/iris.md"
+          grep -qx 'model: sonnet' "$RUNNER_TEMP/ps-analyst/agents/iris.md"
           test -f "$RUNNER_TEMP/ps-coder/output-styles/cleo.md"
           test ! -e "$RUNNER_TEMP/ps-analyst/agents/cleo.md"
           # The lead's review agent, only with a coder, by both installers (#183 R8).

@@ -249,7 +249,7 @@ for `GH_TOKEN=$(gh auth token --user LOGIN) gh`, with that member's login:
 | --- | --- |
 | Assistant (`--assistant-github`) | `Bash(P issue create:*)`, `issue edit`, `issue comment`, `issue close`; `Bash(P pr create:*)`, `pr comment`, `pr review`; `Bash(P label create:*)`; `Bash(git push -u origin TYPE/:*)` and `Bash(git push origin TYPE/:*)` for `feat`, `fix`, `docs`, `refactor`, `test`, `chore` and `ci`; `Bash(git push origin main)`; `Bash(git push origin --delete:*)`; `Bash(P project item-edit:*)` and `Bash(P project item-add:*)` |
 | Assistant, with `--allow-releases` | Also `Bash(P release create:*)` and `Bash(git push origin v:*)` |
-| Assistant, with a coder's account | Also `Bash(P pr edit:*)`, to request your review on the coder's approved pull requests |
+| Assistant, with a coder's account | Also `Bash(P pr edit:*)`, to request your review on the coder's approved pull requests, and to add itself as assignee and you as reviewer on a pull request it takes over |
 | Analyst (`--analyst-github`) | `Bash(P issue create:*)`, `issue edit`, `issue comment`, `issue close`; `Bash(P label create:*)`; `Bash(P project item-edit:*)` and `Bash(P project item-list:*)` |
 | Coder (`--coder-github`) | `Bash(P issue create:*)`, `issue edit`, `issue comment`; `Bash(P pr create:*)`, `pr comment`, `pr review`, `pr edit`; the assistant's work branch pushes; `Bash(git push origin --delete TYPE/:*)` for the same branch types; `Bash(P project item-edit:*)` and `Bash(P project item-add:*)`. Nothing that pushes or deletes `main`: the assistant merges |
 
@@ -693,9 +693,11 @@ no longer waits for you when it holds nothing for you to decide:
   - `verified`: Kira moves the specification to Ready (or adds `status:ready` on a
     repository with no board) and development starts as if you had moved it;
   - `changes requested`: back to Iris, who changes the specification, then a new
-    verification. After two verifications in a row requesting changes, Kira asks you
-    instead, listing the comments still unresolved, and the specification stays in
-    Specified;
+    verification. After two verdicts in a row requesting changes there is no third
+    verification (never more than two rounds before you): Iris makes one last pass on the
+    remaining comments, and Kira asks you to review the specification yourself, listing the
+    comments Iris addressed. The specification stays in Specified until you move it to Ready;
+    a comment of yours on it goes to Iris and back to your review, not to a verification;
   - `needs the user`: a security question was settled without you or left open. Kira asks
     you in a comment of its own that mentions you; once Iris has recorded your answer, the
     specification is verified again.
@@ -718,7 +720,7 @@ With a coder, code goes through Cleo the same way:
   explicitly ask her to in your own message ("write #155 yourself"): only the task or change
   you name, in parallel with Cleo when she is busy, waiting when it touches the same files as
   Cleo's task or a pull request in review. A request that does not clearly ask Kira herself
-  ("do #155") still goes to Cleo.
+  ("do #155") still goes to Cleo. The other case is the takeover, below.
 - **Cleo opens the pull request, Kira reviews it first.** The review runs in the `kira` agent,
   in the background like the other members: it appears among the running agents as Kira,
   with a status such as "Reviewing PR #42", and Kira keeps answering you meanwhile. The agent
@@ -732,18 +734,21 @@ With a coder, code goes through Cleo the same way:
   [Permission rules](#permission-rules)), the review needs auto mode: a background agent
   cannot ask for a permission, and in the default mode its `gh` reads are refused. Once she
   approves, she requests your review and tells you what the review flagged for you
-  (security-sensitive changes, questions); changes requested, by her or by you, go back to
-  Cleo, who makes them, replies to the comments and asks Kira again.
-- **Cleo runs on Sonnet, and on Opus for hard tasks.** A task runs on Opus when it carries
-  the label `model:opus`, which Iris adds at specification time to the tasks the `spec`
-  skill calls hard (concurrency, security-sensitive files, data formats and migrations,
-  interfaces other repositories use, designs that leave a choice between approaches), with
-  the reason in one line of the task; when you ask Kira for Opus for a task or a change; or
-  once the pull request has two reviews requesting changes, by Kira or by you, when Kira
-  hands the next round to a new `cleo` agent on Opus. The design is made on Opus and every
-  pull request is reviewed on Opus, which is what keeps Sonnet's work in check.
+  (security-sensitive changes, questions); the first changes requested, by her or by you, go
+  back to Cleo, who makes them, replies to the comments and asks Kira again.
+- **Cleo always runs on Sonnet; Kira takes over on Opus.** There is no Opus for the coder:
+  the `model:opus` label is retired, and asking Kira for Opus for a task changes nothing. From
+  the second review requesting changes on a pull request, by Kira or by you, Kira continues
+  it herself, in a background agent on Opus that works as her (her identity and key, her
+  account, the coder's branch, plain commits without force). She adds herself as assignee and
+  you as reviewer, runs no `kira` review on it and never completes it without you: it is
+  merged only on your own approval of its last commit, and the changes you request on it go
+  to Kira again, never to Cleo. Without Kira's signing key, a `cleo` agent commits her changes
+  with Kira as author; with no key on either side nothing is committed and Kira proposes your
+  `commit` skill. Every pull request is still reviewed on Opus, which is what keeps Sonnet's
+  work in check, and a pull request gets at most two rounds before it reaches you.
 - **Kira reports in a few lines:** the pull request's URL, the tasks it closes, her review
-  result, the model Cleo ran on, the number of reviews requesting changes so far and any
+  result, the number of reviews requesting changes so far and any
   question for you. Cleo's intermediate work stays out of the conversation.
 - **Kira merges after your own approval.** Her approval also counts in GitHub's
   `reviewDecision`, so she merges only when your latest review approves the last commit,
@@ -770,7 +775,7 @@ persona, under her own rules and on her agent's model, without leaving the conve
 - **No request.** Typed alone, the command makes the member ask, in one line, what you want
   from her.
 
-`/iris` runs on Opus and `/cleo` on Sonnet (see [Models](#models)). The lead has no command.
+`/iris` and `/cleo` run on Sonnet (see [Models](#models)). The lead has no command.
 
 ### Talking to Iris directly
 
@@ -791,7 +796,8 @@ The build fails when a member has the same name as a skill of `claude/skills/`. 
 for the output style, and `delegate`, the agent's description: when to hand work to this
 member, and `model`, the agent's model, which every member declares: the build fails without
 it. Iris's file sits in a `{{#analyst}}` block and Cleo's in a `{{#coder}}` block, so without
-them nothing is built or installed. Iris's agent runs on Opus and Cleo's on Sonnet; their
+them nothing is built or installed. Iris's and Cleo's agents run on Sonnet (Iris on Opus for
+specification work, started by the lead); their
 output styles keep the session's model.
 
 ## Launchers
@@ -940,7 +946,7 @@ when a member invokes it herself, it runs on her model.
 
 | Agent or skill | What it is for | Model | Runs |
 | --- | --- | --- | --- |
-| `iris` (agent) | Clarifies ideas, writes specifications and their tasks | opus | agent |
+| `iris` (agent) | Clarifies ideas, writes specifications and their tasks (Opus when the lead starts her for specification work) | sonnet | agent |
 | `cleo` (agent) | Implements tasks and opens pull requests | sonnet | agent |
 | `kira` (agent) | Reviews a pull request of the coder for the lead, in the background, and verifies a specification with `--start-verified-specs` | opus | agent |
 | `next-task` | Finds the next workable task on the board | sonnet | forked |
@@ -951,22 +957,23 @@ when a member invokes it herself, it runs on her model.
 | `diffv` | Analyzes the changes against a branch | sonnet | forked |
 | `commit` | Commits the user's changes | haiku | inline |
 | `assistant-commit` | Commits the coder's or the assistant's own work | haiku | inline |
-| `idea` | Captures an idea as an issue | opus | inline |
+| `idea` | Captures an idea as an issue | sonnet | inline |
 | `spec` | Turns an idea into a specification and its tasks | opus | inline |
 | `pull-request` | Writes and opens the pull request of a task | sonnet | inline |
-| `watch` | Starts the lead's background checks of GitHub and dispatches what they report (with the assistant's GitHub account) | sonnet | inline |
+| `watch` | Starts the lead's background checks of GitHub and dispatches what they report (with the assistant's GitHub account) | haiku | inline |
 | `review-pr` | Reviews a pull request of the coder and returns a verdict | opus | forked |
 | `review-spec` | Verifies a specification of the analyst and returns a verdict (with `--start-verified-specs`) | opus | forked |
-| `iris` (skill) | Lets you talk to Iris directly (`/iris`) | opus | forked |
+| `iris` (skill) | Lets you talk to Iris directly (`/iris`) | sonnet | forked |
 | `cleo` (skill) | Lets you talk to Cleo directly (`/cleo`) | sonnet | forked |
 
 The lead's and the analyst's own sessions (`assistant`, `analyst`) run on your model, from
 your Claude Code settings: kirakit does not pin it. `board-status` takes the account that
 writes as an argument (`--as LOGIN`), since a forked skill cannot tell who called it. The lead
-gives its background agents a model suited to the step (`haiku` to read CI logs or run the
-tests, `sonnet` to search across many files), and none when it starts `iris` or `kira`, so
-that their own model applies. It starts `cleo` with no model, so that her Sonnet applies,
-except for the tasks that run on Opus (see the team section).
+gives its background agents a model suited to the step (`haiku` to read CI logs, run the
+tests or search across many files), `opus` when it starts `iris` for specification work (an
+idea to specify, a change to a specification) or its takeover agent, and none otherwise, so
+that the agent's own model applies: Opus for `kira`, Sonnet for `cleo` and for `iris` on
+routine work. A `cleo` agent never runs on Opus.
 
 ## Specifications
 

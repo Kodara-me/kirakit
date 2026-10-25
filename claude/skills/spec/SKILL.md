@@ -281,15 +281,6 @@ confirmation:
   or the lead does once she has verified it,
 {{/start_verified_specs}}
   and then all its tasks can be worked on.
-{{#coder}}
-- Hard tasks run on the coder with Opus, the others on Sonnet. A task is hard when it
-  changes concurrent or asynchronous behavior; security-sensitive files (credentials, tokens
-  and signing keys; permission rules and `allowed-tools`; Git identity and signing; network
-  downloads and executed remote scripts; files written or deleted outside the project; CI
-  workflows); a data format or a migration; or an interface other repositories use; or when
-  its design leaves the coder a choice between approaches. Add the label `model:opus` to
-  each hard task, and give the reason in one line of its body: `Model: Opus — <reason>.`
-{{/coder}}
 {{#assistant_github}}
 - Assign every sub-issue to the developer's account: `--assignee {{assistant_github}}`.
 {{/assistant_github}}
@@ -370,6 +361,10 @@ confirmation:
   specification, settle or ask under step 2, and post a comment on the parent, without
   mentioning the user, that lists what changed for each comment. With no question left for
   the user, end it with "Sent to Kira for verification."; with one, ask it as in step 2.
+  After the second verdict in a row requesting changes, which the lead says in her message,
+  the specification gets no third verification: address the remaining comments once and end
+  the comment saying that the specification waits for the user's own review, not with "Sent
+  to Kira for verification."
 - When the lead hands over a comment the user posted on a specification in Ready or In
   progress, answer it on the issue, or change the specification as it asks, so that the
   user's comment no longer comes last.

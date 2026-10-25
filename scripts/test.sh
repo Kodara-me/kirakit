@@ -552,7 +552,7 @@ for dir in "$tmp/lead-coder" "$tmp/lead-both"; do
 	check "$what: the lead reviews first (R18)" contains "$team" 'the assistant posts that verdict on GitHub as its own'
 	check "$what: the user reviews after the lead (R18)" contains "$team" 'on approval, it requests the user'"'"'s review'
 	check "$what: changes go back to the coder (R19)" contains "$team" 'it hands the pull request back to'
-	check "$what: report in a few lines (R21)" contains "$team" 'the tasks it closes, its own review result, the review'"'"'s "For the user" items, the model'
+	check "$what: report in a few lines (R21)" contains "$team" 'the tasks it closes, its own review result, the review'"'"'s "For the user" items, the number'
 	check "$what: merge on the user's own approval (R22)" contains "$team" 'only when the user'"'"'s own latest review is an approval'
 	check "$what: not on reviewDecision (R22)" contains "$team" 'never on `reviewDecision`'
 	check "$what: focused conversation kept" contains "$team" '## Keeping the conversation focused'
@@ -819,7 +819,7 @@ for member in iris cleo; do
 	check "commands: /$member is one exchange ending with her answer (#120 R4)" sh -c 'grep -qF "Handle it as one exchange, in your own persona and under your own rules, and end with your" "$1" && grep -qF "answer to the user, written for the user, your questions included." "$1"' _ "$command"
 	check "commands: /$member asks in one line without a request (#120 R8)" contains "$command" 'When the request above is empty, answer in one line asking what the user wants from you.'
 done
-check 'commands: /iris on her agent'"'"'s model (#120 R4)' grep -qx 'model: opus' "$commands/skills/iris/SKILL.md"
+check 'commands: /iris on her agent'"'"'s model (#120 R4, #211 R14)' grep -qx 'model: sonnet' "$commands/skills/iris/SKILL.md"
 check 'commands: /cleo on her agent'"'"'s model (#120 R4)' grep -qx 'model: sonnet' "$commands/skills/cleo/SKILL.md"
 check 'commands: none for the lead (#120 R3)' sh -c 'test "$(grep -l "^agent: " "$1"/skills/*/SKILL.md | grep -c .)" = 2 && test ! -e "$1/skills/kira" -a ! -e "$1/skills/lead" -a ! -e "$1/skills/assistant"' _ "$commands"
 $shell "$root/scripts/build.sh" -o "$commands" --name Alex --gender female >/dev/null
@@ -1152,9 +1152,9 @@ check 'marker: README says approvals count only from your account (#38 R7)' sh -
 # that a new agent or skill fails until it is listed here and in the README.
 expected_model() {
 	case $1 in
-	iris | kira | idea | spec | review-pr | review-spec) echo opus ;;
-	cleo | next-task | diffv | pull-request | watch) echo sonnet ;;
-	board-status | test | pull | push | commit | assistant-commit) echo haiku ;;
+	kira | spec | review-pr | review-spec) echo opus ;;
+	iris | idea | cleo | next-task | diffv | pull-request) echo sonnet ;;
+	board-status | test | pull | push | commit | assistant-commit | watch) echo haiku ;;
 	esac
 }
 # forked NAME: whether the skill runs in a forked context.
@@ -1212,7 +1212,7 @@ readme_commands() {
 	awk '/^### Talking to a member from the conversation$/ { found = 1; next } found && /^#/ { exit } found' "$root/README.md"
 }
 check 'commands: README explains how to talk to a member (#120 R11)' sh -c 'printf "%s\n" "$1" | grep -qF "Each member has a command named after her, \`/iris\` with an analyst and \`/cleo\` with a coder," && printf "%s\n" "$1" | grep -qF "Type it with your request"' _ "$(readme_commands)"
-check 'commands: README says how they run and their models (#120 R11)' sh -c 'printf "%s\n" "$1" | grep -qF "The command runs forked" && printf "%s\n" "$1" | grep -qF "\`/iris\` runs on Opus and \`/cleo\` on Sonnet"' _ "$(readme_commands)"
+check 'commands: README says how they run and their models (#120 R11)' sh -c 'printf "%s\n" "$1" | grep -qF "The command runs forked" && printf "%s\n" "$1" | grep -qF "\`/iris\` and \`/cleo\` run on Sonnet"' _ "$(readme_commands)"
 check 'commands: README says the lead shows her answer and never runs them (#120 R6, R7, R11)' sh -c 'printf "%s\n" "$1" | grep -qF "The lead shows her answer as she wrote it" && printf "%s\n" "$1" | grep -qF "the lead never runs one itself"' _ "$(readme_commands)"
 for member in iris cleo; do
 	check "commands: README lists /$member with its model, forked (#120 R11)" grep -q "^| \`$member\` (skill) | .*\`/$member\`.* | $(expected_model "$member") | forked |\$" "$root/README.md"
@@ -1303,48 +1303,54 @@ for build in commit-coder commit-coder-solo; do
 	check "kira agent: the lead keeps answering, $build (#183 R2)" flat_has "$team" 'the assistant says in one line that the review started and keeps answering the user.'
 	check "kira agent: started again on not ready, $build (#183 R7)" flat_has "$team" 'background step and starts the `kira` agent again;'
 done
-check 'kira agent: no model in Keeping the conversation focused (#183 R3)' flat_has "$full/rules/team.md" 'No `model` is passed when starting `iris` or `kira`:'
-check 'kira agent: no model, coder only (#183 R3)' flat_has "$tmp/commit-coder-solo/rules/team.md" 'No `model` is passed when starting `kira`:'
+check 'kira agent: no model in Keeping the conversation focused (#183 R3)' flat_has "$full/rules/team.md" 'No `model` is passed when starting `kira` or `cleo`'
+check 'kira agent: no model, coder only (#183 R3)' flat_has "$tmp/commit-coder-solo/rules/team.md" 'No `model` is passed when starting `kira` or `cleo`'
 check 'kira agent: no rule without a coder (#183 R8)' sh -c '! grep -q "\`kira\` agent" "$1"' _ "$tmp/iris-build/rules/team.md"
 check 'kira agent: the README says the review appears as Kira (#183 R9)' flat_has "$root/README.md" 'The review runs in the `kira` agent' 'appears among the running agents as Kira'
 check 'kira agent: the README lists it with a coder (#183 R9)' contains "$root/README.md" '`agents/kira.md` with a coder'
 
 # Background agents (#97 R6, D10).
 for build in commit-coder iris-build commit-coder-solo; do
-	check "models: background agents' models, $build (#97 R6)" sh -c 'grep -qF "\`model: haiku\` for an agent that reads CI logs or runs the tests" "$1" && grep -qF "\`model: sonnet\` for" "$1"' _ "$tmp/$build/rules/team.md"
+	check "models: background agents' models, $build (#97 R6, #211 R9)" sh -c 'grep -qF "\`model: haiku\` for an agent that reads CI logs, runs the tests or searches across many" "$1" && ! grep -qF "\`model: sonnet\` for" "$1"' _ "$tmp/$build/rules/team.md"
 done
-check 'models: no model for iris (#97 D10, #131 R2)' contains "$full/rules/team.md" 'No `model` is passed when starting `iris` or `kira`:'
-check 'models: opus for cleo only when needed (#131 R2)' flat_has "$full/rules/team.md" 'When starting `cleo`, `model: opus` is passed only in the cases of "Delegating to the coder"'
-check 'models: no model for iris without a coder (#97 D10)' contains "$tmp/iris-build/rules/team.md" 'No `model` is passed when starting `iris`:'
-check 'models: opus for cleo only when needed, coder only (#131 R2)' contains "$tmp/commit-coder-solo/rules/team.md" 'When starting `cleo`, `model: opus` is passed only in the cases of "Delegating to the'
+check 'models: opus only for specification work and the takeover (#211 R1, R6)' flat_has "$full/rules/team.md" '`model: opus` is passed only to `iris`, for specification work (see "Delegating to the analyst"), and to the assistant'"'"'s takeover agent.' 'No `model` is passed when starting `kira` or `cleo`'
+check 'models: opus for iris only for specification work, analyst only (#211 R6)' flat_has "$tmp/iris-build/rules/team.md" '`model: opus` is passed to `iris` only for specification work'
+check 'models: the takeover agent only, coder only (#211 R3)' flat_has "$tmp/commit-coder-solo/rules/team.md" '`model: opus` is passed only to the assistant'"'"'s takeover agent.' 'starting `kira` or `cleo`'
 check 'models: no cleo model rule without a coder (#131 R6)' sh -c '! grep -q "starting \`cleo\`" "$1"' _ "$tmp/iris-build/rules/team.md"
 
-# The coder on Sonnet, with Opus for hard tasks and later rounds (#131 R2 to R7).
+# The coder always on Sonnet, the lead's takeover on Opus from the second review requesting
+# changes, and the round cap (#211 R1 to R4, R9, R13, R16).
 for build in commit-coder commit-coder-solo; do
 	team=$tmp/$build/rules/team.md
-	check "coder model, $build: the task's labels read (#131 R2)" contains "$team" 'labels (`gh issue view <n> --json labels`): when the task carries the label `model:opus`,'
-	check "coder model, $build: the user's request (#131 R2)" contains "$team" 'or when the user asked in the conversation for that task or change to run on Opus, the'
-	check "coder model, $build: opus passed (#131 R2)" contains "$team" 'assistant starts the `cleo` agent with the Agent tool'"'"'s `model` set to `opus`; in every'
-	check "coder model, $build: otherwise none (#131 R2)" contains "$team" 'other case it passes no `model`.'
-	check "coder model, $build: rounds counted on GitHub (#131 R3)" contains "$team" '`CHANGES_REQUESTED` (`gh pr view <n> --json reviews`): from two on, it starts a new'
-	check "coder model, $build: a new agent on Opus (#131 R3)" contains "$team" '`cleo` agent with `model` set to `opus`, giving it the pull request, the task and the'
-	check "coder model, $build: not by message (#131 R3)" contains "$team" 'review comments, instead of sending a message to the earlier coder agent, whose model'
-	check "coder model, $build: no label added (#131 R3)" contains "$team" 'cannot change. It adds no label to the task.'
-	check "coder model, $build: model in the report (#131 R5)" contains "$team" 'the coder ran on (Sonnet or Opus), the number of reviews in the state "changes requested"'
-	check "coder model, $build: count in the report (#131 R5)" contains "$team" 'the pull request has had so far, and any question for the user.'
+	check "coder model, $build: always Sonnet, no model passed (#211 R1)" flat_has "$team" 'The coder'"'"'s agent runs on Sonnet, whatever the task'"'"'s labels or the user'"'"'s request: the assistant starts the `cleo` agent with no `model`.'
+	check "coder model, $build: no label read, no Opus on request (#211 R1)" sh -c '! grep -q "model:opus\|run on Opus" "$1"' _ "$team"
+	check "coder model, $build: rounds counted on GitHub (#211 R3)" flat_has "$team" 'counts the pull request'"'"'s reviews in the state `CHANGES_REQUESTED` (`gh pr view <n> --json reviews`). On the first one it hands the pull request back to the coder'
+	check "coder model, $build: the takeover on Opus (#211 R3)" flat_has "$team" 'From the second one on, the assistant continues the pull request itself, on Opus' '`subagent_type: general-purpose` and `model: opus`'
+	check "coder model, $build: the takeover works as the lead (#211 R3, D7)" flat_has "$team" 'says that it works as the assistant: its Git identity and signing key' 'and the flow of "Code the assistant writes".'
+	check "coder model, $build: no kira review, no completion without the user (#211 R4)" flat_has "$team" 'the `kira` agent does not review it, and it is merged only when the user'"'"'s own latest review approves its last commit'
+	check "coder model, $build: the user's changes go to the lead (#211 R16)" flat_has "$team" 'Changes the user requests on it go to a new takeover agent, never to the coder'
+	check "coder model, $build: no model in the report (#211 R1)" sh -c '! grep -q "Sonnet or Opus\|the coder ran on" "$1"' _ "$team"
+	check "coder model, $build: count in the report (#131 R5)" flat_has "$team" 'question for the user. Her intermediate output stays out of the conversation.'
 done
+check 'coder model: the takeover without any signing key (#211 D15)' flat_has "$tmp/commit-coder-solo/rules/team.md" 'Neither the coder nor the assistant has a signing key: the takeover leaves its changes uncommitted'
 for team in "$tmp/iris-build/rules/team.md" "$tmp/lead-analyst/rules/team.md"; do
-	check "coder model: no R2, R3, R5 without a coder, $(basename "$(dirname "$(dirname "$team")")") (#131 R6)" sh -c '! grep -q "model:opus\|CHANGES_REQUESTED\|Sonnet or Opus\|the coder ran on" "$1"' _ "$team"
+	check "coder model: no takeover, rounds or coder model without a coder, $(basename "$(dirname "$(dirname "$team")")") (#211)" sh -c '! grep -q "model:opus\|CHANGES_REQUESTED\|takeover\|Sonnet or Opus\|the coder ran on" "$1"' _ "$team"
 done
-check 'coder model: hard tasks in spec (#131 R4)' contains "$full/skills/spec/SKILL.md" '- Hard tasks run on the coder with Opus, the others on Sonnet. A task is hard when it'
-check 'coder model: hard-task criteria in spec (#131 R4)' sh -c 'grep -qF "changes concurrent or asynchronous behavior; security-sensitive files (credentials, tokens" "$1" && grep -qF "workflows); a data format or a migration; or an interface other repositories use; or when" "$1" && grep -qF "its design leaves the coder a choice between approaches." "$1"' _ "$full/skills/spec/SKILL.md"
-check 'coder model: label and reason in spec (#131 R4)' contains "$full/skills/spec/SKILL.md" 'each hard task, and give the reason in one line of its body: `Model: Opus — <reason>.`'
+check 'coder model: no hard tasks in spec (#211 R2)' sh -c '! grep -q "model:opus\|Hard tasks\|Model: Opus" "$1"' _ "$full/skills/spec/SKILL.md"
 check 'coder model: label created when missing (#131 R4)' contains "$full/skills/spec/SKILL.md" 'create a missing one without'
-check 'coder model: spec with a coder only (#131 R4)' contains "$tmp/commit-coder-solo/skills/spec/SKILL.md" 'Add the label `model:opus` to'
-for build in iris-build build3; do
-	check "coder model: no R4 without a coder, $build (#131 R6)" sh -c '! grep -q "model:opus\|Hard tasks" "$1"' _ "$tmp/$build/skills/spec/SKILL.md"
+for build in commit-coder-solo iris-build build3; do
+	check "coder model: no hard tasks in spec, $build (#211 R2)" sh -c '! grep -q "model:opus\|Hard tasks" "$1"' _ "$tmp/$build/skills/spec/SKILL.md"
 done
-check 'coder model: the README says when a task runs on Opus (#131 R7)' contains "$root/README.md" 'A task runs on Opus when'
+check 'coder model: the git rules gain the takeover (#211 R3, R4, R16)' flat_has "$full/rules/git.md" 'The takeover (`rules/team.md`): from the second review requesting changes on a pull request of the coder, the assistant continues it itself' 'never reviews or approves the pull request'
+# The analyst on Sonnet, Opus only for specification work (#211 R5, R6, D3).
+check 'analyst model: Sonnet, Opus for specification work (#211 R5, R6)' flat_has "$full/rules/team.md" 'The analyst'"'"'s agent runs on Sonnet. The assistant starts `iris` with `model: opus` to specify an idea' 'and with no `model` to capture an idea, post clarification comments, answer a question or record an answer of the user'
+check 'analyst model: a new agent on Opus when the work turns into specification work (#211 R5, D3)' flat_has "$full/rules/team.md" 'she stops and returns that, and the assistant starts a new `iris` agent on Opus for it' 'The `/iris` command, which the user starts himself, is not concerned.'
+check 'analyst model: the idea and spec skills (#211 R14, R15)' sh -c 'grep -qx "model: sonnet" "$1/skills/idea/SKILL.md" && grep -qx "model: opus" "$1/skills/spec/SKILL.md"' _ "$full"
+# The README (#211 R12).
+check 'models: the README says the coder is always on Sonnet and the label retired (#211 R12)' flat_has "$root/README.md" '**Cleo always runs on Sonnet; Kira takes over on Opus.**' 'the `model:opus` label is retired'
+check 'models: the README describes the takeover (#211 R12)' flat_has "$root/README.md" 'From the second review requesting changes on a pull request' 'it is merged only on your own approval of its last commit' 'never to Cleo'
+check 'models: the README describes the round cap (#211 R12, R13)' flat_has "$root/README.md" 'After two verdicts in a row requesting changes there is no third verification' 'a comment of yours on it goes to Iris and back to your review, not to a verification'
+check 'models: the README says Iris uses Opus for specification work (#211 R12)' flat_has "$root/README.md" '`opus` when it starts `iris` for specification work' 'A `cleo` agent never runs on Opus.'
 
 # --- launchers: Konsole color schemes (#36 R4, R6, R7, R8, R16, R17) -----------------------
 
@@ -1865,6 +1871,7 @@ check 'complete: on, CLAUDE.md stop list allows completing (R3)' \
 check 'complete: on, CLAUDE.md merge stop allows completing (R3)' \
 	contains "$tmp/complete-on/CLAUDE.md" 'merge only after the user'"'"'s own approval unless'
 check 'complete: on, no placeholder left (R3)' no_placeholder "$tmp/complete-on"
+check 'coder model: with the completion on, the takeover is never completed without the user (#211 R4)' flat_has "$tmp/complete-on/rules/team.md" 'It is never completed without the user and gets no `review:lead-only` label.'
 check 'complete: off, no completion rule in team.md (R2)' \
 	sh -c '! grep -qF -e "review:lead-only" -e "completed without" "$1"' _ "$off_team"
 check 'complete: off, the user'"'"'s review is requested (R2)' \
@@ -2042,7 +2049,7 @@ check 'verified: on, CLAUDE.md lets the lead move it to Ready (R13)' \
 check 'verified: on, changes back to the analyst (R14)' \
 	flat_has "$on_team" '`changes requested`: the assistant hands the specification back to the analyst with the result'"'"'s comments; once she has changed it, it verifies it again.'
 check 'verified: on, the second round goes to the user (R14)' \
-	flat_has "$on_team" 'also says `changes requested`, the assistant asks the user instead' 'lists the comments still unresolved'
+	flat_has "$on_team" 'also says `changes requested`, the assistant starts no third verification' 'the analyst makes one last pass on the remaining comments'
 check 'verified: on, needs the user (R15)' \
 	flat_has "$on_team" '`needs the user`: the assistant asks the user the result'"'"'s "For the user" questions in a comment of its own'
 check 'verified: on, the count starts over (R15)' \
@@ -3505,12 +3512,13 @@ check 'watch: nothing more starts while a coder task runs (#43 R10, D13)' flat_h
 watch_noaccount=$tmp/watch-coder-noaccount/skills/watch/SKILL.md
 check 'watch: a coder with no GitHub account still gets the Ready task (#43 R10)' flat_has "$watch_noaccount" 'hand the task it gives to the `cleo` agent' 'While a coder task is running, start nothing more'
 check 'watch: a coder with no GitHub account, the lead does not take the task (#43 R10)' sh -c '! grep -q "work on the task it gives yourself" "$1"' _ "$watch_noaccount"
-check "watch: a coder with no GitHub account keeps the coder's merge rule (#43 R11)" flat_has "$watch_noaccount" 'on a pull request of the coder or of the lead' 'hand it back to the `cleo` agent' 'from two on start a new `cleo` agent on Opus'
+check "watch: a coder with no GitHub account keeps the coder's merge rule (#43 R11)" flat_has "$watch_noaccount" 'on a pull request of the coder or of the lead' 'count its reviews in the state `CHANGES_REQUESTED` first' 'the first goes back to the `cleo` agent' 'from the second on, the lead continues the pull request herself in a takeover agent on Opus'
 check 'watch: a coder with no GitHub account, only the assistant check (#43 R10, R11)' sh -c 'test "$(grep -c "^| \`[a-z]*\` | \`[a-z-]*\` |\$" "$1")" -eq 1 && ! grep -q "kirakit-watch coder\|from \`coder\`" "$1"' _ "$watch_noaccount"
 check 'watch: without a coder the lead works (#43 R10)' flat_has "$tmp/watch-analyst/skills/watch/SKILL.md" 'work on the task it gives yourself, as the lead'
 check "watch: merge only on the user's own approval of the last commit (#43 R11)" flat_has "$watch_full" 'merge only under the merge rule' 'gh pr view N --json reviews,commits' 'the user'"'"'s own latest review is an approval submitted after the last commit'
 check "watch: not on the lead's approval, reviewDecision or a team review (#43 R11)" flat_has "$watch_full" 'Never on `reviewDecision`, never on the lead'"'"'s own approval, and never on a review posted from a team account'
-check 'watch: changes requested go back to cleo (#43 R11)' flat_has "$watch_full" 'hand it back to the `cleo` agent' 'from two on start a new `cleo` agent on Opus'
+check 'watch: changes requested go back to cleo, then to the takeover (#43 R11, #211 R3)' flat_has "$watch_full" 'the first goes back to the `cleo` agent' 'from the second on, the lead continues the pull request herself in a takeover agent on Opus' 'never to the coder'
+check 'watch: iris on Opus for specification work only (#211 R6)' flat_has "$watch_full" 'goes to the `iris` agent to specify, started with `model: opus`' 'Start the agent with `model: opus` when the comment asks for a change'
 check 'watch: the coder question goes to cleo (#43)' flat_has "$watch_full" 'answers a question of the coder goes to the `cleo` agent' 'or, when none runs, her next task'
 check 'watch: the lead answers its own questions (#43)' flat_has "$watch_full" 'answers a question of the lead**: act on it yourself'
 check 'watch: decisions that stay with the user (#43 R12)' flat_has "$watch_full" 'merging a pull request outside the merge rule above, tagging or releasing' 'Ask in a comment on the issue or pull request that mentions the user'
