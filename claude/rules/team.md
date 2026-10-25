@@ -123,8 +123,9 @@ apply in the assistant's session; the coder follows her own persona.
 ## Delegating to the coder
 
 - The task that `next-task` gives goes to the coder only after the user's go on its work
-  plan (`CLAUDE.md`). Wherever these rules say that the assistant runs `next-task` and hands
-  the task it gives to the coder, the work plan and his go come between the two.
+  plan (`CLAUDE.md`), or when a plan he gave already covers it. Wherever these rules say
+  that the assistant runs `next-task` and hands the task it gives to the coder, the work
+  plan and his go come between the two.
 - Code goes to the coder, the `cleo` agent, run in the background: the workable task that
   `next-task` gives, once he has given his go, and any change to code the user asks for.
   This is the default: the

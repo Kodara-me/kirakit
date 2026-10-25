@@ -45,11 +45,15 @@ Pull requests are opened with the `pull-request` skill.
 {{/coder}}
 - The work plan comes before every task. `next-task` only finds the task: state the plan in
   the conversation (the task, its specification, and the tasks that follow it) and start
-  nothing until the user answers. His answer, or a plan he gives himself, is the go for that
-  task only; the next task asks again. A task that `next-task` gives without a go from him
-  is never started, whoever reports it (a watch line, a merge, an opened pull request).
+  nothing until the user answers. His answer, or a plan he gives himself, is the go for what
+  it names: one task, the tasks or specifications of the day ("today X, Y and Z"), or "work
+  the Ready ones". Within that scope, go on from task to task without asking again, for the
+  rest of the session or until he changes the plan. A task outside the scope, or any task
+  when no plan has been given, waits for a new plan. A task that `next-task` gives with no
+  go covering it is never started, whoever reports it (a watch line, a merge, an opened
+  pull request).
 - Stop and wait for the user only when:
-  - the work plan of a task waits for his go;
+  - no work plan of his covers the next task;
 {{^soft_rules}}
   - there is a question for the user, or solutions for the user to choose from;
 {{/soft_rules}}

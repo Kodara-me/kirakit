@@ -1056,12 +1056,14 @@ task (specifications in board order, their tasks in sub-issue order, skipping a 
 taken, blocked by an open issue, waiting for an answer, or touching the same files as a pull
 request in review; a shared test file such as `scripts/test.sh` does not count). She then
 states the work plan (the task, its specification, the tasks that follow it) and starts
-nothing until you answer. Your answer, or a plan you give yourself, is the go for that task
-only; the next task asks again.
+nothing until you answer. Your answer, or a plan you give yourself, is the go for what it
+names: one task, the tasks of the day ("today X, Y and Z"), or "work the Ready ones". Within
+that scope she goes on from task to task without asking, for the rest of the session or
+until you change the plan; a task outside it waits for a new plan.
 
 She stops for you only when:
 
-- the work plan of a task waits for your go;
+- no work plan of yours covers the next task;
 - she has a question, or solutions for you to choose from;
 - a pull request waits for your review;
 - she needs more information, asked on the issue;

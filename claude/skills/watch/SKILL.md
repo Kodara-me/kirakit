@@ -103,7 +103,8 @@ Then dispatch by kind and role:
   specification, is Ready (repository, number, URL). Read the issue first: if it is no longer
   Ready, stop. Otherwise run the `next-task` skill for that repository
   (`--as {{assistant_github}}`), state the work plan for the task it gives and wait for the
-  user's go (`CLAUDE.md`: the work plan comes before every task), then
+  user's go, unless a plan he gave already covers it (`CLAUDE.md`: the work plan comes
+  before every task), then
 {{#coder}}
   hand the task to the `cleo` agent, as `rules/team.md` describes for a coder's task
   (no `model`: her agent runs on Sonnet). While a coder task is running, start nothing more: `next-task` runs again

@@ -236,7 +236,7 @@ for build in build2 build3; do
 done
 check 'CLAUDE.md: workable while the specification is Ready (#89 R11)' contains "$tmp/build2/CLAUDE.md" 'A task is workable'
 check 'CLAUDE.md: next-task runs at the start (#89 R12, R13)' contains "$tmp/build2/CLAUDE.md" 'run the `next-task` skill'
-check 'CLAUDE.md: the work plan comes before every task' sh -c 'grep -q "The work plan comes before every task" "$1" && grep -q "the work plan of a task waits for his go" "$1" && ! grep -q "task it gives without asking" "$1" && ! grep -q "to the coder without asking" "$1"' _ "$tmp/build2/CLAUDE.md"
+check 'CLAUDE.md: the work plan comes before every task' sh -c 'grep -q "The work plan comes before every task" "$1" && grep -q "no work plan of his covers the next task" "$1" && grep -q "the Ready ones" "$1" && ! grep -q "task it gives without asking" "$1" && ! grep -q "to the coder without asking" "$1"' _ "$tmp/build2/CLAUDE.md"
 check 'watch: states the work plan before handing a task' contains "$tmp/build3/skills/watch/SKILL.md" 'state the work plan for the task it gives'
 check 'CLAUDE.md: the stops for the user (#89 R5, R6)' sh -c 'grep -q "Stop and wait for the user only when" "$1" && grep -q "merge only after approval" "$1"' _ "$tmp/build2/CLAUDE.md"
 check 'CLAUDE.md: out of Ready, no new task (#89 R14)' contains "$tmp/build2/CLAUDE.md" 'start no further task'
