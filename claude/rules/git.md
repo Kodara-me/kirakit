@@ -350,6 +350,12 @@ phone. The session marker tells the members' own comments from his.
 {{/analyst_github}}
   Handing work to the analyst follows `rules/team.md`. A change to the specification follows
   the `spec` skill.
+{{#assistant_github}}
+- The user's reply on an idea or a specification of the analyst, seen by the lead's watch,
+  is handed as given to the `iris` agent, which records it; the analyst's account and
+  its mentions are notifications only, and the work is started from the assistant's
+  conversation.
+{{/assistant_github}}
 {{/analyst}}
 {{#coder}}
 
@@ -365,6 +371,10 @@ phone. The session marker tells the members' own comments from his.
 {{^analyst_github}}
   The comment names the analyst and does not mention the user.
 {{/analyst_github}}
+{{#assistant_github}}
+  The assistant hands her question to the analyst from its own conversation, with the report
+  of her task, without waiting for the watch.
+{{/assistant_github}}
 {{/analyst}}
 {{^analyst}}
 - When the coder finds a gap or an ambiguity in a specification while working on a task, she

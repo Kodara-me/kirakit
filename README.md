@@ -594,6 +594,35 @@ installed only with an analyst or a coder.
   Move it to Ready on the board, or tell Kira it can start: Kira then works through its
   tasks without asking (see [Development](#development-from-a-ready-specification)). With
   `--start-verified-specs`, Kira verifies it and starts it herself (below).
+- **Only the lead's session watches GitHub.** With the assistant's GitHub account in the
+  profile, the `watch` skill (run by the `assistant` launcher at its start, and by the
+  assistant's pane of `team`) starts one `kirakit-watch` check per team account of the
+  profile, the assistant's, the analyst's and the coder's, with Claude Code's Monitor tool,
+  so Kira wakes only when a line is printed, and `/loop 10m` running them with `--once` as
+  the fallback. The `analyst` launcher, Iris's pane of `team` and a plain `claude` session
+  start no watch; the analyst and the coder run as Kira's background agents. Kira acts on a
+  change once, whichever account reported it, and writes one line in the chat per action,
+  nothing when nothing changed:
+  - your reply on an idea or a specification assigned to Iris, or in a thread where she is
+    mentioned, goes to the `iris` agent as given (to the running task on that issue when
+    there is one); an idea newly assigned to her goes to her to specify; an assignment of a
+    task or a specification starts nothing;
+  - **How a specification wakes Kira.** It enters Ready when you move it to Ready on its
+    board (the Ready column), or, on a repository with no board, when it carries the
+    `status:ready` label; the same goes for an issue with no specification. The watch
+    reports it, Kira runs `next-task` in that repository and hands the task it gives to
+    Cleo, or works on it herself without a coder. While a coder task is running, no other
+    starts, and `next-task` runs again when her task ends with a pull request;
+  - **Merging.** A review on a pull request of Cleo or of Kira leads to a merge only when your
+    own latest review approves its last commit (`gh pr view --json reviews,commits`), or when
+    Kira completes Cleo's pull request without you under `--complete-approved-prs`. Kira's own
+    approval and a review posted from a team account never count. Changes you request on
+    Cleo's pull request go back to Cleo;
+  - a comment of yours answering a question of Cleo goes to Cleo; a gap she finds in a
+    specification comes back with her report and goes to Iris from Kira's conversation, not
+    through the watch;
+  - a merge outside that rule, a tag or a release, and creating, editing or closing an issue
+    other than Iris's own work stay yours: Kira asks in a comment that mentions you.
 - **Long outputs stay out of the conversation too.** CI logs, full test runs and broad
   searches run in a background agent that returns only its conclusion.
 - On GitHub, Iris's work is still written as her account (see
@@ -792,7 +821,7 @@ The launchers are not supported on Windows: `get-kira.ps1` prints a notice and i
 `claude/skills/` holds Claude Code skills, one directory per skill with its `SKILL.md`:
 `assistant-commit`, `board-status`, `commit`, `diffv`, `idea`, `next-task`, `pull`,
 `pull-request`, `push`, `review-pr` (with a coder), `review-spec` (with
-`--start-verified-specs`), `spec` and `test`. They answer
+`--start-verified-specs`), `spec`, `test` and `watch` (with the assistant's GitHub account). They answer
 in the profile's language; `commit` and `assistant-commit` follow the git rules in
 `claude/rules/git.md` (see [Who commits](#who-commits)). Other skills already in
 `$CLAUDE_CONFIG_DIR/skills/` are left untouched. Agents in `claude/agents/` are installed the
@@ -823,6 +852,7 @@ when a member invokes it herself, it runs on her model.
 | `idea` | Captures an idea as an issue | opus | inline |
 | `spec` | Turns an idea into a specification and its tasks | opus | inline |
 | `pull-request` | Writes and opens the pull request of a task | sonnet | inline |
+| `watch` | Starts the lead's background checks of GitHub and dispatches what they report (with the assistant's GitHub account) | haiku | inline |
 | `review-pr` | Reviews a pull request of the coder and returns a verdict | opus | forked |
 | `review-spec` | Verifies a specification of the analyst and returns a verdict (with `--start-verified-specs`) | opus | forked |
 | `iris` (skill) | Lets you talk to Iris directly (`/iris`) | opus | forked |

@@ -271,6 +271,73 @@ apply in the assistant's session; the coder follows her own persona.
   and the assistant runs `next-task` and hands the task it gives to the coder.
 {{/complete_approved_prs}}
 {{/coder}}
+{{#assistant_github}}
+{{^analyst}}
+{{^coder}}
+# Team rules
+
+The assistant leads the team: the user talks to the team through the assistant's
+conversation. These rules apply in the assistant's session.
+{{/coder}}
+{{/analyst}}
+
+## Watching GitHub
+
+- Only the assistant's session watches GitHub, with the `watch` skill, which the `assistant`
+  launcher runs at its start. No member's own session (`analyst`, a background agent, a plain
+  `claude` session) starts a watch.
+- The watch is one `kirakit-watch` check per team account of the profile, run with Claude
+  Code's Monitor tool so that the assistant wakes only when a line is printed, and, as a
+  fallback every 10 minutes, `/loop 10m` running the same checks with `--once`. A check
+  prints nothing when nothing changed, and the assistant writes nothing then.
+- A change reported by several accounts is acted on once, by its URL.
+{{#analyst}}
+- A comment of the user on an idea or a specification assigned to the analyst's account, or
+  in a thread where she is mentioned, goes to the `iris` agent as the user's answer, as given,
+  or to the `iris` task already running on that issue, as a message. An idea newly assigned
+  to her account goes to her to specify. An assignment of a task or a specification starts
+  nothing.
+{{/analyst}}
+- When a specification enters Ready (the Ready column of its board, or the `status:ready`
+  label on a repository with no board), or an issue with no specification enters the Ready
+  column, the watch reports it and the assistant runs `next-task` in that repository.
+{{#coder}}
+  It hands the task it gives to the coder, as above. While a coder task is running, it starts
+  no other one; `next-task` runs again when her task ends with a pull request. A comment of
+  the user that answers a question of the coder goes to the `cleo` agent, to her running task
+  on that issue or, when none runs, as her next task.
+{{/coder}}
+{{^coder}}
+  It works on the task it gives itself.
+{{/coder}}
+{{#coder}}
+- A review of the user on a pull request of the coder or of the assistant leads to a merge
+  only under the merge rule: the user's own latest review is an approval submitted after the
+  pull request's last commit (`gh pr view <n> --json reviews,commits`).
+{{#complete_approved_prs}}
+  The one other case is the coder's pull request that the assistant completes without the
+  user, as above.
+{{/complete_approved_prs}}
+  The assistant's own approval, and a review posted from a team account, never count. Changes
+  requested by the user on the coder's pull request go back to the coder as above.
+{{/coder}}
+{{^coder}}
+- A review of the user on a pull request of the assistant leads to a merge only under the
+  merge rule: the user's own latest review is an approval submitted after the pull request's
+  last commit (`gh pr view <n> --json reviews,commits`). A review posted from a team account
+  never counts.
+{{/coder}}
+- Whatever a watch line leads to, a decision stays with the user: a merge outside that rule, a
+  tag or release, and creating, editing or closing an issue other than the analyst's own work.
+  The assistant asks in a comment that mentions him and waits.
+{{#analyst}}
+{{#coder}}
+- A gap or an ambiguity that the coder finds in a specification comes back with her task's
+  report, and the assistant hands it to the analyst from its own conversation, not through the
+  watch.
+{{/coder}}
+{{/analyst}}
+{{/assistant_github}}
 {{#analyst}}
 
 ## Talking to a member directly

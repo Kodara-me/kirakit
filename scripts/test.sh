@@ -143,6 +143,14 @@ no_placeholder() {
 contains() {
 	grep -qF -- "$2" "$1"
 }
+# flat_has_text STRING TEXT...: whether STRING, on one line with the spaces squeezed, holds every TEXT.
+flat_has_text() {
+	flat=$(printf '%s\n' "$1" | tr '\n' ' ' | tr -s ' ')
+	shift
+	for wanted in "$@"; do
+		printf '%s\n' "$flat" | grep -qF -- "$wanted" || return 1
+	done
+}
 # flat_has FILE TEXT...: whether FILE, on one line with the spaces squeezed, holds every TEXT.
 flat_has() {
 	flat=$(tr '\n' ' ' <"$1" | tr -s ' ')
@@ -1137,7 +1145,7 @@ expected_model() {
 	case $1 in
 	iris | kira | idea | spec | review-pr | review-spec) echo opus ;;
 	cleo | next-task | diffv | pull-request) echo sonnet ;;
-	board-status | test | pull | push | commit | assistant-commit) echo haiku ;;
+	board-status | test | pull | push | commit | assistant-commit | watch) echo haiku ;;
 	esac
 }
 # forked NAME: whether the skill runs in a forked context.
@@ -3237,6 +3245,65 @@ check 'watch: it is found by a search on the member account (#38 D6)' \
 	grep -q 'search issues --commenter cleo-kodara --updated' "$watch_dir/calls"
 
 unset XDG_STATE_HOME
+
+# --- the watch skill (#43 R2, R3, R5, R6, R7, R9, R10, R11, R12, R13, R20) -----------------
+
+$shell "$root/scripts/build.sh" -o "$tmp/watch-lead" --assistant-github kira-bot >/dev/null
+$shell "$root/scripts/build.sh" -o "$tmp/watch-analyst" --analyst --analyst-github iris-bot --assistant-github kira-bot >/dev/null
+$shell "$root/scripts/build.sh" -o "$tmp/watch-coder" --coder 'Cleo <cleo@example.com>' --coder-github cleo-bot --assistant-github kira-bot >/dev/null
+$shell "$root/scripts/build.sh" -o "$tmp/watch-nolead" --analyst --analyst-github iris-bot --coder 'Cleo <cleo@example.com>' --coder-github cleo-bot >/dev/null
+watch_full=$tmp/mention-full/skills/watch/SKILL.md
+check 'watch: not built without the assistant account (#43)' sh -c '! test -e "$1/skills/watch" && ! test -e "$2/skills/watch"' _ "$tmp/watch-nolead" "$tmp/build2"
+check 'watch: built with the assistant account (#43)' test -f "$tmp/watch-lead/skills/watch/SKILL.md"
+check 'watch: three checks with an analyst and a coder (#43)' sh -c 'test "$(grep -c "^| \`[a-z]*\` | \`[a-z-]*\` |\$" "$1")" -eq 3 && grep -qF "kirakit-watch assistant --once" "$1" && grep -qF "kirakit-watch analyst --once" "$1" && grep -qF "kirakit-watch coder --once" "$1"' _ "$watch_full"
+check 'watch: only the assistant check alone (#43)' sh -c 'test "$(grep -c "^| \`[a-z]*\` | \`[a-z-]*\` |\$" "$1")" -eq 1 && ! grep -q "kirakit-watch analyst\|kirakit-watch coder\|iris\|cleo" "$1"' _ "$tmp/watch-lead/skills/watch/SKILL.md"
+check 'watch: assistant and analyst checks, no coder (#43)' sh -c 'test "$(grep -c "^| \`[a-z]*\` | \`[a-z-]*\` |\$" "$1")" -eq 2 && ! grep -q "kirakit-watch coder\|cleo" "$1"' _ "$tmp/watch-analyst/skills/watch/SKILL.md"
+check 'watch: assistant and coder checks, no analyst (#43)' sh -c 'test "$(grep -c "^| \`[a-z]*\` | \`[a-z-]*\` |\$" "$1")" -eq 2 && ! grep -q "kirakit-watch analyst\|iris" "$1"' _ "$tmp/watch-coder/skills/watch/SKILL.md"
+check 'watch: Monitor tool, a line wakes the model (#43)' flat_has "$watch_full" 'With the Monitor tool, one persistent monitor per row' 'The model wakes up only when a line is printed.'
+check 'watch: /loop 10m fallback with --once (#43 R7)' flat_has "$watch_full" 'With `/loop 10m`, run the fallback' 'never runs more often than every 10 minutes'
+check 'watch: a check already running is left alone (#43 R19)' flat_has "$watch_full" 'is already running' 'do not start it again, and do not kill the other one'
+check 'watch: lead session only (#43 R17)' flat_has "$watch_full" 'Run this skill only there' 'do nothing and say so in one line'
+check 'watch: once per URL, whichever account (#43 R20)' flat_has "$watch_full" 'skip a `comment`, `review-comment` or `review` line whose URL is in it, whichever account reported it'
+check 'watch: state read first for approved, assigned and ready (#43 R20)' flat_has "$watch_full" 'for `approved`, `assigned` and `ready`, read the state on GitHub first'
+check "watch: the user's reply goes to the iris agent, as given (#43 R2, R9)" flat_has "$watch_full" 'goes to the `iris` agent, as given, as the user'"'"'s answer' 'send it a message instead of starting a second one'
+check 'watch: only the analyst threads go to her (#43 R9)' flat_has "$watch_full" 'a thread that is neither assigned to her nor mentions her is not hers'
+check 'watch: an idea assigned to her is specified (#43 D12)' flat_has "$watch_full" 'newly assigned to the analyst'"'"'s account goes to the `iris` agent to specify'
+check 'watch: an assignment of a task or specification starts nothing (#43 D12)' flat_has "$watch_full" 'An assigned task or specification starts nothing' 'start nothing'
+check 'watch: Ready runs next-task and hands it to cleo (#43 R10)' flat_has "$watch_full" 'which specification, or which issue with no specification, is Ready' 'run the `next-task` skill for that repository' 'hand the task it gives to the `cleo` agent'
+check 'watch: nothing more starts while a coder task runs (#43 R10, D13)' flat_has "$watch_full" 'While a coder task is running, start nothing more'
+check 'watch: without a coder the lead works (#43 R10)' flat_has "$tmp/watch-analyst/skills/watch/SKILL.md" 'work on the task it gives yourself, as the lead'
+check "watch: merge only on the user's own approval of the last commit (#43 R11)" flat_has "$watch_full" 'merge only under the merge rule' 'gh pr view N --json reviews,commits' 'the user'"'"'s own latest review is an approval submitted after the last commit'
+check "watch: not on the lead's approval, reviewDecision or a team review (#43 R11)" flat_has "$watch_full" 'Never on `reviewDecision`, never on the lead'"'"'s own approval, and never on a review posted from a team account'
+check 'watch: changes requested go back to cleo (#43 R11)' flat_has "$watch_full" 'hand it back to the `cleo` agent' 'from two on start a new `cleo` agent on Opus'
+check 'watch: the coder question goes to cleo (#43)' flat_has "$watch_full" 'answers a question of the coder goes to the `cleo` agent' 'or, when none runs, her next task'
+check 'watch: the lead answers its own questions (#43)' flat_has "$watch_full" 'answers a question of the lead**: act on it yourself'
+check 'watch: decisions that stay with the user (#43 R12)' flat_has "$watch_full" 'merging a pull request outside the merge rule above, tagging or releasing' 'Ask in a comment on the issue or pull request that mentions the user'
+check 'watch: a gap goes to the analyst from the conversation (#43 R13)' flat_has "$watch_full" 'goes to the analyst from the lead'"'"'s conversation, not through the watch'
+check 'watch: one line per action, nothing otherwise (#43 R3, R6)' flat_has "$watch_full" 'One line per action' 'write nothing, in the chat or on GitHub'
+check 'watch: every gh command on the lead account (#43)' flat_has "$watch_full" 'GH_TOKEN=$(gh auth token --user kira-bot)'
+check 'watch: no placeholder, whatever the profile (#43)' sh -c 'for d in "$@"; do ! grep -rq "{{" "$d" || exit 1; done' _ "$tmp/watch-lead" "$tmp/watch-analyst" "$tmp/watch-coder" "$tmp/mention-full"
+check 'watch: README lists it (#43)' in_readme watch inline
+check 'watch: declares its model (#43)' has_model "$watch_full" watch
+for dir in mention-full watch-analyst watch-coder; do
+	team=$tmp/$dir/rules/team.md
+	check "watch rules: only the lead's session, one check per account, $dir (#43)" flat_has "$team" '## Watching GitHub' 'Only the assistant'"'"'s session watches GitHub, with the `watch` skill' 'one `kirakit-watch` check per team account of the profile' 'No member'"'"'s own session'
+	check "watch rules: Ready runs next-task, $dir (#43 R10)" flat_has "$team" 'the watch reports it and the assistant runs `next-task` in that repository'
+	check "watch rules: merge on the user's own approval only, $dir (#43 R11)" flat_has "$team" 'the user'"'"'s own latest review is an approval submitted after the' 'never count'
+	check "watch rules: decisions stay with the user, $dir (#43 R12)" flat_has "$team" 'a decision stays with the user'
+done
+check 'watch rules: dispatch to the analyst (#43 R2, R9)' flat_has "$tmp/watch-analyst/rules/team.md" 'goes to the `iris` agent as the user'"'"'s answer, as given'
+check 'watch rules: dispatch to the coder (#43 R10)' flat_has "$tmp/watch-coder/rules/team.md" 'While a coder task is running, it starts no other one' 'goes to the `cleo` agent'
+check 'watch rules: no coder text without a coder (#43)' sh -c '! grep -qi "coder\|cleo" "$1"' _ "$tmp/watch-analyst/rules/team.md"
+check 'watch rules: team rules header with the lead alone (#43)' sh -c 'grep -qx "# Team rules" "$1" && grep -qx "## Watching GitHub" "$1"' _ "$tmp/watch-lead/rules/team.md"
+check 'watch rules: none without the assistant account (#43)' sh -c '! grep -q "Watching GitHub" "$1/rules/team.md"' _ "$tmp/watch-nolead"
+check 'watch rules: hand-offs, the user reply goes to the iris agent (#43)' flat_has "$tmp/watch-analyst/rules/git.md" 'seen by the lead'"'"'s watch, is handed as given to the `iris` agent'
+check 'watch rules: hand-offs, a gap goes to the analyst from the conversation (#43 R13)' flat_has "$tmp/mention-full/rules/git.md" 'hands her question to the analyst from its own conversation, with the report of her task, without waiting for the watch'
+readme_watch() {
+	awk '/^### Working through the lead$/ { found = 1; next } found && /^#/ { exit } found' "$root/README.md"
+}
+check 'watch README: only the lead watches, one check per team account (#43)' flat_has_text "$(readme_watch)" "Only the lead's session watches GitHub" 'one `kirakit-watch` check per team account'
+check 'watch README: how a specification wakes the lead (#43)' flat_has_text "$(readme_watch)" 'How a specification wakes Kira.' 'the `status:ready` label' 'runs `next-task` in that repository'
+check 'watch README: the merge condition (#43 R11)' flat_has_text "$(readme_watch)" 'only when your own latest review approves its last commit' 'never count'
 
 # --- the clone -----------------------------------------------------------------------------
 
