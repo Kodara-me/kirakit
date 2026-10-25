@@ -235,7 +235,9 @@ for build in build2 build3; do
 	check "rules: specification and pull request moves, $build (#64 R7, R9, R10)" contains "$tmp/$build/rules/git.md" 'request is added to its tasks'"'"' boards in In review'
 done
 check 'CLAUDE.md: workable while the specification is Ready (#89 R11)' contains "$tmp/build2/CLAUDE.md" 'A task is workable'
-check 'CLAUDE.md: next-task without asking (#89 R12, R13)' contains "$tmp/build2/CLAUDE.md" 'run the `next-task` skill'
+check 'CLAUDE.md: next-task runs at the start (#89 R12, R13)' contains "$tmp/build2/CLAUDE.md" 'run the `next-task` skill'
+check 'CLAUDE.md: the work plan comes before every task' sh -c 'grep -q "The work plan comes before every task" "$1" && grep -q "the work plan of a task waits for his go" "$1" && ! grep -q "task it gives without asking" "$1" && ! grep -q "to the coder without asking" "$1"' _ "$tmp/build2/CLAUDE.md"
+check 'watch: states the work plan before handing a task' contains "$tmp/build3/skills/watch/SKILL.md" 'state the work plan for the task it gives'
 check 'CLAUDE.md: the stops for the user (#89 R5, R6)' sh -c 'grep -q "Stop and wait for the user only when" "$1" && grep -q "merge only after approval" "$1"' _ "$tmp/build2/CLAUDE.md"
 check 'CLAUDE.md: out of Ready, no new task (#89 R14)' contains "$tmp/build2/CLAUDE.md" 'start no further task'
 check 'rules: next steps reported without asking (#89 R8)' contains "$tmp/build3/rules/git.md" 'without asking for permission'
@@ -556,7 +558,7 @@ for dir in "$tmp/lead-coder" "$tmp/lead-both"; do
 	check "$what: merge on the user's own approval (R22)" contains "$team" 'only when the user'"'"'s own latest review is an approval'
 	check "$what: not on reviewDecision (R22)" contains "$team" 'never on `reviewDecision`'
 	check "$what: focused conversation kept" contains "$team" '## Keeping the conversation focused'
-	check "$what: next task to the coder (R15)" contains "$dir/CLAUDE.md" 'hand the task it gives to the coder without asking'
+	check "$what: next task to the coder (R15)" contains "$dir/CLAUDE.md" 'The work plan comes before every task'
 	check "$what: merge after the user's own approval (R22)" contains "$dir/CLAUDE.md" 'merge only after the user'"'"'s own approval'
 	check "$what: no placeholder" no_placeholder "$dir"
 done
@@ -564,10 +566,11 @@ check 'lead-both: a gap goes to the analyst (#163 R9)' sh -c 'grep -A1 "gap or a
 check 'lead-coder: a gap goes to the user (#163 R9)' sh -c 'grep -A1 "gap or an ambiguity in the specification goes to\$" "$1" | grep -qx "    the user, in a comment on the issue."' _ "$tmp/lead-coder/rules/team.md"
 check 'lead-both: both members named' contains "$tmp/lead-both/rules/team.md" 'the analyst and the coder follow their own personas.'
 check 'lead-both: analyst rules kept' contains "$tmp/lead-both/rules/team.md" '## Delegating to the analyst'
+check 'lead-both: the coder gets a task after the go on its work plan' flat_has "$tmp/lead-both/rules/team.md" 'only after the user'"'"'s go on its work plan'
 check 'lead-coder: no analyst rules' sh -c '! grep -q "Delegating to the analyst" "$1"' _ "$tmp/lead-coder/rules/team.md"
 check 'lead-analyst: no coder rules (R24)' sh -c '! grep -qi "coder" "$1" "$2"' _ "$tmp/lead-analyst/rules/team.md" "$tmp/lead-analyst/CLAUDE.md"
 check 'lead-analyst: header as before (R24)' contains "$tmp/lead-analyst/rules/team.md" 'apply in the assistant'"'"'s session; the analyst follows her own persona.'
-check 'lead-analyst: next task started as before (R24)' contains "$tmp/lead-analyst/CLAUDE.md" 'and start the task it gives without asking'
+check 'lead-analyst: next task waits for the work plan go (R24)' contains "$tmp/lead-analyst/CLAUDE.md" 'The work plan comes before every task'
 check 'lead-analyst: merge after approval as before (R24)' contains "$tmp/lead-analyst/CLAUDE.md" 'merge only after approval, and asking before'
 check 'lead: no team rules without a member' test ! -e "$tmp/build/rules/team.md"
 
@@ -3507,14 +3510,14 @@ check "watch: the user's reply goes to the iris agent, as given (#43 R2, R9)" fl
 check 'watch: only the analyst threads go to her (#43 R9)' flat_has "$watch_full" 'a thread that is neither assigned to her nor mentions her is not hers'
 check 'watch: an idea assigned to her is specified (#43 D12)' flat_has "$watch_full" 'newly assigned to the analyst'"'"'s account goes to the `iris` agent to specify'
 check 'watch: an assignment of a task or specification starts nothing (#43 D12)' flat_has "$watch_full" 'An assigned task or specification starts nothing' 'start nothing'
-check 'watch: Ready runs next-task and hands it to cleo (#43 R10)' flat_has "$watch_full" 'which specification, or which issue with no specification, is Ready' 'run the `next-task` skill for that repository' 'hand the task it gives to the `cleo` agent'
+check 'watch: Ready runs next-task and hands it to cleo (#43 R10)' flat_has "$watch_full" 'which specification, or which issue with no specification, is Ready' 'run the `next-task` skill for that repository' 'state the work plan for the task it gives' 'hand the task to the `cleo` agent'
 check 'watch: nothing more starts while a coder task runs (#43 R10, D13)' flat_has "$watch_full" 'While a coder task is running, start nothing more'
 watch_noaccount=$tmp/watch-coder-noaccount/skills/watch/SKILL.md
-check 'watch: a coder with no GitHub account still gets the Ready task (#43 R10)' flat_has "$watch_noaccount" 'hand the task it gives to the `cleo` agent' 'While a coder task is running, start nothing more'
-check 'watch: a coder with no GitHub account, the lead does not take the task (#43 R10)' sh -c '! grep -q "work on the task it gives yourself" "$1"' _ "$watch_noaccount"
+check 'watch: a coder with no GitHub account still gets the Ready task (#43 R10)' flat_has "$watch_noaccount" 'hand the task to the `cleo` agent' 'While a coder task is running, start nothing more'
+check 'watch: a coder with no GitHub account, the lead does not take the task (#43 R10)' sh -c '! grep -q "work on the task yourself" "$1"' _ "$watch_noaccount"
 check "watch: a coder with no GitHub account keeps the coder's merge rule (#43 R11)" flat_has "$watch_noaccount" 'on a pull request of the coder or of the lead' 'count its reviews in the state `CHANGES_REQUESTED` first' 'the first goes back to the `cleo` agent' 'from the second on, the lead continues the pull request herself in a takeover agent on Opus'
 check 'watch: a coder with no GitHub account, only the assistant check (#43 R10, R11)' sh -c 'test "$(grep -c "^| \`[a-z]*\` | \`[a-z-]*\` |\$" "$1")" -eq 1 && ! grep -q "kirakit-watch coder\|from \`coder\`" "$1"' _ "$watch_noaccount"
-check 'watch: without a coder the lead works (#43 R10)' flat_has "$tmp/watch-analyst/skills/watch/SKILL.md" 'work on the task it gives yourself, as the lead'
+check 'watch: without a coder the lead works (#43 R10)' flat_has "$tmp/watch-analyst/skills/watch/SKILL.md" 'work on the task yourself, as the lead'
 check "watch: merge only on the user's own approval of the last commit (#43 R11)" flat_has "$watch_full" 'merge only under the merge rule' 'gh pr view N --json reviews,commits' 'the user'"'"'s own latest review is an approval submitted after the last commit'
 check "watch: not on the lead's approval, reviewDecision or a team review (#43 R11)" flat_has "$watch_full" 'Never on `reviewDecision`, never on the lead'"'"'s own approval, and never on a review posted from a team account'
 check 'watch: changes requested go back to cleo, then to the takeover (#43 R11, #211 R3)' flat_has "$watch_full" 'the first goes back to the `cleo` agent' 'from the second on, the lead continues the pull request herself in a takeover agent on Opus' 'never to the coder'

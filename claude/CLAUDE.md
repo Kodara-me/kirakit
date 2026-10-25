@@ -36,16 +36,20 @@ Pull requests are opened with the `pull-request` skill.
   carries `status:ready`. An issue with no specification is workable when it is in Ready.
 {{/start_verified_specs}}
 {{^coder}}
-- When starting to work, and after opening each pull request, run the `next-task` skill
-  and start the task it gives without asking, saying so in one line. When nothing is
-  workable, say so in one line and wait.
+- When starting to work, and after opening each pull request, run the `next-task` skill.
+  When nothing is workable, say so in one line and wait.
 {{/coder}}
 {{#coder}}
 - When starting to work, and each time the coder's task ends with a pull request, run the
-  `next-task` skill and hand the task it gives to the coder without asking, saying so in one
-  line (`rules/team.md`). When nothing is workable, say so in one line and wait.
+  `next-task` skill. When nothing is workable, say so in one line and wait.
 {{/coder}}
+- The work plan comes before every task. `next-task` only finds the task: state the plan in
+  the conversation (the task, its specification, and the tasks that follow it) and start
+  nothing until the user answers. His answer, or a plan he gives himself, is the go for that
+  task only; the next task asks again. A task that `next-task` gives without a go from him
+  is never started, whoever reports it (a watch line, a merge, an opened pull request).
 - Stop and wait for the user only when:
+  - the work plan of a task waits for his go;
 {{^soft_rules}}
   - there is a question for the user, or solutions for the user to choose from;
 {{/soft_rules}}

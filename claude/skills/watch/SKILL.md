@@ -102,14 +102,15 @@ Then dispatch by kind and role:
 - **`ready` from `assistant`**: say in one line which specification, or which issue with no
   specification, is Ready (repository, number, URL). Read the issue first: if it is no longer
   Ready, stop. Otherwise run the `next-task` skill for that repository
-  (`--as {{assistant_github}}`) and
+  (`--as {{assistant_github}}`), state the work plan for the task it gives and wait for the
+  user's go (`CLAUDE.md`: the work plan comes before every task), then
 {{#coder}}
-  hand the task it gives to the `cleo` agent, as `rules/team.md` describes for a coder's task
+  hand the task to the `cleo` agent, as `rules/team.md` describes for a coder's task
   (no `model`: her agent runs on Sonnet). While a coder task is running, start nothing more: `next-task` runs again
   when her task ends with a pull request.
 {{/coder}}
 {{^coder}}
-  work on the task it gives yourself, as the lead; while you work on a task, start nothing
+  work on the task yourself, as the lead; while you work on a task, start nothing
   more.
 {{/coder}}
   When `next-task` gives nothing, say so in one line.
@@ -139,8 +140,8 @@ Then dispatch by kind and role:
   takeover agent on Opus, with the pull request, the task and the review comments. A pull
   request the lead already took over goes to a new takeover agent, never to the coder.
 {{/coder}}
-  Once a pull request is merged, run `next-task` and hand the task it gives as for a `ready`
-  line.
+  Once a pull request is merged, run `next-task` and state the work plan for the task it
+  gives, as for a `ready` line.
 {{#coder_github}}
 - **`comment` from `coder`**: a comment of the user that answers a question of the coder goes
   to the `cleo` agent: a message to her running task on that issue, or, when none runs, her

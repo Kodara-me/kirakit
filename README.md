@@ -595,11 +595,12 @@ installed only with an analyst or a coder.
   Answer there, or in the conversation: Kira passes your answer to Iris as given, and Iris
   records it in the specification. Kira never edits a specification herself, and a new
   request about an issue Iris is already on goes to that same task.
-- **You start a specification, then development runs on its own.** When Iris finishes a
+- **You start a specification, then you give the plan of each task.** When Iris finishes a
   specification with no questions for you, Kira says in one line that it is in Specified.
-  Move it to Ready on the board, or tell Kira it can start: Kira then works through its
-  tasks without asking (see [Development](#development-from-a-ready-specification)). With
-  `--start-verified-specs`, Kira verifies it and starts it herself (below).
+  Move it to Ready on the board, or tell Kira it can start: its tasks become workable, and
+  Kira states the work plan of each one and waits for your go before starting it (see
+  [Development](#development-from-a-ready-specification)). With `--start-verified-specs`,
+  Kira verifies it and makes it workable herself (below).
 - **Only the lead's session watches GitHub.** With the assistant's GitHub account in the
   profile, the `watch` skill (run by the `assistant` launcher at its start, and by the
   assistant's pane of `team`) starts one `kirakit-watch` check per team account of the
@@ -616,9 +617,10 @@ installed only with an analyst or a coder.
   - **How a specification wakes Kira.** It enters Ready when you move it to Ready on its
     board (the Ready column), or, on a repository with no board, when it carries the
     `status:ready` label; the same goes for an issue with no specification. The watch
-    reports it, Kira runs `next-task` in that repository and hands the task it gives to
-    Cleo, or works on it herself without a coder. While a coder task is running, no other
-    starts, and `next-task` runs again when her task ends with a pull request;
+    reports it, Kira runs `next-task` in that repository, states the work plan for the task
+    it gives and waits for your go, then hands the task to Cleo, or works on it herself
+    without a coder. While a coder task is running, no other starts, and `next-task` runs
+    again when her task ends with a pull request;
   - **Merging.** A review on a pull request of Cleo or of Kira leads to a merge only when your
     own latest review approves its last commit (`gh pr view --json reviews,commits`), or when
     Kira completes Cleo's pull request without you under `--complete-approved-prs`. Kira's own
@@ -1048,15 +1050,18 @@ request merged).
 
 ### Development from a Ready specification
 
-Moving a specification to Ready is your go-ahead: all its tasks can be worked on. The
-developer runs `next-task` when she starts working and after each pull request she opens,
-and starts the task it gives without asking: specifications in board order, their tasks in
-sub-issue order, skipping a task that is taken, blocked by an open issue, waiting for an
-answer, or touching the same files as a pull request in review (a shared test file such as
-`scripts/test.sh` does not count).
+Moving a specification to Ready makes all its tasks workable. The developer runs
+`next-task` when she starts working and after each pull request she opens: it finds the
+task (specifications in board order, their tasks in sub-issue order, skipping a task that is
+taken, blocked by an open issue, waiting for an answer, or touching the same files as a pull
+request in review; a shared test file such as `scripts/test.sh` does not count). She then
+states the work plan (the task, its specification, the tasks that follow it) and starts
+nothing until you answer. Your answer, or a plan you give yourself, is the go for that task
+only; the next task asks again.
 
 She stops for you only when:
 
+- the work plan of a task waits for your go;
 - she has a question, or solutions for you to choose from;
 - a pull request waits for your review;
 - she needs more information, asked on the issue;
