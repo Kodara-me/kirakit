@@ -69,16 +69,27 @@ mkdir -p "$state" || exit 1
 # Locks (R19): symbolic links named after the holder's process ID, created atomically by `ln`.
 # watch.lock is held by the continuous check for its whole life, round.lock by every round, so
 # that two rounds of a role never run at once. A lock whose holder is no longer a running
-# kirakit-watch (killed, or its ID reused) is taken over.
-# lock_live PID: whether PID is a running kirakit-watch other than this one.
+# kirakit-watch of the same role (killed, or its ID reused) is taken over.
+# lock_live PID: whether PID is a running kirakit-watch of this role, other than this one.
 lock_live() {
-	local args
+	local args word found=
 	case $1 in '' | *[!0-9]*) return 1 ;; esac
 	[ "$1" != "$$" ] || return 1
 	kill -0 "$1" 2>/dev/null || return 1
 	args=$(ps -p "$1" -o args= 2>/dev/null) || return 0
 	[ -z "$args" ] && return 0
-	case $args in *kirakit-watch*) return 0 ;; *) return 1 ;; esac
+	# The role is the first word after the script that names a role (coder is developer).
+	for word in $args; do
+		if [ -z "$found" ]; then
+			case $word in *kirakit-watch) found=1 ;; esac
+			continue
+		fi
+		case $word in
+		coder | developer) [ "$role" = developer ]; return ;;
+		assistant | analyst) [ "$role" = "$word" ]; return ;;
+		esac
+	done
+	return 1
 }
 # lock_holder LOCK: the process ID that holds LOCK, empty when none.
 lock_holder() {
@@ -246,8 +257,8 @@ check_comments() {
 
 # check_approvals REPOSITORY NUMBER: report the new approving reviews of a pull request the
 # member wrote (assistant and developer), those submitted since the last check: an approval
-# older than the watch, or already reported and since forgotten, is not reported. It fails when the pull
-# request is not hers.
+# older than the watch, or already reported and since forgotten, is not reported. It fails
+# when the pull request is not hers.
 check_approvals() {
 	local repo=$1 number=$2 pr review key since
 	since=$(cat "$state/since" 2>/dev/null || true)
@@ -337,9 +348,10 @@ check_notifications() {
 
 # ready_items: the specifications in Ready, and the issues with no specification in a Ready
 # column, one "REPOSITORY NUMBER URL" per line, sorted. The owners read are the user's login
-# and the owner of every repository with an open issue assigned to the member (the assistant). On a board, a
-# specification is an issue labelled type:feature; an issue with no parent has no
-# specification. A specification on no board of its owner counts when labelled status:ready.
+# and the owner of every repository with an open issue assigned to the member (the
+# assistant). On a board, a specification is an issue labelled type:feature; an issue with no
+# parent has no specification. A specification on no board of its owner counts when labelled
+# status:ready.
 # It fails when a lookup fails, so that a partial list is never taken for the current one. An
 # issue whose parent cannot be read is skipped, or kept when it was in the previous list, so
 # that one unreadable item neither blocks the others nor comes back as new. Board items are

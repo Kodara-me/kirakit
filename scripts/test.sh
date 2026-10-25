@@ -2592,7 +2592,7 @@ check 'fetch: an unknown ref shows could not fetch (#86 R3)' \
 	contains "$tmp/fetch-unknown.out" "could not fetch file://$tmp/remote"
 check 'fetch: an unknown ref installs nothing (#86 R3)' test ! -e "$tmp/unknown"
 
-# --- kirakit-watch (#41 R4, R5, R6, R8, R10; #182 R5, R10, R18, R19) -------------------------
+# --- kirakit-watch (#41 R4, R5, R6, R8, R10; #182 R5, R7, R10, R18, R19) ---------------------
 
 # A fake gh that serves fixtures from $FAKE_GH_DIR, so that no request reaches GitHub:
 #   notifications.json   the notifications; notifications.status (default 200) and
@@ -2940,16 +2940,24 @@ comment Kodara-me_kirakit-7 100 jonathan
 calls_before=$(wc -l <"$watch_dir/calls")
 watch_status=0
 watch_run analyst --once >"$tmp/watch.out" || watch_status=$?
-check 'watch: --once while a check of the same role runs succeeds (#182 R19)' test "$watch_status" -eq 0
+check 'watch: --once while a check of the same role runs succeeds (#182 R7, R19)' test "$watch_status" -eq 0
 check 'watch: it prints nothing (#182 R19)' sh -c 'test ! -s "$1" && test ! -s "$2"' _ "$tmp/watch.out" "$tmp/watch.err"
 check 'watch: it checks nothing (#182 R19)' test "$(wc -l <"$watch_dir/calls")" -eq "$calls_before"
+# A lock of the coder whose process ID is now the analyst's check is taken over.
+mkdir -p "$XDG_STATE_HOME/kirakit/watch-developer"
+ln -sfn "$watch_first" "$XDG_STATE_HOME/kirakit/watch-developer/watch.lock"
+watch_status=0
+rm -f "$tmp/sleep-log"
+watch_run coder >/dev/null || watch_status=$?
+check "watch: a lock held by another role's check is taken over (#182 R19)" \
+	sh -c 'test "$1" -eq 0 && test "$(cat "$2")" = 60' _ "$watch_status" "$tmp/sleep-log"
 rm -f "$tmp/sleep-hold"
 wait "$watch_first" || true
 check 'watch: the lock is released when the check ends (#182 R19)' \
 	sh -c '! ls -A "$1" | grep -q "\.lock"' _ "$XDG_STATE_HOME/kirakit/watch-analyst"
 watch_status=0
 watch_run analyst --once >"$tmp/watch.out" || watch_status=$?
-check 'watch: --once checks again once the check has ended (#182 R19)' \
+check 'watch: --once checks again once the check has ended (#182 R7, R19)' \
 	test "$(cat "$tmp/watch.out")" = 'comment Kodara-me/kirakit#7 https://github.com/Kodara-me/kirakit/issues/7#issuecomment-100'
 
 # A lock left by a check that was killed is taken over (#182 R19).
