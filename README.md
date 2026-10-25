@@ -755,17 +755,19 @@ changes; the color sequences go to the terminal, never to redirected output.
 `konsole --separate --layout`. It uses no D-Bus: Konsole refuses to run commands over D-Bus
 unless its security-sensitive D-Bus API is enabled.
 
-`kirakit-watch ROLE [--once]` is the background check of a member (`assistant`, `analyst` or
-`developer`). It reads the member account's notifications with `If-Modified-Since` (a `304`
-costs nothing) at most every 60 seconds, or less often when GitHub's `X-Poll-Interval` asks,
-and prints one line, `KIND REPOSITORY#NUMBER URL`, per change: a new assignment, a reply of
+`kirakit-watch ROLE [--once]` is the background check of a team account (`assistant`,
+`analyst`, or `coder`, also called `developer`); the lead's session runs one per team account
+in the profile. It reads the account's notifications with `If-Modified-Since` (a `304` costs
+nothing) at most every 60 seconds, or less often when GitHub's `X-Poll-Interval` asks, and
+prints one line, `KIND REPOSITORY#NUMBER URL`, per change: a new assignment, and a reply of
 yours in a thread the member takes part in (a comment of your login, or an unmarked comment of
 a team account posted after the latest marked comment of the thread, see the session marker
-above; never a comment of another account), and, for the developer, an approving review
-of her pull request, and a specification that enters Ready, or an issue with no
-specification that enters a Ready column, once. The boards read are those of your account
-and of the owner of every repository with an open issue assigned to the developer, an
-organization included; a specification on no board of its owner counts when labelled
+above; never a comment of another account). For `assistant` and `coder`, it also reports an
+approving review of a pull request that account wrote. For `assistant` only, it reports a
+specification that enters Ready, or an issue with no specification that enters a Ready
+column, once: the boards read are those of your account and of the owner of every repository
+with an open issue assigned to the assistant's account (each published specification and task
+is), an organization included; a specification on no board of its owner counts when labelled
 `status:ready`. It never looks for tasks: the `next-task` skill chooses one. GitHub does not
 notify an account of its own comments, so the check also reads the threads the member's account
 commented in that changed since the last check (`gh search issues --commenter`). A lookup that
@@ -773,7 +775,10 @@ fails changes nothing and is tried again on the next check. It prints nothing ot
 nothing to GitHub. The member's account comes from the profile (`analyst_github`,
 `coder_github`, `assistant_github`), your login from `gh config get user`. State is kept in
 `${XDG_STATE_HOME:-~/.local/state}/kirakit/watch-ROLE`, so a restart reports nothing twice;
-`--once` checks a single time and exits. It needs `jq`.
+`--once` checks a single time and exits. One check per role runs at a time: a second
+continuous check exits at once with one line on standard error and a non-zero status, and
+`--once` while a check of the same role runs prints nothing, checks nothing and exits
+successfully. A lock left by a check that was killed is taken over. It needs `jq`.
 
 The installer warns when the bin directory is not on your `PATH`, and when another command
 with a launcher's name comes first in it. A shell function or alias of the same name, such

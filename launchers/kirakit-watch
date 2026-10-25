@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # kirakit-watch ROLE [--once]: check GitHub as a team member's account and print one line per
-# change that concerns her role, nothing otherwise.
+# change that concerns her role, nothing otherwise. The lead's session runs one process per team
+# account in the profile.
 #
 # ROLE is assistant, analyst or developer (coder is the same as developer). The member's
 # account comes from the profile ($CLAUDE_CONFIG_DIR/.kirakit-profile, key ROLE_github), or
@@ -10,21 +11,27 @@
 # Sources:
 #   - the account's notifications (participating threads), read with If-Modified-Since, so a
 #     304 costs nothing, and paced by X-Poll-Interval: assignments, comments that wake the
-#     member (the user's replies, see wake_items) and, for the developer, approving reviews of
-#     her pull requests;
+#     member (the user's replies, see wake_items) and, for the assistant and the developer,
+#     approving reviews of the pull requests the account wrote;
 #   - the threads the member's account commented in that changed since the last check, because
 #     GitHub does not notify an account of its own comments (a reply posted from her own
 #     account would never show up in her notifications);
-#   - for the developer only, the specifications that enter Ready, and the issues with no
+#   - for the assistant only (the lead's account, which every published specification and
+#     task is assigned to), the specifications that enter Ready, and the issues with no
 #     specification that enter a Ready column, on the boards of the user and of the owner of
-#     each repository where an open issue is assigned to her; a specification on no board of
-#     its owner counts when labelled status:ready.
-#     Tasks assigned to her are not looked for: the next-task skill chooses the task.
+#     each repository where an open issue is assigned to the assistant's account; a
+#     specification on no board of its owner counts when labelled status:ready.
+#     Tasks are not looked for: the next-task skill chooses the task.
 #
 # Each line is "KIND REPOSITORY#NUMBER URL". State lives in
 # ${XDG_STATE_HOME:-~/.local/state}/kirakit/watch-ROLE, so a restart reports nothing twice.
 # With --once, check a single time and exit (the fallback check); otherwise check every 60
 # seconds, or less often when GitHub asks for it.
+#
+# One check per role at a time: a second continuous check exits at once with one line on
+# standard error and status 1; --once while a check of the same role runs checks nothing,
+# prints nothing and exits successfully. A continuous check started while a --once round runs
+# waits for that round to end.
 #
 # For tests: KIRAKIT_WATCH_SLEEP replaces `sleep`; when it fails, the loop ends.
 set -u
@@ -56,6 +63,69 @@ command -v jq >/dev/null 2>&1 || {
 	exit 1
 }
 
+state=${XDG_STATE_HOME:-$HOME/.local/state}/kirakit/watch-$role
+mkdir -p "$state" || exit 1
+
+# Locks (R19): symbolic links named after the holder's process ID, created atomically by `ln`.
+# watch.lock is held by the continuous check for its whole life, round.lock by every round, so
+# that two rounds of a role never run at once. A lock whose holder is no longer a running
+# kirakit-watch (killed, or its ID reused) is taken over.
+# lock_live PID: whether PID is a running kirakit-watch other than this one.
+lock_live() {
+	local args
+	case $1 in '' | *[!0-9]*) return 1 ;; esac
+	[ "$1" != "$$" ] || return 1
+	kill -0 "$1" 2>/dev/null || return 1
+	args=$(ps -p "$1" -o args= 2>/dev/null) || return 0
+	[ -z "$args" ] && return 0
+	case $args in *kirakit-watch*) return 0 ;; *) return 1 ;; esac
+}
+# lock_holder LOCK: the process ID that holds LOCK, empty when none.
+lock_holder() {
+	readlink "$1" 2>/dev/null || true
+}
+# lock_take LOCK: take LOCK, or fail when a live check holds it. A stale lock is moved aside
+# first, atomically, so that two processes that find it stale never both take it.
+lock_take() {
+	local holder moved aside
+	ln -sn "$$" "$1" 2>/dev/null && return 0
+	holder=$(lock_holder "$1")
+	lock_live "$holder" && return 1
+	aside=$1.stale.$$
+	mv "$1" "$aside" 2>/dev/null || return 1
+	moved=$(lock_holder "$aside")
+	if [ "$moved" != "$holder" ]; then
+		# Another process took the stale lock in between: give it back.
+		ln -sn "$moved" "$1" 2>/dev/null
+		rm -f "$aside"
+		return 1
+	fi
+	rm -f "$aside"
+	ln -sn "$$" "$1" 2>/dev/null
+}
+# lock_release LOCK: release LOCK when this process holds it.
+lock_release() {
+	[ "$(lock_holder "$1")" != "$$" ] || rm -f "$1"
+}
+sleeping=
+release_locks() {
+	[ -z "$sleeping" ] || kill "$sleeping" 2>/dev/null
+	lock_release "$state/round.lock"
+	lock_release "$state/watch.lock"
+}
+trap release_locks EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
+trap 'exit 129' HUP
+
+if [ -n "$once" ]; then
+	lock_live "$(lock_holder "$state/watch.lock")" && exit 0
+	lock_take "$state/round.lock" || exit 0
+elif ! lock_take "$state/watch.lock"; then
+	printf 'kirakit-watch: a %s check is already running (process %s)\n' "$role" "$(lock_holder "$state/watch.lock")" >&2
+	exit 1
+fi
+
 config_dir=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
 profile_key=$role
 [ "$role" != developer ] || profile_key=coder
@@ -81,8 +151,6 @@ user=${KIRAKIT_USER-}
 	exit 1
 }
 
-state=${XDG_STATE_HOME:-$HOME/.local/state}/kirakit/watch-$role
-mkdir -p "$state" || exit 1
 poll_interval=$min_interval
 notifications_status=
 first_round=
@@ -127,7 +195,7 @@ each_item() {
 # account, it carries no session marker (<!-- kirakit:ROLE -->), and it was posted after the
 # latest comment carrying one in the same thread. An account outside the team never counts.
 # Items have kind, id, login, body, at (a timestamp, possibly empty) and state, url. A review
-# of a team account counts by its body only; an approval of the developer's own pull request is
+# of a team account counts by its body only; an approval of the member's own pull request is
 # check_approvals' business (OWN set). Items older than SINCE are skipped.
 wake_items() {
 	jq -r --arg user "$user" --arg team "$team" --arg since "$1" --arg own "$2" '
@@ -149,7 +217,7 @@ wake_items() {
 
 # check_comments REPOSITORY NUMBER TYPE [OWN]: report the new comments of a thread that wake
 # the member: the comments of the issue or pull request and, on a pull request, its review
-# comments and the bodies of its reviews. OWN is set for a pull request of the developer,
+# comments and the bodies of its reviews. OWN is set for a pull request of the member,
 # whose approvals check_approvals reports instead. The whole thread is read, since the latest
 # marked comment may be older than the last check.
 check_comments() {
@@ -177,8 +245,8 @@ check_comments() {
 }
 
 # check_approvals REPOSITORY NUMBER: report the new approving reviews of a pull request the
-# member wrote (developer only), those submitted since the last check: an approval older than
-# the watch, or already reported and since forgotten, is not reported. It fails when the pull
+# member wrote (assistant and developer), those submitted since the last check: an approval
+# older than the watch, or already reported and since forgotten, is not reported. It fails when the pull
 # request is not hers.
 check_approvals() {
 	local repo=$1 number=$2 pr review key since
@@ -211,13 +279,13 @@ check_assignment() {
 	[ -n "$first_round" ] || report assigned "$1" "$2" "$3"
 }
 
-# check_thread REPOSITORY NUMBER TYPE: the approvals (developer only) and the comments of a
-# thread, once per round.
+# check_thread REPOSITORY NUMBER TYPE: the approvals (assistant and developer) and the
+# comments of a thread, once per round.
 check_thread() {
 	local own=
 	case " $round_threads " in *" $1#$2 "*) return 0 ;; esac
 	round_threads+=" $1#$2"
-	if [ "$role" = developer ] && [ "$3" = PullRequest ]; then
+	if [ "$role" != analyst ] && [ "$3" = PullRequest ]; then
 		check_approvals "$1" "$2" && own=1
 	fi
 	check_comments "$1" "$2" "$3" "$own"
@@ -269,7 +337,7 @@ check_notifications() {
 
 # ready_items: the specifications in Ready, and the issues with no specification in a Ready
 # column, one "REPOSITORY NUMBER URL" per line, sorted. The owners read are the user's login
-# and the owner of every repository with an open issue assigned to the member. On a board, a
+# and the owner of every repository with an open issue assigned to the member (the assistant). On a board, a
 # specification is an issue labelled type:feature; an issue with no parent has no
 # specification. A specification on no board of its owner counts when labelled status:ready.
 # It fails when a lookup fails, so that a partial list is never taken for the current one. An
@@ -354,7 +422,7 @@ check() {
 	round_threads=
 	check_notifications
 	check_own_threads
-	[ "$role" != developer ] || check_ready
+	[ "$role" != assistant ] || check_ready
 	case $notifications_status in
 	200 | 304) minute_ago >"$state/since" ;;
 	esac
@@ -370,6 +438,13 @@ if [ -n "$once" ]; then
 fi
 sleeper=${KIRAKIT_WATCH_SLEEP:-sleep}
 while :; do
+	# Wait for a --once round that runs, then hold the round for this check.
+	until lock_take "$state/round.lock"; do sleep 1; done
 	check
-	"$sleeper" "$poll_interval" || exit 0
+	lock_release "$state/round.lock"
+	# In the background, so that a signal ends the check at once, with its locks.
+	"$sleeper" "$poll_interval" &
+	sleeping=$!
+	wait "$sleeping" || exit 0
+	sleeping=
 done

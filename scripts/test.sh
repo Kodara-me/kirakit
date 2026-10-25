@@ -2592,7 +2592,7 @@ check 'fetch: an unknown ref shows could not fetch (#86 R3)' \
 	contains "$tmp/fetch-unknown.out" "could not fetch file://$tmp/remote"
 check 'fetch: an unknown ref installs nothing (#86 R3)' test ! -e "$tmp/unknown"
 
-# --- kirakit-watch (#41 R4, R5, R6, R8, R10) ----------------------------------------------
+# --- kirakit-watch (#41 R4, R5, R6, R8, R10; #182 R5, R10, R18, R19) -------------------------
 
 # A fake gh that serves fixtures from $FAKE_GH_DIR, so that no request reaches GitHub:
 #   notifications.json   the notifications; notifications.status (default 200) and
@@ -2607,7 +2607,8 @@ check 'fetch: an unknown ref installs nothing (#86 R3)' test ! -e "$tmp/unknown"
 #   projects-OWNER.json, items-OWNER-N.json   `gh project list` and `gh project item-list`
 #   parent-REPO-N.json   `gh issue view N --repo REPO --json parent` (default: no parent);
 #                        the call fails when parent-REPO-N.fail exists
-# `gh search` fails when search.fail exists, `gh project` when project.fail exists.
+# `gh search` fails when search.fail exists, `gh project` when project.fail exists. While
+# gh.block exists, the notifications call waits, after creating gh.blocked.
 # Every call is appended to $FAKE_GH_DIR/calls.
 watchbin=$tmp/watchbin
 mkdir -p "$watchbin"
@@ -2660,6 +2661,11 @@ pr)
 	cat "$d/pr-$n.json" ;;
 api)
 	if [ "$2" = -i ]; then
+		if [ -f "$d/gh.block" ]; then
+			: >"$d/gh.blocked"
+			i=0
+			while [ -f "$d/gh.block" ] && [ $i -lt 200 ]; do sleep 0.1; i=$((i + 1)); done
+		fi
 		status=$(cat "$d/notifications.status" 2>/dev/null || echo 200)
 		case $status in 304) text='Not Modified' ;; *) text=OK ;; esac
 		printf 'HTTP/2.0 %s %s\r\n' "$status" "$text"
@@ -2682,7 +2688,7 @@ api)
 esac
 FAKE
 chmod +x "$watchbin/gh"
-for tool in bash cat date dirname grep head jq mkdir mv printf rm sed sort tail tr wc; do
+for tool in bash cat date dirname grep head jq ln mkdir mv printf ps readlink rm sed sleep sort tail tr wc; do
 	ln -sf "$(command -v "$tool")" "$watchbin/$tool"
 done
 
@@ -2695,9 +2701,15 @@ watch_reset() {
 	mkdir -p "$watch_dir"
 	echo '[]' >"$watch_dir/notifications.json"
 }
-# watch ROLE [ARGS...]: a single check, with the fake gh only.
+# watch ROLE [ARGS...]: a single check as cleo-kodara, with the fake gh only.
 watch() {
-	env -u GH_TOKEN PATH="$watchbin" FAKE_GH_DIR="$watch_dir" KIRAKIT_WATCH_ACCOUNT=cleo-kodara KIRAKIT_USER=jonathan \
+	watch_as cleo-kodara "$@"
+}
+# watch_as ACCOUNT ROLE [ARGS...]: the same, as ACCOUNT.
+watch_as() {
+	watch_account=$1
+	shift
+	env -u GH_TOKEN PATH="$watchbin" FAKE_GH_DIR="$watch_dir" KIRAKIT_WATCH_ACCOUNT="$watch_account" KIRAKIT_USER=jonathan \
 		"$root/launchers/kirakit-watch" "$@" --once 2>/dev/null
 }
 # notification REASON TYPE NUMBER [UPDATED_AT]: a notification of Kodara-me/kirakit.
@@ -2866,6 +2878,140 @@ notification mention Issue 9
 echo '[{"id": 304, "user": {"login": "jonathan"}, "html_url": "x"}]' >"$watch_dir/comments-Kodara-me_kirakit-9-pr.json"
 check 'watch: an issue has no review comments (#41 R5)' test -z "$(watch developer)"
 
+# The approvals of the lead's own pull requests go to the assistant's check, those of the
+# coder's to the coder's (#182 R5).
+watch_reset
+notification author PullRequest 9
+echo '{"number": 9, "author": {"login": "kira-kodara"}, "url": "https://github.com/Kodara-me/kirakit/pull/9", "reviews": [{"id": "R7", "state": "APPROVED", "submittedAt": "2999-01-01T00:00:00Z"}]}' \
+	>"$watch_dir/pr-9.json"
+check "watch: an approval of the assistant's pull request gives one line to the assistant (#182 R5)" \
+	test "$(watch_as kira-kodara assistant)" = 'approved Kodara-me/kirakit#9 https://github.com/Kodara-me/kirakit/pull/9'
+check 'watch: it is reported once (#182 R5)' test -z "$(watch_as kira-kodara assistant)"
+watch_reset
+notification review_requested PullRequest 9
+echo '{"number": 9, "author": {"login": "cleo-kodara"}, "url": "https://github.com/Kodara-me/kirakit/pull/9", "reviews": [{"id": "R8", "state": "APPROVED", "submittedAt": "2999-01-01T00:00:00Z"}]}' \
+	>"$watch_dir/pr-9.json"
+check "watch: an approval of the coder's pull request is still reported by the coder (#182 R5)" \
+	test "$(watch coder)" = 'approved Kodara-me/kirakit#9 https://github.com/Kodara-me/kirakit/pull/9'
+check "watch: it is not an approval of the assistant's own (#182 R5)" \
+	test -z "$(watch_as kira-kodara assistant)"
+
+# One check per role at a time (#182 R19).
+# hold_sleep: a sleep that creates FAKE_SLEEP_MARK, then waits while FAKE_SLEEP_HOLD exists
+# (20 seconds at most), and ends the loop.
+holdsleep=$tmp/holdsleep
+printf '%s\n' '#!/bin/sh' ': >"$FAKE_SLEEP_MARK"' 'i=0' \
+	'while [ -f "$FAKE_SLEEP_HOLD" ] && [ $i -lt 200 ]; do sleep 0.1; i=$((i + 1)); done' 'exit 1' >"$holdsleep"
+chmod +x "$holdsleep"
+# watch_run ROLE [ARGS...]: one kirakit-watch, its output on stdout, its errors in watch.err.
+watch_run() {
+	env -u GH_TOKEN PATH="$watchbin" FAKE_GH_DIR="$watch_dir" KIRAKIT_WATCH_ACCOUNT=cleo-kodara KIRAKIT_USER=jonathan \
+		KIRAKIT_WATCH_SLEEP="$fakesleep" FAKE_SLEEP_LOG="$tmp/sleep-log" \
+		"$root/launchers/kirakit-watch" "$@" 2>"$tmp/watch.err"
+}
+# wait_for FILE: wait until FILE exists, 20 seconds at most.
+wait_for() {
+	wait_i=0
+	while [ ! -e "$1" ] && [ $wait_i -lt 200 ]; do sleep 0.1; wait_i=$((wait_i + 1)); done
+	[ -e "$1" ]
+}
+watch_reset
+rm -f "$tmp/sleep-mark"
+: >"$tmp/sleep-hold"
+env -u GH_TOKEN PATH="$watchbin" FAKE_GH_DIR="$watch_dir" KIRAKIT_WATCH_ACCOUNT=cleo-kodara KIRAKIT_USER=jonathan \
+	KIRAKIT_WATCH_SLEEP="$holdsleep" FAKE_SLEEP_MARK="$tmp/sleep-mark" FAKE_SLEEP_HOLD="$tmp/sleep-hold" \
+	"$root/launchers/kirakit-watch" analyst >/dev/null 2>&1 &
+watch_first=$!
+wait_for "$tmp/sleep-mark" || true
+watch_status=0
+watch_run analyst >"$tmp/watch.out" || watch_status=$?
+check 'watch: a second continuous check of the same role fails (#182 R19)' test "$watch_status" -ne 0
+check 'watch: it prints nothing on standard output (#182 R19)' test ! -s "$tmp/watch.out"
+check 'watch: it says so in one line on standard error (#182 R19)' \
+	sh -c 'test "$(wc -l <"$1")" -eq 1 && grep -q "already running" "$1"' _ "$tmp/watch.err"
+watch_status=0
+rm -f "$tmp/sleep-log"
+watch_run coder >/dev/null || watch_status=$?
+check 'watch: a continuous check of another role starts (#182 R19)' \
+	sh -c 'test "$1" -eq 0 && test "$(cat "$2")" = 60' _ "$watch_status" "$tmp/sleep-log"
+# A user's comment that a check would report: --once must not look.
+notification mention Issue 7
+comment Kodara-me_kirakit-7 100 jonathan
+calls_before=$(wc -l <"$watch_dir/calls")
+watch_status=0
+watch_run analyst --once >"$tmp/watch.out" || watch_status=$?
+check 'watch: --once while a check of the same role runs succeeds (#182 R19)' test "$watch_status" -eq 0
+check 'watch: it prints nothing (#182 R19)' sh -c 'test ! -s "$1" && test ! -s "$2"' _ "$tmp/watch.out" "$tmp/watch.err"
+check 'watch: it checks nothing (#182 R19)' test "$(wc -l <"$watch_dir/calls")" -eq "$calls_before"
+rm -f "$tmp/sleep-hold"
+wait "$watch_first" || true
+check 'watch: the lock is released when the check ends (#182 R19)' \
+	sh -c '! ls -A "$1" | grep -q "\.lock"' _ "$XDG_STATE_HOME/kirakit/watch-analyst"
+watch_status=0
+watch_run analyst --once >"$tmp/watch.out" || watch_status=$?
+check 'watch: --once checks again once the check has ended (#182 R19)' \
+	test "$(cat "$tmp/watch.out")" = 'comment Kodara-me/kirakit#7 https://github.com/Kodara-me/kirakit/issues/7#issuecomment-100'
+
+# A lock left by a check that was killed is taken over (#182 R19).
+watch_reset
+mkdir -p "$XDG_STATE_HOME/kirakit/watch-analyst"
+sh -c 'exit 0' &
+dead_pid=$!
+wait "$dead_pid"
+ln -s "$dead_pid" "$XDG_STATE_HOME/kirakit/watch-analyst/watch.lock"
+ln -s "$dead_pid" "$XDG_STATE_HOME/kirakit/watch-analyst/round.lock"
+watch_status=0
+rm -f "$tmp/sleep-log"
+watch_run analyst >/dev/null || watch_status=$?
+check 'watch: a lock of a check that no longer runs is taken over (#182 R19)' \
+	sh -c 'test "$1" -eq 0 && test "$(cat "$2")" = 60' _ "$watch_status" "$tmp/sleep-log"
+# A lock held by a process that is not kirakit-watch (a reused process ID) is taken over too.
+ln -s "$$" "$XDG_STATE_HOME/kirakit/watch-analyst/watch.lock"
+watch_status=0
+rm -f "$tmp/sleep-log"
+watch_run analyst >/dev/null || watch_status=$?
+check 'watch: a lock whose process ID was reused is taken over (#182 R19)' \
+	sh -c 'test "$1" -eq 0 && test "$(cat "$2")" = 60' _ "$watch_status" "$tmp/sleep-log"
+
+# A --once round that runs: another --once checks nothing, a continuous check waits for it.
+watch_reset
+: >"$watch_dir/gh.block"
+env -u GH_TOKEN PATH="$watchbin" FAKE_GH_DIR="$watch_dir" KIRAKIT_WATCH_ACCOUNT=cleo-kodara KIRAKIT_USER=jonathan \
+	"$root/launchers/kirakit-watch" analyst --once >/dev/null 2>&1 &
+watch_first=$!
+wait_for "$watch_dir/gh.blocked" || true
+calls_before=$(wc -l <"$watch_dir/calls")
+watch_status=0
+watch_run analyst --once >"$tmp/watch.out" || watch_status=$?
+check 'watch: --once while a --once round runs prints nothing and succeeds (#182 R19)' \
+	sh -c 'test "$1" -eq 0 && test ! -s "$2" && test ! -s "$3"' _ "$watch_status" "$tmp/watch.out" "$tmp/watch.err"
+check 'watch: it checks nothing (#182 R19)' test "$(wc -l <"$watch_dir/calls")" -eq "$calls_before"
+rm -f "$tmp/sleep-log"
+watch_run analyst >/dev/null &
+watch_second=$!
+sleep 1
+check 'watch: a continuous check waits for a --once round (#182 R19)' test ! -e "$tmp/sleep-log"
+rm -f "$watch_dir/gh.block"
+wait "$watch_first" || true
+watch_status=0
+wait "$watch_second" || watch_status=$?
+check 'watch: then it starts (#182 R19)' sh -c 'test "$1" -eq 0 && test "$(cat "$2")" = 60' _ "$watch_status" "$tmp/sleep-log"
+
+# A signal ends a continuous check at once, during its wait, and releases its lock (#182 R19).
+watch_reset
+rm -f "$tmp/sleep-mark"
+: >"$tmp/sleep-hold"
+env -u GH_TOKEN PATH="$watchbin" FAKE_GH_DIR="$watch_dir" KIRAKIT_WATCH_ACCOUNT=cleo-kodara KIRAKIT_USER=jonathan \
+	KIRAKIT_WATCH_SLEEP="$holdsleep" FAKE_SLEEP_MARK="$tmp/sleep-mark" FAKE_SLEEP_HOLD="$tmp/sleep-hold" \
+	"$root/launchers/kirakit-watch" analyst >/dev/null 2>&1 &
+watch_first=$!
+wait_for "$tmp/sleep-mark" || true
+kill "$watch_first"
+wait "$watch_first" 2>/dev/null || true
+check 'watch: a stopped check releases its lock at once (#182 R19)' \
+	test ! -e "$XDG_STATE_HOME/kirakit/watch-analyst/watch.lock"
+rm -f "$tmp/sleep-hold"
+
 # `since` moves forward only after GitHub answered (#41 R5).
 watch_reset
 watch analyst >/dev/null
@@ -2938,67 +3084,76 @@ spec37='ready Kodara-me/kirakit#37 https://github.com/Kodara-me/kirakit/issues/3
 
 watch_reset
 board jonathan "[$(item Ready jonathan/other 37 type:feature)]"
-check "watch: a specification moved to Ready on a board gives one line (#41 R10)" \
-	test "$(watch developer)" = 'ready jonathan/other#37 https://github.com/jonathan/other/issues/37'
+check "watch: a specification moved to Ready on a board gives one line to the assistant (#182 R10)" \
+	test "$(watch assistant)" = 'ready jonathan/other#37 https://github.com/jonathan/other/issues/37'
 check 'watch: a Ready specification gives nothing to the analyst (#41 R10)' test -z "$(watch analyst)"
-check 'watch: a Ready specification gives nothing to the assistant (#41 R10)' test -z "$(watch assistant)"
+rm -f "$watch_dir/calls"
+check 'watch: a Ready specification gives nothing to the coder (#182 R10)' test -z "$(watch coder)"
+check 'watch: nor to the developer alias (#182 R10)' test -z "$(watch developer)"
+check 'watch: the coder runs no Ready lookup (#182 R10)' sh -c '! grep -q "^project " "$1"' _ "$watch_dir/calls"
 
 watch_reset
 echo '[{"repository": {"nameWithOwner": "Kodara-me/kirakit"}}]' >"$watch_dir/assigned.json"
 board Kodara-me "[$(item Ready Kodara-me/kirakit 37 type:feature)]"
 check "watch: a specification in Ready on an organization's board gives one line (#41 R18)" \
-	test "$(watch developer)" = "$spec37"
-check 'watch: a specification already reported gives nothing after a restart (#41 R10)' test -z "$(watch developer)"
+	test "$(watch_as kira-kodara assistant)" = "$spec37"
+check "watch: the owners come from the issues assigned to the assistant's account (#182 R18)" \
+	grep -qx -- 'search issues --assignee kira-kodara --state open --limit 1000 --json repository' "$watch_dir/calls"
+check "watch: the boards of the user are read (#182 R18)" grep -qx -- 'project list --owner jonathan --format json' "$watch_dir/calls"
+check "watch: the boards of the owner of an assigned issue are read (#182 R18)" \
+	grep -qx -- 'project list --owner Kodara-me --format json' "$watch_dir/calls"
+check 'watch: no other board is read (#182 R18)' test "$(grep -c '^project list' "$watch_dir/calls")" = 2
+check 'watch: a specification already reported gives nothing after a restart (#41 R10)' test -z "$(watch assistant)"
 board Kodara-me "[$(item 'In progress' Kodara-me/kirakit 37 type:feature)]"
-check 'watch: a specification leaving Ready gives nothing (#41 R10)' test -z "$(watch developer)"
+check 'watch: a specification leaving Ready gives nothing (#41 R10)' test -z "$(watch assistant)"
 board Kodara-me "[$(item Ready Kodara-me/kirakit 37 type:feature)]"
-check 'watch: a specification back in Ready gives one line (#41 R10)' test "$(watch developer)" = "$spec37"
+check 'watch: a specification back in Ready gives one line (#41 R10)' test "$(watch assistant)" = "$spec37"
 # A failed lookup keeps the previous state (#41 R10).
 board Kodara-me "[$(item Ready Kodara-me/kirakit 37 type:feature), $(item Ready Kodara-me/kirakit 38 type:feature)]"
 touch "$watch_dir/project.fail"
-check 'watch: a failed board lookup gives nothing (#41 R10)' test -z "$(watch developer)"
+check 'watch: a failed board lookup gives nothing (#41 R10)' test -z "$(watch assistant)"
 check 'watch: a failed board lookup keeps the previous state (#41 R10)' \
-	test "$(cat "$XDG_STATE_HOME/kirakit/watch-developer/ready")" = 'Kodara-me/kirakit 37 https://github.com/Kodara-me/kirakit/issues/37'
+	test "$(cat "$XDG_STATE_HOME/kirakit/watch-assistant/ready")" = 'Kodara-me/kirakit 37 https://github.com/Kodara-me/kirakit/issues/37'
 rm "$watch_dir/project.fail"
 touch "$watch_dir/search.fail"
-check 'watch: a failed search gives nothing (#41 R10)' test -z "$(watch developer)"
+check 'watch: a failed search gives nothing (#41 R10)' test -z "$(watch assistant)"
 rm "$watch_dir/search.fail"
 check 'watch: the next good check reports only what is new (#41 R10)' \
-	test "$(watch developer)" = 'ready Kodara-me/kirakit#38 https://github.com/Kodara-me/kirakit/issues/38'
+	test "$(watch assistant)" = 'ready Kodara-me/kirakit#38 https://github.com/Kodara-me/kirakit/issues/38'
 
 watch_reset
 echo '[{"repository": {"nameWithOwner": "Kodara-me/kirakit"}, "number": 37, "url": "https://github.com/Kodara-me/kirakit/issues/37"}]' \
 	>"$watch_dir/search-jonathan.json"
 check 'watch: a specification labelled status:ready in a repository with no board gives one line (#41 R10)' \
-	test "$(watch developer)" = "$spec37"
+	test "$(watch assistant)" = "$spec37"
 watch_reset
 echo '[{"repository": {"nameWithOwner": "Kodara-me/kirakit"}, "number": 37, "url": "https://github.com/Kodara-me/kirakit/issues/37"}]' \
 	>"$watch_dir/search-jonathan.json"
 board jonathan "[$(item Backlog Kodara-me/kirakit 37 type:feature)]"
-check 'watch: a labelled specification on a board where it is not Ready gives nothing (#41 R10)' test -z "$(watch developer)"
+check 'watch: a labelled specification on a board where it is not Ready gives nothing (#41 R10)' test -z "$(watch assistant)"
 
 watch_reset
 board jonathan "[$(item Ready Kodara-me/kirakit 50)]"
 check 'watch: an issue with no specification moved to Ready gives one line (#41 R10)' \
-	test "$(watch developer)" = 'ready Kodara-me/kirakit#50 https://github.com/Kodara-me/kirakit/issues/50'
+	test "$(watch assistant)" = 'ready Kodara-me/kirakit#50 https://github.com/Kodara-me/kirakit/issues/50'
 # An issue whose parent cannot be read is skipped without blocking the others, and one already
 # reported is kept (#41 R10).
 board jonathan "[$(item Ready Kodara-me/kirakit 50), $(item Ready Kodara-me/kirakit 51), $(item Ready Kodara-me/kirakit 52 type:feature)]"
 touch "$watch_dir/parent-Kodara-me_kirakit-50.fail" "$watch_dir/parent-Kodara-me_kirakit-51.fail"
 check 'watch: an unreadable issue does not block the Ready lookup (#41 R10)' \
-	test "$(watch developer)" = 'ready Kodara-me/kirakit#52 https://github.com/Kodara-me/kirakit/issues/52'
+	test "$(watch assistant)" = 'ready Kodara-me/kirakit#52 https://github.com/Kodara-me/kirakit/issues/52'
 rm "$watch_dir/parent-Kodara-me_kirakit-50.fail" "$watch_dir/parent-Kodara-me_kirakit-51.fail"
 check 'watch: an unreadable issue already reported is kept, a new one is reported once readable (#41 R10)' \
-	test "$(watch developer)" = 'ready Kodara-me/kirakit#51 https://github.com/Kodara-me/kirakit/issues/51'
+	test "$(watch assistant)" = 'ready Kodara-me/kirakit#51 https://github.com/Kodara-me/kirakit/issues/51'
 
-# Tasks assigned to the developer are never looked for (#41 R10).
+# Tasks assigned to the lead's account are never looked for (#41 R10).
 watch_reset
 echo '[{"repository": {"nameWithOwner": "Kodara-me/kirakit"}, "number": 41, "url": "https://github.com/Kodara-me/kirakit/issues/41"}]' \
 	>"$watch_dir/assigned.json"
 echo '{"parent": {"number": 37}}' >"$watch_dir/parent-Kodara-me_kirakit-41.json"
 echo '{"parent": {"number": 37}}' >"$watch_dir/parent-Kodara-me_kirakit-42.json"
 board Kodara-me "[$(item Backlog Kodara-me/kirakit 41), $(item Ready Kodara-me/kirakit 42)]"
-check 'watch: a task assigned to the developer, in Backlog or in Ready, gives nothing (#41 R10)' test -z "$(watch developer)"
+check "watch: a task assigned to the lead's account, in Backlog or in Ready, gives nothing (#41 R10)" test -z "$(watch assistant)"
 
 # Every repository of the notifications is watched, not only the current directory's (#41 R8).
 watch_reset
