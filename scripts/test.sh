@@ -1144,8 +1144,8 @@ check 'marker: README says approvals count only from your account (#38 R7)' sh -
 expected_model() {
 	case $1 in
 	iris | kira | idea | spec | review-pr | review-spec) echo opus ;;
-	cleo | next-task | diffv | pull-request) echo sonnet ;;
-	board-status | test | pull | push | commit | assistant-commit | watch) echo haiku ;;
+	cleo | next-task | diffv | pull-request | watch) echo sonnet ;;
+	board-status | test | pull | push | commit | assistant-commit) echo haiku ;;
 	esac
 }
 # forked NAME: whether the skill runs in a forked context.
@@ -3252,14 +3252,18 @@ $shell "$root/scripts/build.sh" -o "$tmp/watch-lead" --assistant-github kira-bot
 $shell "$root/scripts/build.sh" -o "$tmp/watch-analyst" --analyst --analyst-github iris-bot --assistant-github kira-bot >/dev/null
 $shell "$root/scripts/build.sh" -o "$tmp/watch-coder" --coder 'Cleo <cleo@example.com>' --coder-github cleo-bot --assistant-github kira-bot >/dev/null
 $shell "$root/scripts/build.sh" -o "$tmp/watch-nolead" --analyst --analyst-github iris-bot --coder 'Cleo <cleo@example.com>' --coder-github cleo-bot >/dev/null
+$shell "$root/scripts/build.sh" -o "$tmp/watch-complete" --coder 'Cleo <cleo@example.com>' --coder-github cleo-bot --assistant-github kira-bot --complete-approved-prs >/dev/null
 watch_full=$tmp/mention-full/skills/watch/SKILL.md
+check 'watch: completion without the user only with --complete-approved-prs (#43 R11)' sh -c '! grep -q "completes it without the user\|completes without the user\|without the user" "$1" && ! grep -q "without the user" "$2" && grep -q "The one other case is a pull request of the coder that the lead completes without the user" "$3"' _ "$watch_full" "$tmp/watch-coder/skills/watch/SKILL.md" "$tmp/watch-complete/skills/watch/SKILL.md"
+check 'watch: a second check line reaches the monitor (#43 R19)' contains "$watch_full" 'kirakit-watch ROLE 2>&1 | awk'
+check 'watch: merge follows the workspace rules (#43 R11)' flat_has "$watch_full" 'Merge as the workspace rules describe (fast-forward only'
 check 'watch: not built without the assistant account (#43)' sh -c '! test -e "$1/skills/watch" && ! test -e "$2/skills/watch"' _ "$tmp/watch-nolead" "$tmp/build2"
 check 'watch: built with the assistant account (#43)' test -f "$tmp/watch-lead/skills/watch/SKILL.md"
 check 'watch: three checks with an analyst and a coder (#43)' sh -c 'test "$(grep -c "^| \`[a-z]*\` | \`[a-z-]*\` |\$" "$1")" -eq 3 && grep -qF "kirakit-watch assistant --once" "$1" && grep -qF "kirakit-watch analyst --once" "$1" && grep -qF "kirakit-watch coder --once" "$1"' _ "$watch_full"
 check 'watch: only the assistant check alone (#43)' sh -c 'test "$(grep -c "^| \`[a-z]*\` | \`[a-z-]*\` |\$" "$1")" -eq 1 && ! grep -q "kirakit-watch analyst\|kirakit-watch coder\|iris\|cleo" "$1"' _ "$tmp/watch-lead/skills/watch/SKILL.md"
 check 'watch: assistant and analyst checks, no coder (#43)' sh -c 'test "$(grep -c "^| \`[a-z]*\` | \`[a-z-]*\` |\$" "$1")" -eq 2 && ! grep -q "kirakit-watch coder\|cleo" "$1"' _ "$tmp/watch-analyst/skills/watch/SKILL.md"
 check 'watch: assistant and coder checks, no analyst (#43)' sh -c 'test "$(grep -c "^| \`[a-z]*\` | \`[a-z-]*\` |\$" "$1")" -eq 2 && ! grep -q "kirakit-watch analyst\|iris" "$1"' _ "$tmp/watch-coder/skills/watch/SKILL.md"
-check 'watch: Monitor tool, a line wakes the model (#43)' flat_has "$watch_full" 'With the Monitor tool, one persistent monitor per row' 'The model wakes up only when a line is printed.'
+check 'watch: Monitor tool, a line wakes the model (#43 R5)' flat_has "$watch_full" 'With the Monitor tool, one persistent monitor per row' 'The model wakes up only when a line is printed.'
 check 'watch: /loop 10m fallback with --once (#43 R7)' flat_has "$watch_full" 'With `/loop 10m`, run the fallback' 'never runs more often than every 10 minutes'
 check 'watch: a check already running is left alone (#43 R19)' flat_has "$watch_full" 'is already running' 'do not start it again, and do not kill the other one'
 check 'watch: lead session only (#43 R17)' flat_has "$watch_full" 'Run this skill only there' 'do nothing and say so in one line'

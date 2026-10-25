@@ -821,8 +821,8 @@ The launchers are not supported on Windows: `get-kira.ps1` prints a notice and i
 `claude/skills/` holds Claude Code skills, one directory per skill with its `SKILL.md`:
 `assistant-commit`, `board-status`, `commit`, `diffv`, `idea`, `next-task`, `pull`,
 `pull-request`, `push`, `review-pr` (with a coder), `review-spec` (with
-`--start-verified-specs`), `spec`, `test` and `watch` (with the assistant's GitHub account). They answer
-in the profile's language; `commit` and `assistant-commit` follow the git rules in
+`--start-verified-specs`), `spec`, `test` and `watch` (with the assistant's GitHub account).
+They answer in the profile's language; `commit` and `assistant-commit` follow the git rules in
 `claude/rules/git.md` (see [Who commits](#who-commits)). Other skills already in
 `$CLAUDE_CONFIG_DIR/skills/` are left untouched. Agents in `claude/agents/` are installed the
 same way.
@@ -852,7 +852,7 @@ when a member invokes it herself, it runs on her model.
 | `idea` | Captures an idea as an issue | opus | inline |
 | `spec` | Turns an idea into a specification and its tasks | opus | inline |
 | `pull-request` | Writes and opens the pull request of a task | sonnet | inline |
-| `watch` | Starts the lead's background checks of GitHub and dispatches what they report (with the assistant's GitHub account) | haiku | inline |
+| `watch` | Starts the lead's background checks of GitHub and dispatches what they report (with the assistant's GitHub account) | sonnet | inline |
 | `review-pr` | Reviews a pull request of the coder and returns a verdict | opus | forked |
 | `review-spec` | Verifies a specification of the analyst and returns a verdict (with `--start-verified-specs`) | opus | forked |
 | `iris` (skill) | Lets you talk to Iris directly (`/iris`) | opus | forked |

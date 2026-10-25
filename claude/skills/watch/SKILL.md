@@ -2,7 +2,7 @@
 ---
 name: watch
 description: Starts the lead's background checks of GitHub, one `kirakit-watch` per team account, and dispatches what they report to the team's members. Use only in the lead's session, at its start (the `assistant` launcher runs it) or when the checks stopped.
-model: haiku
+model: sonnet
 ---
 
 # Watch
@@ -34,7 +34,7 @@ every line, so that a line tells which account reported it:
    running:
 
    ```
-   kirakit-watch ROLE | awk '{ print "ROLE " $0; fflush() }'
+   kirakit-watch ROLE 2>&1 | awk '{ print "ROLE " $0; fflush() }'
    ```
 
    The model wakes up only when a line is printed. When a monitor answers that a check of
@@ -111,16 +111,20 @@ Then dispatch by kind and role:
 {{#coder_github}}
 - **`approved`, or a `review` of the user, on a pull request of the coder or of the lead**:
   merge only under the merge rule. Read `gh pr view N --json reviews,commits`: merge when the
-  user's own latest review is an approval submitted after the last commit, or, for a pull
-  request of the coder, when the lead completes it without the user under `rules/team.md`.
+  user's own latest review is an approval submitted after the last commit.
+{{#complete_approved_prs}}
+  The one other case is a pull request of the coder that the lead completes without the user
+  under `rules/team.md`.
+{{/complete_approved_prs}}
 {{/coder_github}}
 {{^coder_github}}
 - **`approved`, or a `review` of the user, on a pull request of the lead**: merge only under
   the merge rule. Read `gh pr view N --json reviews,commits`: merge when the user's own latest
   review is an approval submitted after the last commit.
 {{/coder_github}}
-  Never on `reviewDecision`, never on the lead's own approval, and never on a review posted
-  from a team account. When the condition does not hold, merge nothing and write nothing. A
+  Merge as the workspace rules describe (fast-forward only, branches deleted, board moves, a
+  rebase by the writer when `main` moved). Never on `reviewDecision`, never on the lead's own
+  approval, and never on a review posted from a team account. When the condition does not hold, merge nothing and write nothing. A
   pull request the lead wrote itself waits for the user's own approval.
 {{#coder_github}}
   When the user requested changes on a pull request of the coder, hand it back to the `cleo`
