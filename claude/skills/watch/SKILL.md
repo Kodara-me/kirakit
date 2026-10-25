@@ -67,9 +67,10 @@ A line is `ROLE KIND REPOSITORY#NUMBER URL`, where KIND is `comment`, `review-co
 
 **Once per change.** Keep, for this session, the URLs of the comments and reviews already
 handled, and skip a `comment`, `review-comment` or `review` line whose URL is in it, whichever
-account reported it: one change can reach the checks of several accounts. The other kinds point at an issue or a pull request, not at one
-event: for `approved`, `assigned` and `ready`, read the state on GitHub first (below) and act
-only if it still calls for it, so that a second line for the same change finds nothing to do.
+account reported it: one change can reach the checks of several accounts. The other kinds
+point at an issue or a pull request, not at one event: for `approved`, `assigned` and `ready`,
+read the state on GitHub first (below) and act only if it still calls for it, so that a second
+line for the same change finds nothing to do.
 
 **Read before acting.** Every `gh` command of this skill, reads included, is prefixed with
 `GH_TOKEN=$(gh auth token --user {{assistant_github}})`, so that it uses the lead's account and
@@ -98,17 +99,17 @@ Then dispatch by kind and role:
   specification, is Ready (repository, number, URL). Read the issue first: if it is no longer
   Ready, stop. Otherwise run the `next-task` skill for that repository
   (`--as {{assistant_github}}`) and
-{{#coder_github}}
+{{#coder}}
   hand the task it gives to the `cleo` agent, as `rules/team.md` describes for a coder's task
   (model included). While a coder task is running, start nothing more: `next-task` runs again
   when her task ends with a pull request.
-{{/coder_github}}
-{{^coder_github}}
+{{/coder}}
+{{^coder}}
   work on the task it gives yourself, as the lead; while you work on a task, start nothing
   more.
-{{/coder_github}}
+{{/coder}}
   When `next-task` gives nothing, say so in one line.
-{{#coder_github}}
+{{#coder}}
 - **`approved`, or a `review` of the user, on a pull request of the coder or of the lead**:
   merge only under the merge rule. Read `gh pr view N --json reviews,commits`: merge when the
   user's own latest review is an approval submitted after the last commit.
@@ -116,22 +117,23 @@ Then dispatch by kind and role:
   The one other case is a pull request of the coder that the lead completes without the user
   under `rules/team.md`.
 {{/complete_approved_prs}}
-{{/coder_github}}
-{{^coder_github}}
+{{/coder}}
+{{^coder}}
 - **`approved`, or a `review` of the user, on a pull request of the lead**: merge only under
   the merge rule. Read `gh pr view N --json reviews,commits`: merge when the user's own latest
   review is an approval submitted after the last commit.
-{{/coder_github}}
+{{/coder}}
   Merge as the workspace rules describe (fast-forward only, branches deleted, board moves, a
   rebase by the writer when `main` moved). Never on `reviewDecision`, never on the lead's own
-  approval, and never on a review posted from a team account. When the condition does not hold, merge nothing and write nothing. A
-  pull request the lead wrote itself waits for the user's own approval.
-{{#coder_github}}
+  approval, and never on a review posted from a team account. When the condition does not
+  hold, merge nothing and write nothing. A pull request the lead wrote itself waits for the
+  user's own approval.
+{{#coder}}
   When the user requested changes on a pull request of the coder, hand it back to the `cleo`
   agent as `rules/team.md` describes: count its reviews in the state `CHANGES_REQUESTED`
   first, and from two on start a new `cleo` agent on Opus with the pull request, the task and
   the review comments.
-{{/coder_github}}
+{{/coder}}
   Once a pull request is merged, run `next-task` and hand the task it gives as for a `ready`
   line.
 {{#coder_github}}
@@ -155,6 +157,6 @@ lead's conversation, not through the watch.
 
 ## 4. What the chat shows
 
-One line per action, naming it and its URL (handed to a member, merged, asked the user). A line that leads to nothing, and a round with no line, write nothing, in the
-chat or on GitHub.
+One line per action, naming it and its URL (handed to a member, merged, asked the user). A line
+that leads to nothing, and a round with no line, write nothing, in the chat or on GitHub.
 {{/assistant_github}}

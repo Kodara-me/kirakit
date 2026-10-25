@@ -3253,6 +3253,7 @@ $shell "$root/scripts/build.sh" -o "$tmp/watch-analyst" --analyst --analyst-gith
 $shell "$root/scripts/build.sh" -o "$tmp/watch-coder" --coder 'Cleo <cleo@example.com>' --coder-github cleo-bot --assistant-github kira-bot >/dev/null
 $shell "$root/scripts/build.sh" -o "$tmp/watch-nolead" --analyst --analyst-github iris-bot --coder 'Cleo <cleo@example.com>' --coder-github cleo-bot >/dev/null
 $shell "$root/scripts/build.sh" -o "$tmp/watch-complete" --coder 'Cleo <cleo@example.com>' --coder-github cleo-bot --assistant-github kira-bot --complete-approved-prs >/dev/null
+$shell "$root/scripts/build.sh" -o "$tmp/watch-coder-noaccount" --coder 'Cleo <cleo@example.com>' --assistant-github kira-bot >/dev/null
 watch_full=$tmp/mention-full/skills/watch/SKILL.md
 check 'watch: completion without the user only with --complete-approved-prs (#43 R11)' sh -c '! grep -q "completes it without the user\|completes without the user\|without the user" "$1" && ! grep -q "without the user" "$2" && grep -q "The one other case is a pull request of the coder that the lead completes without the user" "$3"' _ "$watch_full" "$tmp/watch-coder/skills/watch/SKILL.md" "$tmp/watch-complete/skills/watch/SKILL.md"
 check 'watch: a second check line reaches the monitor (#43 R19)' contains "$watch_full" 'kirakit-watch ROLE 2>&1 | awk'
@@ -3275,6 +3276,11 @@ check 'watch: an idea assigned to her is specified (#43 D12)' flat_has "$watch_f
 check 'watch: an assignment of a task or specification starts nothing (#43 D12)' flat_has "$watch_full" 'An assigned task or specification starts nothing' 'start nothing'
 check 'watch: Ready runs next-task and hands it to cleo (#43 R10)' flat_has "$watch_full" 'which specification, or which issue with no specification, is Ready' 'run the `next-task` skill for that repository' 'hand the task it gives to the `cleo` agent'
 check 'watch: nothing more starts while a coder task runs (#43 R10, D13)' flat_has "$watch_full" 'While a coder task is running, start nothing more'
+watch_noaccount=$tmp/watch-coder-noaccount/skills/watch/SKILL.md
+check 'watch: a coder with no GitHub account still gets the Ready task (#43 R10)' flat_has "$watch_noaccount" 'hand the task it gives to the `cleo` agent' 'While a coder task is running, start nothing more'
+check 'watch: a coder with no GitHub account, the lead does not take the task (#43 R10)' sh -c '! grep -q "work on the task it gives yourself" "$1"' _ "$watch_noaccount"
+check "watch: a coder with no GitHub account keeps the coder's merge rule (#43 R11)" flat_has "$watch_noaccount" 'on a pull request of the coder or of the lead' 'hand it back to the `cleo` agent' 'from two on start a new `cleo` agent on Opus'
+check 'watch: a coder with no GitHub account, only the assistant check (#43 R10, R11)' sh -c 'test "$(grep -c "^| \`[a-z]*\` | \`[a-z-]*\` |\$" "$1")" -eq 1 && ! grep -q "kirakit-watch coder\|from \`coder\`" "$1"' _ "$watch_noaccount"
 check 'watch: without a coder the lead works (#43 R10)' flat_has "$tmp/watch-analyst/skills/watch/SKILL.md" 'work on the task it gives yourself, as the lead'
 check "watch: merge only on the user's own approval of the last commit (#43 R11)" flat_has "$watch_full" 'merge only under the merge rule' 'gh pr view N --json reviews,commits' 'the user'"'"'s own latest review is an approval submitted after the last commit'
 check "watch: not on the lead's approval, reviewDecision or a team review (#43 R11)" flat_has "$watch_full" 'Never on `reviewDecision`, never on the lead'"'"'s own approval, and never on a review posted from a team account'
@@ -3285,7 +3291,7 @@ check 'watch: decisions that stay with the user (#43 R12)' flat_has "$watch_full
 check 'watch: a gap goes to the analyst from the conversation (#43 R13)' flat_has "$watch_full" 'goes to the analyst from the lead'"'"'s conversation, not through the watch'
 check 'watch: one line per action, nothing otherwise (#43 R3, R6)' flat_has "$watch_full" 'One line per action' 'write nothing, in the chat or on GitHub'
 check 'watch: every gh command on the lead account (#43)' flat_has "$watch_full" 'GH_TOKEN=$(gh auth token --user kira-bot)'
-check 'watch: no placeholder, whatever the profile (#43)' sh -c 'for d in "$@"; do ! grep -rq "{{" "$d" || exit 1; done' _ "$tmp/watch-lead" "$tmp/watch-analyst" "$tmp/watch-coder" "$tmp/mention-full"
+check 'watch: no placeholder, whatever the profile (#43)' sh -c 'for d in "$@"; do ! grep -rq "{{" "$d" || exit 1; done' _ "$tmp/watch-lead" "$tmp/watch-analyst" "$tmp/watch-coder" "$tmp/watch-coder-noaccount" "$tmp/mention-full"
 check 'watch: README lists it (#43)' in_readme watch inline
 check 'watch: declares its model (#43)' has_model "$watch_full" watch
 for dir in mention-full watch-analyst watch-coder; do
