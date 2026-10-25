@@ -832,7 +832,7 @@ unless its security-sensitive D-Bus API is enabled.
 `kirakit-watch ROLE [--once]` is the background check of a team account (`assistant`,
 `analyst`, or `coder`, also called `developer`); the lead's session runs one per team account
 in the profile. It reads the account's notifications with `If-Modified-Since` (a `304` costs
-nothing) at most every 60 seconds, or less often when GitHub's `X-Poll-Interval` asks, and
+nothing) at most every 2 minutes, or less often when GitHub's `X-Poll-Interval` asks, and
 prints one line, `KIND REPOSITORY#NUMBER URL`, per change: a new assignment, and a reply of
 yours in a thread the member takes part in (a comment of your login, or an unmarked comment of
 a team account posted after the latest marked comment of the thread, see the session marker

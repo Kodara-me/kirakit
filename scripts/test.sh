@@ -3037,7 +3037,7 @@ check 'watch: If-Modified-Since is sent after the first check (#41 R4)' \
 check 'watch: the notifications are read with the account token (#41 R4)' \
 	grep -q 'auth token --user cleo-kodara' "$watch_dir/calls"
 
-# The loop waits 60 seconds, or the X-Poll-Interval when longer.
+# The loop waits 120 seconds, or the X-Poll-Interval when longer.
 fakesleep=$tmp/fakesleep
 printf '%s\n' '#!/bin/sh' 'echo "$1" >>"$FAKE_SLEEP_LOG"' 'exit 1' >"$fakesleep"
 chmod +x "$fakesleep"
@@ -3049,9 +3049,9 @@ watch_loop() {
 	cat "$tmp/sleep-log"
 }
 watch_reset
-check 'watch: waits 60 seconds between checks (#41 R4)' test "$(watch_loop)" = 60
+check 'watch: waits 120 seconds between checks (#41 R4)' test "$(watch_loop)" = 120
 echo 10 >"$watch_dir/notifications.interval"
-check 'watch: never waits less than 60 seconds (#41 R4)' test "$(watch_loop)" = 60
+check 'watch: never waits less than 120 seconds (#41 R4)' test "$(watch_loop)" = 120
 echo 180 >"$watch_dir/notifications.interval"
 check 'watch: waits as long as X-Poll-Interval asks (#41 R4)' test "$(watch_loop)" = 180
 
@@ -3177,7 +3177,7 @@ watch_status=0
 rm -f "$tmp/sleep-log"
 watch_run coder >/dev/null || watch_status=$?
 check 'watch: a continuous check of another role starts (#182 R19)' \
-	sh -c 'test "$1" -eq 0 && test "$(cat "$2")" = 60' _ "$watch_status" "$tmp/sleep-log"
+	sh -c 'test "$1" -eq 0 && test "$(cat "$2")" = 120' _ "$watch_status" "$tmp/sleep-log"
 # A user's comment that a check would report: --once must not look.
 notification mention Issue 7
 comment Kodara-me_kirakit-7 100 jonathan
@@ -3194,7 +3194,7 @@ watch_status=0
 rm -f "$tmp/sleep-log"
 watch_run coder >/dev/null || watch_status=$?
 check "watch: a lock held by another role's check is taken over (#182 R19)" \
-	sh -c 'test "$1" -eq 0 && test "$(cat "$2")" = 60' _ "$watch_status" "$tmp/sleep-log"
+	sh -c 'test "$1" -eq 0 && test "$(cat "$2")" = 120' _ "$watch_status" "$tmp/sleep-log"
 rm -f "$tmp/sleep-hold"
 wait "$watch_first" || true
 check 'watch: the lock is released when the check ends (#182 R19)' \
@@ -3216,14 +3216,14 @@ watch_status=0
 rm -f "$tmp/sleep-log"
 watch_run analyst >/dev/null || watch_status=$?
 check 'watch: a lock of a check that no longer runs is taken over (#182 R19)' \
-	sh -c 'test "$1" -eq 0 && test "$(cat "$2")" = 60' _ "$watch_status" "$tmp/sleep-log"
+	sh -c 'test "$1" -eq 0 && test "$(cat "$2")" = 120' _ "$watch_status" "$tmp/sleep-log"
 # A lock held by a process that is not kirakit-watch (a reused process ID) is taken over too.
 ln -s "$$" "$XDG_STATE_HOME/kirakit/watch-analyst/watch.lock"
 watch_status=0
 rm -f "$tmp/sleep-log"
 watch_run analyst >/dev/null || watch_status=$?
 check 'watch: a lock whose process ID was reused is taken over (#182 R19)' \
-	sh -c 'test "$1" -eq 0 && test "$(cat "$2")" = 60' _ "$watch_status" "$tmp/sleep-log"
+	sh -c 'test "$1" -eq 0 && test "$(cat "$2")" = 120' _ "$watch_status" "$tmp/sleep-log"
 
 # A --once round that runs: another --once checks nothing, a continuous check waits for it.
 watch_reset
@@ -3247,7 +3247,7 @@ rm -f "$watch_dir/gh.block"
 wait "$watch_first" || true
 watch_status=0
 wait "$watch_second" || watch_status=$?
-check 'watch: then it starts (#182 R19)' sh -c 'test "$1" -eq 0 && test "$(cat "$2")" = 60' _ "$watch_status" "$tmp/sleep-log"
+check 'watch: then it starts (#182 R19)' sh -c 'test "$1" -eq 0 && test "$(cat "$2")" = 120' _ "$watch_status" "$tmp/sleep-log"
 
 # A signal ends a continuous check at once, during its wait, and releases its lock (#182 R19).
 watch_reset

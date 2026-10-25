@@ -25,7 +25,7 @@
 #
 # Each line is "KIND REPOSITORY#NUMBER URL". State lives in
 # ${XDG_STATE_HOME:-~/.local/state}/kirakit/watch-ROLE, so a restart reports nothing twice.
-# With --once, check a single time and exit (the fallback check); otherwise check every 60
+# With --once, check a single time and exit (the fallback check); otherwise check every 120
 # seconds, or less often when GitHub asks for it.
 #
 # One check per role at a time: a second continuous check exits at once with one line on
@@ -36,7 +36,7 @@
 # For tests: KIRAKIT_WATCH_SLEEP replaces `sleep`; when it fails, the loop ends.
 set -u
 
-min_interval=60
+min_interval=120
 
 usage() {
 	printf 'usage: kirakit-watch ROLE [--once]   (ROLE: assistant, analyst or developer)\n' >&2
