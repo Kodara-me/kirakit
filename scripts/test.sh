@@ -237,7 +237,7 @@ done
 check 'CLAUDE.md: workable while the specification is Ready (#89 R11)' contains "$tmp/build2/CLAUDE.md" 'A task is workable'
 check 'CLAUDE.md: next-task runs at the start (#89 R12, R13)' contains "$tmp/build2/CLAUDE.md" 'run the `next-task` skill'
 check 'CLAUDE.md: the work plan comes before every task' sh -c 'grep -q "The work plan comes before every task" "$1" && grep -q "no work plan of his covers the next task" "$1" && grep -q "the Ready ones" "$1" && ! grep -q "task it gives without asking" "$1" && ! grep -q "to the coder without asking" "$1"' _ "$tmp/build2/CLAUDE.md"
-check 'watch: states the work plan before handing a task' contains "$tmp/build3/skills/watch/SKILL.md" 'state the work plan for the task it gives'
+check 'watch: gives the work plan before handing a task (#226 R8)' flat_has "$tmp/build3/skills/watch/SKILL.md" 'The work plan for the task it gives is the turn'"'"'s one line, the task'"'"'s URL with the go asked of the user' 'wait for the go'
 check 'CLAUDE.md: the stops for the user (#89 R5, R6)' sh -c 'grep -q "Stop and wait for the user only when" "$1" && grep -q "merge only after approval" "$1"' _ "$tmp/build2/CLAUDE.md"
 check 'CLAUDE.md: out of Ready, no new task (#89 R14)' contains "$tmp/build2/CLAUDE.md" 'start no further task'
 check 'rules: next steps reported without asking (#89 R8)' contains "$tmp/build3/rules/git.md" 'without asking for permission'
@@ -554,7 +554,7 @@ for dir in "$tmp/lead-coder" "$tmp/lead-both"; do
 	check "$what: the lead reviews first (R18)" contains "$team" 'the assistant posts that verdict on GitHub as its own'
 	check "$what: the user reviews after the lead (R18)" contains "$team" 'on approval, it requests the user'"'"'s review'
 	check "$what: changes go back to the coder (R19)" contains "$team" 'it hands the pull request back to'
-	check "$what: report in a few lines (R21)" contains "$team" 'the tasks it closes, its own review result, the review'"'"'s "For the user" items, the number'
+	check "$what: report in one line, nothing restated (#226 R5)" flat_has "$team" 'When the coder finishes, the assistant reports it as "Reporting in the conversation" says' 'the number of reviews in the state "changes requested" and the question itself stay on GitHub'
 	check "$what: merge on the user's own approval (R22)" contains "$team" 'only when the user'"'"'s own latest review is an approval'
 	check "$what: not on reviewDecision (R22)" contains "$team" 'never on `reviewDecision`'
 	check "$what: focused conversation kept" contains "$team" '## Keeping the conversation focused'
@@ -797,9 +797,9 @@ $shell "$root/scripts/build.sh" -o "$tmp/iris-none" >/dev/null
 check 'iris build: no style without an analyst' test ! -e "$tmp/iris-none/output-styles/iris.md"
 check 'iris build: no agent without an analyst' test ! -e "$tmp/iris-none/agents/iris.md"
 check 'lead rules: built with an analyst (#79 R1)' contains "$tmp/iris-build/rules/team.md" 'never runs the `idea` or `spec` skill'
-check 'lead rules: Specified reported without asking (#89 R10)' contains "$tmp/iris-build/rules/team.md" 'ready for the user to start. Nothing is asked.'
+check 'lead rules: Specified reported with the URL and "move it to Ready" (#89 R10, #226 R3)' flat_has "$tmp/iris-build/rules/team.md" 'line holds the specification'"'"'s URL with the action "move it to Ready"'
 check "lead rules: start on the user's word (#89)" contains "$tmp/iris-build/rules/team.md" 'moves it to Ready with the `board-status` skill and runs `next-task`'
-check 'lead rules: report format (#79 R3)' contains "$tmp/iris-build/rules/team.md" 'sub-issues created (number and title)'
+check 'lead rules: report format, the issue URL and no sub-issue list (#79 R3, #226 R5)' flat_has "$tmp/iris-build/rules/team.md" 'the line holds the issue'"'"'s URL and, when she has a question for the user, the URL of the comment that holds it' 'The sub-issues she created, her questions and her intermediate output stay on GitHub'
 check 'lead rules: no placeholder' sh -c '! grep -q "{{" "$1"' _ "$tmp/iris-build/rules/team.md"
 check 'lead rules: not built without an analyst (#79 R8)' test ! -e "$tmp/iris-none/rules/team.md"
 check 'lead rules: git rules point to them' contains "$tmp/iris-build/rules/git.md" 'follows `rules/team.md`'
@@ -1279,7 +1279,7 @@ check 'review-pr: every gh api call a GET (#130 R9)' contains "$review" 'Every `
 team=$full/rules/team.md
 check 'review-pr: the lead posts the verdict herself (#130 R10, #183 R7)' contains "$team" 'the assistant posts that verdict on GitHub as its own'
 check 'review-pr: no approval against the verdict (#130 R10, #183 R7)' contains "$team" 'It never posts an approval when the'
-check 'review-pr: For the user reported (#130 R10, #183 R7)' contains "$team" 'anything under "For the user" in the result is said to the user'
+check 'review-pr: For the user written in the posted review (#130 R10, #183 R7, #226 R13)' flat_has "$team" 'anything under "For the user" in the result is written in the review the assistant posts' 'is never restated in the conversation'
 check 'review-pr: the lead no longer invokes it herself (#183 D7)' sh -c '! grep -qF "\`review-pr OWNER/REPO#<n> [notes]\`" "$1"' _ "$team"
 
 # The lead's review in the kira agent (#183).
@@ -1303,7 +1303,7 @@ for build in commit-coder commit-coder-solo; do
 	check "kira agent: a Reviewing description naming the pull request, $build (#183 R1)" flat_has "$team" 'a `description` that starts with `Reviewing` and names the pull request (`Reviewing PR #<n>`)'
 	check "kira agent: no model passed, $build (#183 R3)" flat_has "$team" '(`Reviewing PR #<n>`), no `model`, so that the agent'"'"'s Opus applies'
 	check "kira agent: the reference and the notes, $build (#183 R4)" flat_has "$team" 'the reference `OWNER/REPO#<n>` followed by the user'"'"'s direction for the task as notes.'
-	check "kira agent: the lead keeps answering, $build (#183 R2)" flat_has "$team" 'the assistant says in one line that the review started and keeps answering the user.'
+	check "kira agent: the lead keeps answering, $build (#183 R2, #226 R2)" flat_has "$team" 'The start of the review is reported as "Reporting in the conversation" says, never as a line of its own in an automated turn; while it runs, the assistant keeps answering the user.'
 	check "kira agent: started again on not ready, $build (#183 R7)" flat_has "$team" 'background step and starts the `kira` agent again;'
 done
 check 'kira agent: no model in Keeping the conversation focused (#183 R3)' flat_has "$full/rules/team.md" 'No `model` is passed when starting `kira` or `cleo`'
@@ -1333,7 +1333,7 @@ for build in commit-coder commit-coder-solo; do
 	check "coder model, $build: no kira review, no completion without the user (#211 R4)" flat_has "$team" 'the `kira` agent does not review it, and it is merged only when the user'"'"'s own latest review approves its last commit'
 	check "coder model, $build: the user's changes go to the lead (#211 R16)" flat_has "$team" 'Changes the user requests on it go to a new takeover agent, never to the coder'
 	check "coder model, $build: no model in the report (#211 R1)" sh -c '! grep -q "Sonnet or Opus\|the coder ran on" "$1"' _ "$team"
-	check "coder model, $build: count in the report (#131 R5)" flat_has "$team" 'question for the user. Her intermediate output stays out of the conversation.'
+	check "coder model, $build: no count in the conversation (#131 R5, #226 R5)" flat_has "$team" 'the number of reviews in the state "changes requested" and the question itself stay on GitHub, and her intermediate output stays out of the conversation.'
 done
 check 'coder model: the takeover without any signing key (#211 D15)' flat_has "$tmp/commit-coder-solo/rules/team.md" 'Neither the coder nor the assistant has a signing key: the takeover leaves its changes uncommitted'
 for team in "$tmp/iris-build/rules/team.md" "$tmp/lead-analyst/rules/team.md"; do
@@ -1857,12 +1857,12 @@ check 'complete: on, condition no question (R4)' contains "$on_team" '- the assi
 check 'complete: on, condition closes a task (R4)' contains "$on_team" '- it closes at least one task;'
 check 'complete: on, condition user review (R4)' contains "$on_team" '- the user has neither submitted a review requesting changes on it, nor asked to review'
 check 'complete: on, no CI check, decision and reason (R5)' contains "$on_team" 'tests in a background agent before deciding, and states that decision and its reason'
-check 'complete: on, fallback to the user'"'"'s review (R6)' contains "$on_team" 'and says which condition failed, in its review and in its report;'
+check 'complete: on, fallback to the user'"'"'s review (R6, #226 R5)' flat_has "$on_team" 'and says which condition failed in its review only; the line is "review" with the pull request'"'"'s URL;'
 check 'complete: on, fallback moves to In review (R6)' contains "$on_team" '(`board-status <n> In review --as kira-bot`),'
 check 'complete: on, the lead'"'"'s own pull requests wait (R7)' contains "$on_team" 'itself always waits for the user'"'"'s own approval.'
 check 'complete: on, the label marks it (R8)' contains "$on_team" '`review:lead-only` to it (`gh pr edit <n> --add-label review:lead-only`), creating the'
 check 'complete: on, no mention of the user (R8)' contains "$on_team" 'only, branches deleted, board moves). It mentions the user nowhere on GitHub for it, and'
-check 'complete: on, reported as merged without review (R8)' contains "$on_team" 'his review. When the pull request cannot be merged by fast-forward, the usual rebase flow'
+check 'complete: on, reported as merged without review (R8, #226 R4)' flat_has "$on_team" 'URL with the status "merged without your review". When the pull request cannot be merged by fast-forward, the usual rebase flow'
 check 'complete: on, notification on the specification (R9)' contains "$on_team" 'specification, the assistant posts a comment on that specification that mentions the user'
 check 'complete: on, notification lists the pull requests (R9)' contains "$on_team" '(`gh pr list --state merged --label review:lead-only`, keeping those'
 check 'complete: on, notification on a task alone (R9)' contains "$on_team" 'no specification, the same comment goes on the task. The comment asks nothing.'
@@ -1944,7 +1944,7 @@ check 'verified: off, no review-spec skill (R5)' test ! -e "$claude/skills/revie
 check 'verified: off, nothing verifies a specification (R5)' \
 	sh -c '! grep -rqF -e "review-spec" -e "Verifying spec" -e "Sent to Kira for verification" "$1"' _ "$claude"
 check 'verified: off, specifications wait in Specified for the user (R5)' \
-	contains "$claude/rules/team.md" 'says in one line that it is in Specified, ready for the user to start. Nothing is asked.'
+	flat_has "$claude/rules/team.md" 'line holds the specification'"'"'s URL with the action "move it to Ready"'
 check 'verified: off, the analyst asks as today (R5)' \
 	contains "$claude/skills/spec/SKILL.md" 'Ready for you: move it to Ready when you want the team to start.'
 verified_team --start-verified-specs >/dev/null
@@ -2030,7 +2030,7 @@ check 'verified: on, the lead starts the kira agent in the background (R9)' \
 check 'verified: on, Verifying spec #<n> (R9)' \
 	flat_has "$on_team" 'a `description` that starts with `Verifying` and names the specification (`Verifying spec #<n>`), no `model`'
 check 'verified: on, the lead keeps answering (R9)' \
-	flat_has "$on_team" 'says in one line that the verification started and keeps answering the user.'
+	flat_has "$on_team" 'The start of the verification is reported as "Reporting in the conversation" says, never as a line of its own in an automated turn; while it runs, the assistant keeps answering the user.'
 check 'verified: on, no verification while a question waits (D16)' \
 	flat_has "$on_team" 'A specification that still holds a question for the user is not verified'
 check 'verified: on, the security list in the lead'"'"'s rules (R11)' \
@@ -2043,7 +2043,7 @@ check 'verified: on, the verdict posted as her account (R12)' \
 check 'verified: on, the verdict named first (R12)' \
 	flat_has "$on_team" '`Verification: verified`, `Verification: changes requested` or `Verification: needs the user`'
 check 'verified: on, one line, no mention (R12)' \
-	flat_has "$on_team" 'It says the verdict in one line in the conversation. The verdict comment does not mention the user.'
+	flat_has "$on_team" 'The verdict reaches the conversation only through the one line of "Reporting in the conversation". The verdict comment does not mention the user.'
 check 'verified: on, verified moves to Ready (R13)' \
 	flat_has "$on_team" '`verified`: the assistant moves the specification to Ready with the `board-status` skill (`board-status <n> Ready --as kira-bot`)'
 check 'verified: on, status:ready without a board (R13)' contains "$on_team" '(`gh issue edit <n> --add-label status:ready`), then runs `next-task` and hands the task'
@@ -2210,8 +2210,8 @@ verified_build "$tmp/soft-on" --analyst --analyst-github iris-bot --coder 'Cleo 
 	--coder-github cleo-bot --complete-approved-prs --start-verified-specs --soft-rules
 check 'soft: on, no placeholder left (R3)' no_placeholder "$tmp/soft-on"
 soft_team_rules=$tmp/soft-on/rules/team.md
-check 'soft: R3, a question that is not a security question gets the recommendation, recorded and reported' \
-	flat_has "$soft_team_rules" 'applies her own recommendation, records the choice and its reason in a comment' 'that does not mention the user' 'under "Decided without you"'
+check 'soft: R3, a question that is not a security question gets the recommendation, recorded and reported (#226 R14, R15)' \
+	flat_has "$soft_team_rules" 'applies her own recommendation, records the choice and its reason in a comment' 'that does not mention the user, before anything is reported, and the assistant'"'"'s line is "look at" with the URL of that comment'
 check 'soft: R3, the analyst and the coder record and report it too' \
 	sh -c 'grep -qF "Decided without you" "$1/agents/iris.md" && grep -qF "Decided without you" "$1/agents/cleo.md"' _ "$tmp/soft-on"
 check 'soft: R4, security questions still reach the user' \
@@ -2219,7 +2219,7 @@ check 'soft: R4, security questions still reach the user' \
 check 'soft: R4, CLAUDE.md stops only for a security question' \
 	flat_has "$tmp/soft-on/CLAUDE.md" 'there is a security question for the user'
 check 'soft: R5, the completion needs no "Nothing." from the review' \
-	flat_has "$soft_team_rules" 'holds no question and no security-sensitive change' 'its other items go in the assistant'"'"'s report'
+	flat_has "$soft_team_rules" 'holds no question and no security-sensitive change' 'its other items go in the review the assistant posts'
 check 'soft: R5, the strict "Nothing." condition is gone' sh -c '! grep -qF "part says \`Nothing.\`" "$1"' _ "$soft_team_rules"
 check 'soft: R6, issues for bugs and follow-ups, and labels, without asking' \
 	flat_has "$soft_team_rules" 'create an issue for a bug or a follow-up idea found during the team'"'"'s work' 'add or remove labels on the team'"'"'s issues, without asking first'
@@ -2236,7 +2236,67 @@ check 'soft: README lists the no option (R18)' contains "$root/README.md" '| `--
 check 'soft: README lists the profile key and default (R18)' \
 	flat_has "$root/README.md" '`soft_rules` (`yes` or `no`, default `no`)'
 check 'soft: README describes what they relax and what always reaches the user (R18)' \
-	flat_has "$root/README.md" '#### Soft rules' 'What the soft rules relax' 'What always reaches you: every security question' '"Decided without you"'
+	flat_has "$root/README.md" '#### Soft rules' 'What the soft rules relax' 'What always reaches you: every security question' 'Kira'"'"'s line is "look at" with the URL of that comment'
+
+# --- #226: reporting in the conversation ---------------------------------------------------
+
+# r226_build DIR ARGS: build.sh with no team account, to add only what a variant needs.
+r226_build() {
+	out=$1
+	shift
+	$shell "$root/scripts/build.sh" -o "$out" --name Alex --gender female --language auto \
+		--co-author 'Kira <kira@example.com>' "$@" >/dev/null
+}
+r226_build "$tmp/r226-analyst" --analyst
+r226_build "$tmp/r226-coder" --coder 'Cleo <cleo@example.com>'
+r226_build "$tmp/r226-both" --analyst --coder 'Cleo <cleo@example.com>'
+r226_build "$tmp/r226-lead" --assistant 'Kira <kira@example.com>' --assistant-github kira-bot
+r226_build "$tmp/r226-soft" --soft-rules
+r226_build "$tmp/r226-none"
+check '#226 R18: no team rules, no section, without a team (R18)' test ! -e "$tmp/r226-none/rules/team.md"
+for variant in analyst coder both lead soft; do
+	team=$tmp/r226-$variant/rules/team.md
+	check "#226 R18: $variant, the section is in rules/team.md (R18)" contains "$team" '## Reporting in the conversation'
+	check "#226 R2: $variant, an automated turn writes exactly one line (R2)" flat_has "$team" 'An automated turn is a turn that the user'"'"'s own typed message in the conversation did not start' 'the assistant'"'"'s whole output in the conversation is exactly one line, covering everything that turn did, with no other text before or after it'
+	check "#226 R3: $variant, full URL and the action asked (R3)" flat_has "$team" 'the line holds the full URL (`https://github.com/OWNER/REPO/...`) of each issue, pull request or comment concerned, and the action asked of him in a few words' 'the URL is that of the comment holding the question'
+	check "#226 R4: $variant, nothing needed, a few-word status (R4)" flat_has "$team" 'When nothing is needed from the user, the line says so, with the full URL of the issue or pull request concerned when there is one, and at most a few-word status'
+	check "#226 R5: $variant, never restates the ticket (R5)" flat_has "$team" 'The line never restates what the issue or pull request shows: no title, summary, decision, list of sub-issues, question, option, recommendation, review comment, "For the user" item, condition that failed, list of addressed comments, or count of reviews requesting changes.'
+	check "#226 R6: $variant, several items in the one line (R6)" flat_has "$team" 'the one line holds each URL with its own action or status'
+	check "#226 R8: $variant, the next task with the go, beside a status (R8)" flat_has "$team" 'the line holds the full URL of the next task with the go asked of the user' 'beside the status of anything else the turn did' 'its URL carries a status instead of the go'
+	check "#226 R9: $variant, an action with no ticket has no URL (R9)" flat_has "$team" 'the line names the action in a few words, without a URL'
+	check "#226 R10: $variant, a turn the user started keeps its detail (R10)" flat_has "$team" 'In a turn that the user'"'"'s own typed message started' 'keeps the level of detail the answer needs, the work plan he asked about included'
+	check "#226 R12: $variant, the question is already in a comment that mentions him (R12)" flat_has "$team" 'which is already posted in a comment that mentions him on the issue or pull request concerned'
+	check "#226 R20: $variant, the start line names the checks (R20)" flat_has "$team" 'In the turn that starts the watch, the line names the checks that run, a check reported as already running included.'
+	check "#226 R21: $variant, a disagreement goes in a comment, the line is answer (R21)" flat_has "$team" 'it posts the disagreement in a comment on the pull request that mentions the user, and the line is "answer" with that comment'"'"'s URL.'
+	check "#226 R22: $variant, only the lead's own output, agents keep their format (R22)" flat_has "$team" 'This section governs only the assistant'"'"'s own output in the main conversation.' 'keep the format their procedure sets.'
+	check "#226 R2: $variant, no field of the old reports asked in the conversation (R2)" sh -c '! grep -q "in a few lines\|sub-issues created (number and title)\|says in one line that\|in its report;\|Decided without you" "$1"' _ "$team"
+	check "#226 R18: $variant, no placeholder left (R18)" no_placeholder "$tmp/r226-$variant"
+done
+for variant in coder both; do
+	team=$tmp/r226-$variant/rules/team.md
+	check "#226 R13: $variant, the For the user items go in the posted review (R13)" flat_has "$team" 'is written in the review the assistant posts, where the user reads it when he is asked to review, and is never restated in the conversation'
+	check "#226 R21: $variant, the disagreement with a verdict is posted, the line is answer (R21)" flat_has "$team" 'raises a disagreement with the verdict with the user in a comment of its own on the pull request that mentions him and holds only the disagreement and the question; the line is "answer" with that comment'"'"'s URL'
+	check "#226 R22: $variant, the kira and takeover results keep their format (R22)" flat_has "$team" 'a review or verification result of the `kira` agent, a takeover agent'"'"'s report, a member'"'"'s report, a helper'"'"'s conclusion) keep the format their procedure sets'
+done
+check '#226 R3: the Specified bullet gives the URL and "move it to Ready" (R3)' flat_has "$tmp/r226-analyst/rules/team.md" 'line holds the specification'"'"'s URL with the action "move it to Ready"'
+check '#226 R3, R12: git.md points its conversation side to the section (R3, R12)' flat_has "$tmp/r226-lead/rules/git.md" 'Questions and decisions for the user are asked in a comment of its own' 'an automated turn only gives the line of `rules/team.md` ("Reporting in the conversation") that points to that comment'
+check '#226 R8: the work plan is one line in an automated turn (R8)' flat_has "$tmp/r226-both/CLAUDE.md" 'In an automated turn (`rules/team.md`, "Reporting in the conversation"), the plan is one line: the task'"'"'s full URL and the go asked' 'Stated in reply to the user, it keeps its detail.'
+check '#226 R8: no automated-turn sentence in CLAUDE.md without the rules (R8)' sh -c '! grep -q "Reporting in the conversation" "$1"' _ "$tmp/r226-none/CLAUDE.md"
+check '#226 R2: the watch skill writes one line per woken turn (R2)' flat_has "$tmp/r226-lead/skills/watch/SKILL.md" 'One line per woken turn, under "Reporting in the conversation" in `rules/team.md`'
+check '#226 R20: the watch skill writes the start line (R20)' flat_has "$tmp/r226-lead/skills/watch/SKILL.md" 'write one line that names the checks that run, a check reported as already running included'
+check '#226 R8: the watch skill gives the plan as the turn'"'"'s line (R8)' flat_has "$tmp/r226-lead/skills/watch/SKILL.md" 'The work plan for the task it gives is the turn'"'"'s one line, the task'"'"'s URL with the go asked of the user'
+for variant in analyst coder both lead soft; do
+	for style in "$tmp/r226-$variant"/output-styles/kira-*.md; do
+		check "#226 R19: $variant, $(basename "$style"): the one-line rule prevails over the openings (R19)" flat_has "$style" 'the one-line rule of `rules/team.md` ("Reporting in the conversation") prevails over these openings and closings'
+	done
+done
+check '#226 R19: no sentence in the output style without rules/team.md (R19)' sh -c '! grep -rq "Reporting in the conversation" "$1"' _ "$tmp/r226-none/output-styles"
+# Soft rules: R14 to R17.
+team=$tmp/r226-soft/rules/team.md
+	check "#226 R14, R15: soft, a decision is recorded in a comment, the line is look at (R14, R15)" flat_has "$team" 'records the choice and its reason in a comment on the issue or pull request concerned' 'before anything is reported, and the assistant'"'"'s line is "look at" with the URL of that comment'
+	check "#226 R17: soft, an issue created or relabeled is a look at line (R17)" flat_has "$team" 'The line is "look at" with that issue'"'"'s URL for each one.'
+	check "#226 R21: soft, the guard for a disagreement points to the section (R21)" flat_has "$team" 'the assistant'"'"'s disagreement with a review verdict, which it raises with the user in a comment of its own on the pull request, as "Reporting in the conversation" says'
+check '#226 R16: soft, a completed pull request with For the user items is a look at the review (R16)' flat_has "$tmp/soft-on/rules/team.md" 'writes the other "For the user" items in the review it posts instead of holding the pull request for them, and its line is "look at" with that review'"'"'s URL'
 
 # --- dry run -------------------------------------------------------------------------------
 
@@ -3510,7 +3570,7 @@ check "watch: the user's reply goes to the iris agent, as given (#43 R2, R9)" fl
 check 'watch: only the analyst threads go to her (#43 R9)' flat_has "$watch_full" 'a thread that is neither assigned to her nor mentions her is not hers'
 check 'watch: an idea assigned to her is specified (#43 D12)' flat_has "$watch_full" 'newly assigned to the analyst'"'"'s account goes to the `iris` agent to specify'
 check 'watch: an assignment of a task or specification starts nothing (#43 D12)' flat_has "$watch_full" 'An assigned task or specification starts nothing' 'start nothing'
-check 'watch: Ready runs next-task and hands it to cleo (#43 R10)' flat_has "$watch_full" 'which specification, or which issue with no specification, is Ready' 'run the `next-task` skill for that repository' 'state the work plan for the task it gives' 'hand the task to the `cleo` agent'
+check 'watch: Ready runs next-task and hands it to cleo (#43 R10, #226 R8)' flat_has "$watch_full" 'read the issue first: if it is no longer Ready, stop' 'run the `next-task` skill for that repository' 'The work plan for the task it gives is the turn'"'"'s one line, the task'"'"'s URL with the go asked of the user' 'hand the task to the `cleo` agent'
 check 'watch: nothing more starts while a coder task runs (#43 R10, D13)' flat_has "$watch_full" 'While a coder task is running, start nothing more'
 watch_noaccount=$tmp/watch-coder-noaccount/skills/watch/SKILL.md
 check 'watch: a coder with no GitHub account still gets the Ready task (#43 R10)' flat_has "$watch_noaccount" 'hand the task to the `cleo` agent' 'While a coder task is running, start nothing more'
@@ -3526,7 +3586,8 @@ check 'watch: the coder question goes to cleo (#43)' flat_has "$watch_full" 'ans
 check 'watch: the lead answers its own questions (#43)' flat_has "$watch_full" 'answers a question of the lead**: act on it yourself'
 check 'watch: decisions that stay with the user (#43 R12)' flat_has "$watch_full" 'merging a pull request outside the merge rule above, tagging or releasing' 'Ask in a comment on the issue or pull request that mentions the user'
 check 'watch: a gap goes to the analyst from the conversation (#43 R13)' flat_has "$watch_full" 'goes to the analyst from the lead'"'"'s conversation, not through the watch'
-check 'watch: one line per action, nothing otherwise (#43 R3, R6)' flat_has "$watch_full" 'One line per action' 'write nothing, in the chat or on GitHub'
+check 'watch: one line per woken turn, nothing otherwise (#43 R3, R6, #226 R2)' flat_has "$watch_full" 'One line per woken turn, under "Reporting in the conversation" in `rules/team.md`' 'write nothing, in the chat or on GitHub'
+check 'watch: the start line names the checks, an already running one included (#226 R20)' flat_has "$watch_full" 'write one line that names the checks that run, a check reported as already running included' 'name it in the line of step 3 as already running'
 check 'watch: every gh command on the lead account (#43)' flat_has "$watch_full" 'GH_TOKEN=$(gh auth token --user kira-bot)'
 check 'watch: no placeholder, whatever the profile (#43)' sh -c 'for d in "$@"; do ! grep -rq "{{" "$d" || exit 1; done' _ "$tmp/watch-lead" "$tmp/watch-analyst" "$tmp/watch-coder" "$tmp/watch-coder-noaccount" "$tmp/mention-full"
 check 'watch: README lists it (#43)' in_readme watch inline

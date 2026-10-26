@@ -28,8 +28,9 @@ apply in the assistant's session; the coder follows her own persona.
   one. The assistant never runs the `idea` or `spec` skill in its own context.
 - The assistant gives the agent what it needs: the issue or the request, the user's
   direction in the user's own words, and what to return.
-- While the analyst works, the assistant keeps answering the user, and says in a line what
-  was handed to her.
+- While the analyst works, the assistant keeps answering the user. The hand-off is reported
+  as "Reporting in the conversation" says: in a line in a turn the user started, and inside
+  the one line of an automated turn.
 - The analyst's agent runs on Sonnet. The assistant starts `iris` with `model: opus` to
   specify an idea, or to change a specification's requirements, design, decisions or tasks at
   a verification's or the user's request, and with no `model` to capture an idea, post
@@ -38,12 +39,15 @@ apply in the assistant's session; the coder follows her own persona.
   and returns that, and the assistant starts a new `iris` agent on Opus for it, since a
   running agent's model cannot change: the assistant says so in its prompt when it starts
   `iris` on Sonnet. The `/iris` command, which the user starts himself, is not concerned.
-- When the analyst finishes, the assistant reports it in a few lines: the issue's URL, the
-  sub-issues created (number and title), and her questions for the user with her
-  recommendations. Her intermediate output stays out of the conversation.
+- When the analyst finishes, the assistant reports it as "Reporting in the conversation"
+  says: the line holds the issue's URL and, when she has a question for the user, the URL of
+  the comment that holds it, which she has posted on the issue with her recommendations and
+  a mention of him. The sub-issues she created, her questions and her intermediate output
+  stay on GitHub and out of the conversation.
 {{^start_verified_specs}}
-- When the analyst finishes a specification with no questions for the user, the assistant
-  says in one line that it is in Specified, ready for the user to start. Nothing is asked.
+- When the analyst finishes a specification with no questions for the user, the assistant's
+  line holds the specification's URL with the action "move it to Ready" ("Reporting in the
+  conversation"): it is in Specified, and moving it to Ready is the action only he takes.
 {{/start_verified_specs}}
 {{#start_verified_specs}}
 - When the analyst finishes a specification with no questions for the user, the assistant
@@ -53,8 +57,9 @@ apply in the assistant's session; the coder follows her own persona.
   prompt holding the specification's issue URL (`https://github.com/OWNER/REPO/issues/<n>`)
   followed by the user's direction for the feature as notes, with the comments of the
   previous verification on a later round. The agent follows the `review-spec` procedure,
-  posts nothing and returns only its result. While it runs, the assistant says in one line
-  that the verification started and keeps answering the user. A specification that still
+  posts nothing and returns only its result. The start of the verification is reported as
+  "Reporting in the conversation" says, never as a line of its own in an automated turn;
+  while it runs, the assistant keeps answering the user. A specification that still
   holds a question for the user is not verified: it waits in Specified for his answer,
   which the analyst records, and then the verification runs.
 - A security question is an open choice about credentials, tokens or signing keys;
@@ -67,9 +72,9 @@ apply in the assistant's session; the coder follows her own persona.
 - When the verification returns, the assistant posts its verdict on the specification as
   its own account (`gh issue comment <n> --body-file <file>`), in its own voice, with the
   result's comments. The comment's first line names the verdict: `Verification: verified`,
-  `Verification: changes requested` or `Verification: needs the user`. It says the verdict
-  in one line in the conversation. The verdict comment does not mention the user. Then, by
-  the verdict:
+  `Verification: changes requested` or `Verification: needs the user`. The verdict reaches
+  the conversation only through the one line of "Reporting in the conversation". The
+  verdict comment does not mention the user. Then, by the verdict:
   - `verified`: the assistant moves the specification to Ready with the `board-status`
     skill
 {{#assistant_github}}
@@ -88,14 +93,15 @@ apply in the assistant's session; the coder follows her own persona.
     verification: the analyst makes one last pass on the remaining comments and ends her
     comment without sending it to verification, and the assistant asks the user to review
     the specification himself, in a comment of its own, posted after hers, that mentions
-    him, lists the comments she addressed and ends with a short question, and in the
-    conversation too. The specification stays in Specified until he moves it to Ready; a
+    him, lists the comments she addressed and ends with a short question; the line is
+    "review" with that comment's URL, without the list. The specification stays in
+    Specified until he moves it to Ready; a
     comment of his on it goes to the analyst, who answers it or changes the specification,
     and it goes back to his review, not to a verification;
   - `needs the user`: the assistant asks the user the result's "For the user" questions in
     a comment of its own, posted after the verdict, that mentions him, holds only each
-    question with its options and recommendation, and ends with a short question, and asks
-    them in the conversation too. The specification stays in Specified. Once the analyst
+    question with its options and recommendation, and ends with a short question; the line
+    is "answer" with that comment's URL. The specification stays in Specified. Once the analyst
     has recorded his answers, the assistant verifies it again, and the count of verdicts
     requesting changes starts over.
 - When `next-task` reports a specification paused by a comment of the user, the assistant
@@ -185,7 +191,8 @@ apply in the assistant's session; the coder follows her own persona.
   to that running task, with a message, not to a second one.
 - The assistant gives the agent what it needs: the task's issue, the user's direction in the
   user's own words, and what to return. While the coder works, the assistant keeps answering
-  the user, and says in a line what was handed to her.
+  the user. The hand-off is reported as "Reporting in the conversation" says: in a line in a
+  turn the user started, and inside the one line of an automated turn.
 - The coder's agent runs on Sonnet, whatever the task's labels or the user's request: the
   assistant starts the `cleo` agent with no `model`.
 - When the coder opens or updates a pull request, the assistant has it reviewed by the
@@ -194,17 +201,21 @@ apply in the assistant's session; the coder follows her own persona.
   (`Reviewing PR #<n>`), no `model`, so that the agent's Opus applies, and a prompt holding
   the reference `OWNER/REPO#<n>` followed by the user's direction for the task as notes.
   The agent follows the `review-pr` procedure, posts nothing and returns only its result.
-  While it runs, the assistant says in one line that the review started and keeps answering
-  the user. When it returns, by the result's verdict:
+  The start of the review is reported as "Reporting in the conversation" says, never as a
+  line of its own in an automated turn; while it runs, the assistant keeps answering the
+  user. When it returns, by the result's verdict:
   - `approve` or `request changes`: the assistant posts that verdict on GitHub as its own
     account (`gh pr review --approve` or `--request-changes`), with the result's comments
     (`path:line`) in the review body, in its own voice. It never posts an approval when the
     verdict is not `approve`; it may add remarks of its own, and raises a disagreement with
-    the verdict with the user;
+    the verdict with the user in a comment of its own on the pull request that mentions him
+    and holds only the disagreement and the question; the line is "answer" with that
+    comment's URL;
   - `not ready`: CI is still running; the assistant waits for the pending checks in a
     background step and starts the `kira` agent again;
-  - anything under "For the user" in the result is said to the user when the assistant
-    requests the user's review, and in its report. The review request is the user's
+  - anything under "For the user" in the result is written in the review the assistant
+    posts, where the user reads it when he is asked to review, and is never restated in the
+    conversation. The review request is the user's
     notification (`rules/git.md`): the review it posts does not mention him. When a "For
     the user" item is a question for him, the assistant asks it in a comment of its own,
     posted after the review, that mentions him, holds only the question with its options
@@ -233,7 +244,7 @@ apply in the assistant's session; the coder follows her own persona.
 {{/soft_rules}}
 {{#soft_rules}}
     - the result's "For the user" part holds no question and no security-sensitive change;
-      its other items go in the assistant's report;
+      its other items go in the review the assistant posts;
     - the assistant has no security question and no disagreement for the user;
 {{/soft_rules}}
     - it closes at least one task;
@@ -249,17 +260,20 @@ apply in the assistant's session; the coder follows her own persona.
 {{^assistant_github}}
     (`board-status <n> In review`),
 {{/assistant_github}}
-    and says which condition failed, in its review and in its report;
+    and says which condition failed in its review only; the line is "review" with the pull
+    request's URL;
 {{/complete_approved_prs}}
   - on changes requested, by the assistant or by the user, it first counts the pull
     request's reviews in the state `CHANGES_REQUESTED` (`gh pr view <n> --json reviews`). On
     the first one it hands the pull request back to the coder, who makes the changes, replies
     to the review comments and requests the assistant's review again. From the second one on,
     the assistant continues the pull request itself, on Opus (the takeover, below);
-- When the coder finishes, the assistant reports it in a few lines: the pull request's URL,
-  the tasks it closes, its own review result, the review's "For the user" items, the number
-  of reviews in the state "changes requested" the pull request has had so far, and any
-  question for the user. Her intermediate output stays out of the conversation.
+- When the coder finishes, the assistant reports it as "Reporting in the conversation"
+  says: the line holds the pull request's URL with the action or status that fits (review,
+  merged, working, waiting) and, for a question for the user, the URL of the comment that
+  holds it. The tasks it closes, its own review result, the review's "For the user" items,
+  the number of reviews in the state "changes requested" and the question itself stay on
+  GitHub, and her intermediate output stays out of the conversation.
 - The takeover: from the second review in the state `CHANGES_REQUESTED` on a pull request of
   the coder, the assistant continues it itself, and no later round goes to a developer.
   - It runs in a background agent started with the Agent tool, `subagent_type:
@@ -315,16 +329,16 @@ apply in the assistant's session; the coder follows her own persona.
   label first when the repository has none (`gh label create review:lead-only --description
   "Merged on the lead's review alone"`), then merges it by the usual rules (fast-forward
   only, branches deleted, board moves). It mentions the user nowhere on GitHub for it, and
-  its report in the conversation, in the usual few lines, says that it was merged without
-  his review. When the pull request cannot be merged by fast-forward, the usual rebase flow
+  the line in the conversation ("Reporting in the conversation") gives the pull request's
+  URL with the status "merged without your review". When the pull request cannot be merged by fast-forward, the usual rebase flow
   applies; once rebased and approved again by the assistant, the conditions above are
   checked again.
 - When a pull request completed without the user closes the last open task of a
   specification, the assistant posts a comment on that specification that mentions the user
   and lists every pull request of that specification completed without his review, with
   its link and title (`gh pr list --state merged --label review:lead-only`, keeping those
-  that close one of its tasks), and says so in one line in the conversation. For a task with
-  no specification, the same comment goes on the task. The comment asks nothing.
+  that close one of its tasks); the line is "look at" with that comment's URL. For a task
+  with no specification, the same comment goes on the task. The comment asks nothing.
 - A pull request is merged only when the user's own latest review is an approval submitted
   after its last commit (`gh pr view <n> --json reviews,commits`), never on `reviewDecision`
   alone: the assistant's approval counts there too; or, for a pull request of the coder, when
@@ -467,6 +481,7 @@ conversation. These rules apply in the assistant's session.
   Sonnet.
 {{/coder}}
 {{/analyst}}
+{{#team_rules}}
 {{#soft_rules}}
 {{^analyst}}
 {{^coder}}
@@ -478,6 +493,70 @@ conversation.
 {{/assistant_github}}
 {{/coder}}
 {{/analyst}}
+{{/soft_rules}}
+
+## Reporting in the conversation
+
+{{#coder}}
+- An automated turn is a turn that the user's own typed message in the conversation did not
+  start: a turn woken by a watch line, by the completion or notification of a background
+  agent (a member, a review, a verification, a takeover or a helper), by the result of a
+  check the assistant started, or the turn the `assistant` launcher starts with `/watch`. A
+  member's command (`/<member>`) is started by the user and is not an automated turn.
+{{/coder}}
+{{^coder}}
+- An automated turn is a turn that the user's own typed message in the conversation did not
+  start: a turn woken by a watch line, by the completion or notification of a background
+  agent (a member or a helper), by the result of a check the assistant started, or the turn
+  the `assistant` launcher starts with `/watch`. A member's command (`/<member>`) is started
+  by the user and is not an automated turn.
+{{/coder}}
+- In an automated turn, the assistant's whole output in the conversation is exactly one
+  line, covering everything that turn did, with no other text before or after it: no
+  greeting, no persona sentence, no summary, no list. The persona's openings and closings
+  do not apply to it. Wherever these rules say that the assistant reports, says or asks
+  something in the conversation, an automated turn does it in that line.
+- When the user must act, the line holds the full URL (`https://github.com/OWNER/REPO/...`)
+  of each issue, pull request or comment concerned, and the action asked of him in a few
+  words (for example: answer, review, approve, give your go, look at, move it to Ready).
+  When the action is to answer a question, the URL is that of the comment holding the
+  question, which is already posted in a comment that mentions him on the issue or pull
+  request concerned.
+- When nothing is needed from the user, the line says so, with the full URL of the issue or
+  pull request concerned when there is one, and at most a few-word status (for example:
+  merged, in review, working, waiting).
+- The line never restates what the issue or pull request shows: no title, summary,
+  decision, list of sub-issues, question, option, recommendation, review comment, "For the
+  user" item, condition that failed, list of addressed comments, or count of reviews
+  requesting changes.
+- When an automated turn concerns several issues or pull requests, the one line holds each
+  URL with its own action or status.
+- When a task becomes workable in an automated turn, the line holds the full URL of the next
+  task with the go asked of the user (the work plan of `CLAUDE.md`), beside the status of
+  anything else the turn did (for example the merge that made the task workable). When a
+  plan he gave already covers the task, its URL carries a status instead of the go.
+- When the action needed has no issue or pull request (for example the watch stopped, or a
+  commit or a command was refused), the line names the action in a few words, without a URL.
+- In the turn that starts the watch, the line names the checks that run, a check reported as
+  already running included.
+- When the assistant disagrees with a review verdict in an automated turn, it posts the
+  disagreement in a comment on the pull request that mentions the user, and the line is
+  "answer" with that comment's URL.
+- In a turn that the user's own typed message started (a question, a discussion, a request
+  for work, a request for detail about a report), the assistant keeps the level of detail
+  the answer needs, the work plan he asked about included.
+- This section governs only the assistant's own output in the main conversation.
+{{#coder}}
+  The results and reports that background agents return to it (a review or verification
+  result of the `kira` agent, a takeover agent's report, a member's report, a helper's
+  conclusion) keep the format their procedure sets.
+{{/coder}}
+{{^coder}}
+  The results and reports that background agents return to it (a member's report, a
+  helper's conclusion) keep the format their procedure sets.
+{{/coder}}
+{{/team_rules}}
+{{#soft_rules}}
 
 ## Soft rules
 
@@ -488,8 +567,8 @@ rules above and in `CLAUDE.md` where they say so, and nowhere else.
 - A question that is not a security question is not asked of the user, whoever has it.
   The member applies her own recommendation, records the choice and its reason in a
   comment on the issue or pull request concerned (for a specification, as a decision in it)
-  that does not mention the user, and the assistant lists it in its next report in the
-  conversation under "Decided without you", with the link to that comment. A question with
+  that does not mention the user, before anything is reported, and the assistant's line is
+  "look at" with the URL of that comment ("Reporting in the conversation"). A question with
   no recommendation to apply, such as a clarifying question of the `idea` skill, is still
   asked.
 - A security question is an open choice about credentials, tokens or signing keys;
@@ -501,17 +580,19 @@ rules above and in `CLAUDE.md` where they say so, and nowhere else.
 {{#coder}}
 - A pull request with a security-sensitive change still goes to the user's review, and the
   review's "For the user" part lists it. Without one, the assistant completes an approved
-  pull request of the coder without the user under the conditions above, and reports the
-  other "For the user" items instead of holding the pull request for them.
+  pull request of the coder without the user under the conditions above, writes the other
+  "For the user" items in the review it posts instead of holding the pull request for
+  them, and its line is "look at" with that review's URL.
 {{/coder}}
 - The assistant may create an issue for a bug or a follow-up idea found during the team's
-  work, and add or remove labels on the team's issues, without asking first. It reports each
-  one in its next report, with its link. Closing and deleting issues keep their rules.
+  work, and add or remove labels on the team's issues, without asking first. The line is
+  "look at" with that issue's URL for each one. Closing and deleting issues keep their rules.
 - These stay as they are, since they are guards and not questions with a recommendation:
 {{#analyst}}
   the escalation to the user after two verifications that request changes;
 {{/analyst}}
-  the assistant's disagreement with a review verdict, which it raises with the user; tags and
+  the assistant's disagreement with a review verdict, which it raises with the user in a
+  comment of its own on the pull request, as "Reporting in the conversation" says; tags and
   releases, only on an explicit request; and the user's own approval of the pull requests
   the assistant wrote itself.
 {{/soft_rules}}

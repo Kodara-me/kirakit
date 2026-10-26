@@ -45,7 +45,13 @@ Pull requests are opened with the `pull-request` skill.
 {{/coder}}
 - The work plan comes before every task. `next-task` only finds the task: state the plan in
   the conversation (the task, its specification, and the tasks that follow it) and start
-  nothing until the user answers. His answer, or a plan he gives himself, is the go for what
+  nothing until the user answers.
+{{#team_rules}}
+  In an automated turn (`rules/team.md`, "Reporting in the conversation"), the plan is one
+  line: the task's full URL and the go asked; the specification and the tasks that follow it
+  are on GitHub. Stated in reply to the user, it keeps its detail.
+{{/team_rules}}
+  His answer, or a plan he gives himself, is the go for what
   it names: one task, the tasks or specifications of the day ("today X, Y and Z"), or "work
   the Ready ones". Within that scope, go on from task to task without asking again, for the
   rest of the session or until he changes the plan. A task outside the scope, or any task

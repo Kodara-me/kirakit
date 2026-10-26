@@ -591,18 +591,28 @@ installed only with an analyst or a coder.
   an idea, specify one, change a specification or answer a question about one, she hands it
   to the `iris` agent and keeps talking with you meanwhile. She never runs the `idea` or
   `spec` skill in her own conversation.
-- **Kira reports in a few lines** when Iris finishes: the issue's URL, the sub-issues created,
-  and Iris's questions with her recommendations. Iris's intermediate work stays out of the
-  conversation.
+- **One line per automated turn.** In a turn you did not start (a watch line, a background
+  agent finishing, a check she started, the start of the watch), Kira writes exactly one
+  line in the conversation: the full URL of each issue, pull request or comment concerned,
+  with what you must do in a few words (answer, review, approve, give your go, look at) or a
+  few-word status (merged, in review, working, waiting), and never a rewrite of what the
+  ticket shows. Questions, "For the user" items and decisions are on GitHub, where you
+  answer them. In a turn you started, she keeps the detail the answer needs. The rule is in
+  `rules/team.md`, and only governs Kira's own output: the reports of her background agents
+  keep their format.
+- **Kira reports in one line** when Iris finishes: the issue's URL and,
+  for a question, the URL of the comment that holds it. The sub-issues, the questions and
+  Iris's intermediate work stay on GitHub and out of the conversation.
 - **Answer in either place.** Iris also posts her questions on the issue, in a comment of
   its own that mentions you (see [when you are mentioned](#the-team)).
   Answer there, or in the conversation: Kira passes your answer to Iris as given, and Iris
   records it in the specification. Kira never edits a specification herself, and a new
   request about an issue Iris is already on goes to that same task.
 - **You start a specification, then you give the plan of each task.** When Iris finishes a
-  specification with no questions for you, Kira says in one line that it is in Specified.
+  specification with no questions for you, Kira's line gives its URL and "move it to Ready".
   Move it to Ready on the board, or tell Kira it can start: its tasks become workable, and
-  Kira states the work plan of each one and waits for your go before starting it (see
+  Kira states the work plan of each one (in one line with the task's URL when the turn is
+  automated, in full when you ask) and waits for your go before starting it (see
   [Development](#development-from-a-ready-specification)). With `--start-verified-specs`,
   Kira verifies it and makes it workable herself (below).
 - **Only the lead's session watches GitHub.** With the assistant's GitHub account in the
@@ -621,8 +631,9 @@ installed only with an analyst or a coder.
   - **How a specification wakes Kira.** It enters Ready when you move it to Ready on its
     board (the Ready column), or, on a repository with no board, when it carries the
     `status:ready` label; the same goes for an issue with no specification. The watch
-    reports it, Kira runs `next-task` in that repository, states the work plan for the task
-    it gives and waits for your go, then hands the task to Cleo, or works on it herself
+    reports it, Kira runs `next-task` in that repository and gives the work plan for the task
+    it gives as one line (the task's URL and the go asked), waits for your go, then hands the
+    task to Cleo, or works on it herself
     without a coder. While a coder task is running, no other starts, and `next-task` runs
     again when her task ends with a pull request;
   - **Merging.** A review on a pull request of Cleo or of Kira leads to a merge only when your
@@ -653,13 +664,15 @@ What the soft rules relax:
 - **Questions that are not security questions.** Whoever has one, Kira, Iris or Cleo, applies
   her own recommendation instead of asking you, records the choice and its reason in a comment
   on the issue or pull request (in the specification, for Iris) that does not mention you, and
-  Kira lists it in her next report under "Decided without you". A clarifying question with no
+  Kira's line is "look at" with the URL of that comment. A clarifying question with no
   recommendation to apply is still asked.
 - **The review of a pull request of the coder.** Kira completes an approved pull request
   without your review when its "For the user" items are neither questions nor security-sensitive
-  changes, the other conditions of `--complete-approved-prs` holding; those items go in her report.
+  changes, the other conditions of `--complete-approved-prs` holding; those items go in the
+  review she posts, and her line is "look at" with that review's URL.
 - **Issues.** Kira may create an issue for a bug or a follow-up idea found during the team's
-  work, and add or remove labels on the team's issues, without asking, and reports each one.
+  work, and add or remove labels on the team's issues, without asking; her line is "look at"
+  with that issue's URL for each one.
 
 What always reaches you: every security question (see below), every pull request with a
 security-sensitive change, the escalation after two verifications requesting changes, Kira's
@@ -694,8 +707,8 @@ no longer waits for you when it holds nothing for you to decide:
   requirement is covered by a task, that the tasks follow the splitting rules, that every
   decision states its reason, that the specification matches the code and files it names,
   and that no decision taken without you settles a security question. It returns one
-  verdict, which Kira posts on the specification as her own account and tells you in one
-  line:
+  verdict, which Kira posts on the specification as her own account and reports in her one
+  line, with the specification's URL:
   - `verified`: Kira moves the specification to Ready (or adds `status:ready` on a
     repository with no board) and development starts as if you had moved it;
   - `changes requested`: back to Iris, who changes the specification, then a new
@@ -739,8 +752,9 @@ With a coder, code goes through Cleo the same way:
   own voice, and never approves against it. Like the members' rules (see
   [Permission rules](#permission-rules)), the review needs auto mode: a background agent
   cannot ask for a permission, and in the default mode its `gh` reads are refused. Once she
-  approves, she requests your review and tells you what the review flagged for you
-  (security-sensitive changes, questions); the first changes requested, by her or by you, go
+  approves, she requests your review; what the review flagged for you
+  (security-sensitive changes, questions) is in the review she posts, and a question for you
+  is in a comment that mentions you; the first changes requested, by her or by you, go
   back to Cleo, who makes them, replies to the comments and asks Kira again.
 - **Cleo always runs on Sonnet; Kira takes over on Opus.** There is no Opus for the coder:
   the `model:opus` label is retired, and asking Kira for Opus for a task changes nothing. From
@@ -753,9 +767,10 @@ With a coder, code goes through Cleo the same way:
   with Kira as author; with no key on either side nothing is committed and Kira proposes your
   `commit` skill. Every pull request is still reviewed on Opus, which is what keeps Sonnet's
   work in check, and a pull request gets at most two rounds before it reaches you.
-- **Kira reports in a few lines:** the pull request's URL, the tasks it closes, her review
-  result, the number of reviews requesting changes so far and any
-  question for you. Cleo's intermediate work stays out of the conversation.
+- **Kira reports in one line:** the pull request's URL with the action or status that fits
+  (review, merged, working, waiting). Her review result, the tasks it closes, the number of
+  reviews requesting changes and any question for you stay on GitHub, in her review and in a
+  comment that mentions you. Cleo's intermediate work stays out of the conversation.
 - **Kira merges after your own approval.** Her approval also counts in GitHub's
   `reviewDecision`, so she merges only when your latest review approves the last commit,
   then picks the next task.
@@ -1059,8 +1074,8 @@ Moving a specification to Ready makes all its tasks workable. The developer runs
 task (specifications in board order, their tasks in sub-issue order, skipping a task that is
 taken, blocked by an open issue, waiting for an answer, or touching the same files as a pull
 request in review; a shared test file such as `scripts/test.sh` does not count). She then
-states the work plan (the task, its specification, the tasks that follow it) and starts
-nothing until you answer. Your answer, or a plan you give yourself, is the go for what it
+states the work plan (the task, its specification, the tasks that follow it; in an automated
+turn, one line with the task's URL and the go asked) and starts nothing until you answer. Your answer, or a plan you give yourself, is the go for what it
 names: one task, the tasks of the day ("today X, Y and Z"), or "work the Ready ones". Within
 that scope she goes on from task to task without asking, for the rest of the session or
 until you change the plan; a task outside it waits for a new plan.
@@ -1102,6 +1117,7 @@ identity):
 | `{{committer}}` | Who commits with `assistant-commit`: "the coder" with a coder, "the assistant" otherwise |
 | `{{committer_name}}`, `{{committer_email}}`, `{{committer_signing_key}}` | That member's git identity and signing key: the coder's with a coder, the assistant's otherwise |
 | `{{team_github}}` | "yes" when the assistant, the analyst or the coder has a GitHub account, or nothing |
+| `{{team_rules}}` | "yes" when the lead's `rules/team.md` is installed (an analyst, a coder, the assistant's GitHub account or the soft rules), or nothing |
 | `{{assistant_style}}`, `{{analyst_style}}` | The name of the assistant's and the analyst's output style, e.g. "Kira (cozy)" and "Iris" |
 
 A line holding only a placeholder that expands to nothing is removed.

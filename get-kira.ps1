@@ -157,7 +157,7 @@ $PermissionsPath = Join-Path $ClaudeDir '.kirakit-permissions'
 $PlaceholderKeys = @('user', 'they', 'them', 'their', 'language', 'co_author', 'assistant_name', 'assistant_email',
     'assistant_signing_key', 'assistant_github', 'analyst', 'analyst_github', 'coder', 'coder_name', 'coder_email',
     'coder_signing_key', 'coder_github', 'committer', 'committer_name', 'committer_email', 'committer_signing_key',
-    'complete_approved_prs', 'start_verified_specs', 'soft_rules', 'any_committer_key', 'team_github')
+    'complete_approved_prs', 'start_verified_specs', 'soft_rules', 'any_committer_key', 'team_github', 'team_rules')
 
 $script:Work = $null
 $script:BackupDir = $null
@@ -707,6 +707,8 @@ function Get-KiraValue($UserProfile) {
         soft_rules = if ($UserProfile['soft_rules'] -eq 'yes') { 'yes' } else { '' }
         # The team's accounts: the members' sessions mark what they write as these accounts.
         team_github = if ($github -or $analystGithub -or $coderGithub) { 'yes' } else { '' }
+        # The lead's rules/team.md exists under the same conditions.
+        team_rules = if ($analystValue -or $coderValue -or $github -or $UserProfile['soft_rules'] -eq 'yes') { 'yes' } else { '' }
     }
 }
 

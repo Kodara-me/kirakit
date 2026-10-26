@@ -226,10 +226,12 @@ project's `CLAUDE.md` cannot override the attribution rules.
 {{^analyst_github}}
 - Ideas are assigned to `{{assistant_github}}` too, until they become specifications.
 {{/analyst_github}}
-- Questions and decisions for the user are asked both in the conversation and in a comment
-  of its own on the issue or pull request concerned, which mentions the user, holds only
-  what he must decide and ends with a short question, as the rules on comments say. A next
-  step that needs no decision is reported in a comment too, without mentioning him and
+- Questions and decisions for the user are asked in a comment of its own on the issue or
+  pull request concerned, which mentions the user, holds only what he must decide and ends
+  with a short question, as the rules on comments say. In the conversation, an automated
+  turn only gives the line of `rules/team.md` ("Reporting in the conversation") that points
+  to that comment; a turn the user started asks the question in the conversation too. A
+  next step that needs no decision is reported in a comment too, without mentioning him and
   without asking for permission.
 - Project boards stay owned by the user or the user's organization. The assistant updates a
   board as `{{assistant_github}}`, which must be a Writer of it, directly or through a team:

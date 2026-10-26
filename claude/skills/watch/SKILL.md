@@ -38,8 +38,9 @@ every line, so that a line tells which account reported it:
    ```
 
    The model wakes up only when a line is printed. When a monitor answers that a check of
-   that role is already running (a second continuous check exits at once with one line), show
-   that line and leave it: do not start it again, and do not kill the other one.
+   that role is already running (a second continuous check exits at once with one line),
+   leave it: do not start it again, and do not kill the other one, and name it in the line
+   of step 3 as already running.
 2. With `/loop 10m`, run the fallback for the same roles, which covers a monitor that
    stopped:
 
@@ -55,7 +56,9 @@ every line, so that a line tells which account reported it:
 
    Its output is handled like the monitors' lines. It prints nothing and checks nothing for a
    role whose continuous check runs, and never runs more often than every 10 minutes.
-3. Say in one line which checks run. Nothing else is written until a line arrives.
+3. This turn is automated: write one line that names the checks that run, a check reported
+   as already running included (`rules/team.md`, "Reporting in the conversation"). Nothing
+   else is written until a line arrives.
 
 A line that arrives from the fallback and from a monitor, or from two accounts, is one change
 (next section).
@@ -99,12 +102,11 @@ Then dispatch by kind and role:
   Specified for the user. An assigned task or specification starts nothing: Ready is the only
   gate.
 {{/analyst_github}}
-- **`ready` from `assistant`**: say in one line which specification, or which issue with no
-  specification, is Ready (repository, number, URL). Read the issue first: if it is no longer
-  Ready, stop. Otherwise run the `next-task` skill for that repository
-  (`--as {{assistant_github}}`), state the work plan for the task it gives and wait for the
-  user's go, unless a plan he gave already covers it (`CLAUDE.md`: the work plan comes
-  before every task), then
+- **`ready` from `assistant`**: read the issue first: if it is no longer Ready, stop.
+  Otherwise run the `next-task` skill for that repository (`--as {{assistant_github}}`). The
+  work plan for the task it gives is the turn's one line, the task's URL with the go asked
+  of the user, unless a plan he gave already covers it (`CLAUDE.md`: the work plan comes
+  before every task); wait for the go, then
 {{#coder}}
   hand the task to the `cleo` agent, as `rules/team.md` describes for a coder's task
   (no `model`: her agent runs on Sonnet). While a coder task is running, start nothing more: `next-task` runs again
@@ -114,7 +116,8 @@ Then dispatch by kind and role:
   work on the task yourself, as the lead; while you work on a task, start nothing
   more.
 {{/coder}}
-  When `next-task` gives nothing, say so in one line.
+  When `next-task` gives nothing, the turn's line says that nothing is workable, with the
+  Ready item's URL.
 {{#coder}}
 - **`approved`, or a `review` of the user, on a pull request of the coder or of the lead**:
   merge only under the merge rule. Read `gh pr view N --json reviews,commits`: merge when the
@@ -141,8 +144,8 @@ Then dispatch by kind and role:
   takeover agent on Opus, with the pull request, the task and the review comments. A pull
   request the lead already took over goes to a new takeover agent, never to the coder.
 {{/coder}}
-  Once a pull request is merged, run `next-task` and state the work plan for the task it
-  gives, as for a `ready` line.
+  Once a pull request is merged, run `next-task`; the turn's line holds the merge status and
+  the work plan of the task it gives, as for a `ready` line.
 {{#coder_github}}
 - **`comment` from `coder`**: a comment of the user that answers a question of the coder goes
   to the `cleo` agent: a message to her running task on that issue, or, when none runs, her
@@ -164,6 +167,8 @@ lead's conversation, not through the watch.
 
 ## 4. What the chat shows
 
-One line per action, naming it and its URL (handed to a member, merged, asked the user). A line
-that leads to nothing, and a round with no line, write nothing, in the chat or on GitHub.
+One line per woken turn, under "Reporting in the conversation" in `rules/team.md`: it holds
+the URL of each issue or pull request the turn concerned with its action or status
+(handed to a member, merged, asked the user), and nothing else. A line that leads to
+nothing, and a round with no line, write nothing, in the chat or on GitHub.
 {{/assistant_github}}
