@@ -234,6 +234,18 @@ Write the three phases in one pass, without stopping for approval:
    and their "Done when". Check that every requirement is covered. Before publishing, check
    each task against the splitting rules: merge any task that cannot land without another.
 
+Before publishing, check the specification against each blocking class of the verification,
+and correct what you find. These are the findings that get a specification sent back:
+
+- a requirement that no task covers, or a task that lists a requirement that does not exist;
+- a requirement that neither a test nor a reader can check;
+- a contradiction between requirements, decisions, the user's answers or the code that would
+  make a task impossible to complete as written or would lead to wrong behavior;
+- a task that, merged alone, would make a check of the repository fail.
+
+The suggestions (a thin reason in Decisions, an incomplete list of files in the Design, a
+wrong line reference) are not part of this check.
+
 When the user asks to work phase by phase, show each phase in the conversation and wait for
 their approval before the next one.
 
@@ -357,10 +369,14 @@ confirmation:
 - Assignees are left as they are: changing a specification, moving it on the board or
   closing it adds or removes none.
 {{#start_verified_specs}}
-- When the lead hands back a verification's comments, address each one in the
+- When the lead hands back a verification's comments, address every blocking finding in the
   specification, settle or ask under step 2, and post a comment on the parent, without
-  mentioning the user, that lists what changed for each comment. With no question left for
-  the user, end it with "Sent to Kira for verification."; with one, ask it as in step 2.
+  mentioning the user, that lists what changed for each comment. The comment states that
+  every blocking finding is addressed, and says for each suggestion whether it was applied
+  or declined. Before ending it with "Sent to Kira for verification.", check the changed
+  specification against each blocking class listed in step 3 and correct what you find. With
+  no question left for the user, end it with "Sent to Kira for verification."; with one, ask
+  it as in step 2.
   After the second verdict in a row requesting changes, which the lead says in her message,
   the specification gets no third verification: address the remaining comments once and end
   the comment saying that the specification waits for the user's own review, not with "Sent

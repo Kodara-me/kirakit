@@ -2024,7 +2024,7 @@ check 'verified: on, summary without mention, sent to the lead (R8)' \
 	flat_has "$on_spec" 'post it without mentioning the user and ask nothing: the specification goes to the lead' 'End with "Sent to Kira for verification."'
 check 'verified: on, no Ready for you (R8)' sh -c '! grep -qF "Ready for you" "$1"' _ "$on_spec"
 check 'verified: on, the analyst changes it on the lead'"'"'s comments (R14)' \
-	flat_has "$on_spec" 'When the lead hands back a verification'"'"'s comments, address each one'
+	flat_has "$on_spec" 'When the lead hands back a verification'"'"'s comments, address every blocking finding'
 check 'verified: on, the lead starts the kira agent in the background (R9)' \
 	flat_has "$on_team" 'verifies it with the `kira` agent, run in the background: the Agent tool with `subagent_type: kira`'
 check 'verified: on, Verifying spec #<n> (R9)' \
@@ -2160,6 +2160,10 @@ for build in commit-coder commit-coder-solo; do
 	check "review-pr: the pull request rules do not name review-spec, $build (#228 R11)" sh -c 'awk "/^## Delegating to the coder/,0" "$1" | grep -qF "suggestions" && ! awk "/^## Delegating to the coder/,0" "$1" | grep -qF "review-spec"' _ "$team"
 done
 check 'blocking: README describes the blocking classes and the suggestions (#228 R15)' flat_has "$root/README.md" 'each finding is either **blocking** or a **suggestion**' 'a requirement that no task covers' 'a covered requirement the change does not meet' 'the comments are listed under "Blocking" and "Suggestions"' 'whether she applied or declined it'
+check 'spec: the hand-back reply states the blocking findings addressed and answers each suggestion (#228 R12)' flat_has "$on_spec" 'The comment states that every blocking finding is addressed, and says for each suggestion whether it was applied or declined.'
+check 'spec: self-check against each blocking class before publishing (#228 R13)' flat_has "$on_spec" 'Before publishing, check the specification against each blocking class of the verification, and correct what you find.' 'a requirement that no task covers, or a task that lists a requirement that does not exist' 'a requirement that neither a test nor a reader can check' 'would make a task impossible to complete as written or would lead to wrong behavior' 'a task that, merged alone, would make a check of the repository fail'
+check 'spec: self-check again before sending a changed specification to verification (#228 R13)' flat_has "$on_spec" 'Before ending it with "Sent to Kira for verification.", check the changed specification against each blocking class listed in step 3'
+check 'cleo: self-check before opening a pull request or requesting a new review (#228 R14)' flat_has "$tmp/commit-coder/agents/cleo.md" 'Before she opens a pull request or requests a new review, she checks her change against each blocking class of the review that she can check locally' 'every requirement the task covers is met' 'every testable covered requirement has a test that names it' "the project's tests pass" 'the branch is up to date with the base branch'
 
 # R18: the README documents the option, the verification and how to object.
 check 'verified: README lists the option (R18)' contains "$root/README.md" '| `--start-verified-specs` |'
