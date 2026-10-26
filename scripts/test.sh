@@ -1265,7 +1265,7 @@ check 'review-pr: neutral result (#130 R3)' contains "$review" 'in neutral langu
 check 'review-pr: reads the tasks and their specification (#130 R4)' contains "$review" 'read it and its parent specification'
 check 'review-pr: requirement not met blocks (#130 R4)' contains "$review" 'A requirement not met leads to `request changes`.'
 check 'review-pr: no task reported (#130 R4)' contains "$review" 'that references no task is reported as such'
-check 'review-pr: tests name their requirement (#130 R5)' contains "$review" 'A testable requirement with no such test leads'
+check 'review-pr: tests name their requirement (#130 R5, #228 R5)' flat_has "$review" 'A testable requirement that a test exercises without naming it is a suggestion' 'only a requirement with no test at all leads to `request changes`'
 check 'review-pr: not testable does not block (#130 R5)' contains "$review" 'is reported as `not testable` and does not block.'
 check 'review-pr: security changes for the user (#130 R6)' sh -c 'for item in "credentials, tokens and signing keys" "permission rules and \`allowed-tools\`" "Git identity and signing" "network downloads and remote scripts" "files written or deleted outside the project" "CI workflows"; do grep -qF -- "$item" "$1" || exit 1; done && grep -qF "does not by itself lead to \`request changes\`" "$1"' _ "$review"
 check 'review-pr: pending CI, not ready (#130 R7)' contains "$review" 'any `pending`: the verdict is `not ready`, naming the pending checks, whatever the other'
@@ -1278,7 +1278,7 @@ check 'review-pr: no write in allowed-tools (#130 R9)' sh -c 'tools=$(grep "^all
 check 'review-pr: every gh api call a GET (#130 R9)' contains "$review" 'Every `gh api` call is a GET'
 team=$full/rules/team.md
 check 'review-pr: the lead posts the verdict herself (#130 R10, #183 R7)' contains "$team" 'the assistant posts that verdict on GitHub as its own'
-check 'review-pr: no approval against the verdict (#130 R10, #183 R7)' contains "$team" 'It never posts an approval when the'
+check 'review-pr: no approval against the verdict (#130 R10, #183 R7)' flat_has "$team" 'It never posts an approval when the verdict is not `approve`'
 check 'review-pr: For the user written in the posted review (#130 R10, #183 R7, #226 R13)' flat_has "$team" 'anything under "For the user" in the result is written in the review the assistant posts' 'is never restated in the conversation'
 check 'review-pr: the lead no longer invokes it herself (#183 D7)' sh -c '! grep -qF "\`review-pr OWNER/REPO#<n> [notes]\`" "$1"' _ "$team"
 
@@ -1302,7 +1302,7 @@ for build in commit-coder commit-coder-solo; do
 	check "kira agent: the lead starts it in the background, $build (#183 R1, R2)" flat_has "$team" 'reviewed by the `kira` agent, run in the background: the Agent tool with `subagent_type: kira`'
 	check "kira agent: a Reviewing description naming the pull request, $build (#183 R1)" flat_has "$team" 'a `description` that starts with `Reviewing` and names the pull request (`Reviewing PR #<n>`)'
 	check "kira agent: no model passed, $build (#183 R3)" flat_has "$team" '(`Reviewing PR #<n>`), no `model`, so that the agent'"'"'s Opus applies'
-	check "kira agent: the reference and the notes, $build (#183 R4)" flat_has "$team" 'the reference `OWNER/REPO#<n>` followed by the user'"'"'s direction for the task as notes.'
+	check "kira agent: the reference and the notes, $build (#183 R4)" flat_has "$team" 'the reference `OWNER/REPO#<n>` followed by the user'"'"'s direction for the task as notes, with the comments of the previous review (blocking findings and suggestions) on a later round.'
 	check "kira agent: the lead keeps answering, $build (#183 R2, #226 R2)" flat_has "$team" 'The start of the review is reported as "Reporting in the conversation" says, never as a line of its own in an automated turn; while it runs, the assistant keeps answering the user.'
 	check "kira agent: started again on not ready, $build (#183 R7)" flat_has "$team" 'background step and starts the `kira` agent again;'
 done
@@ -2050,7 +2050,7 @@ check 'verified: on, status:ready without a board (R13)' contains "$on_team" '(`
 check 'verified: on, CLAUDE.md lets the lead move it to Ready (R13)' \
 	flat_has "$on_claude" 'or the lead moves it there after verifying it (`rules/team.md`)'
 check 'verified: on, changes back to the analyst (R14)' \
-	flat_has "$on_team" '`changes requested`: the assistant hands the specification back to the analyst with the result'"'"'s comments; once she has changed it, it verifies it again.'
+	flat_has "$on_team" '`changes requested`: the assistant hands the specification back to the analyst with the result'"'"'s blocking findings and suggestions' 'once she has changed it, it verifies it again.'
 check 'verified: on, the second round goes to the user (R14)' \
 	flat_has "$on_team" 'also says `changes requested`, the assistant starts no third verification' 'the analyst makes one last pass on the remaining comments'
 check 'verified: on, needs the user (R15)' \
@@ -2127,13 +2127,47 @@ check 'kira agent: verifies a specification from its issue URL (R9, R10)' \
 	flat_has "$on_kira" 'A specification'"'"'s reference is its issue URL (`https://github.com/OWNER/REPO/issues/N`): follow the `review-spec` procedure'
 check 'kira agent: description covers verifying (R9)' contains "$on_kira" 'or verify a specification of the analyst in the background'
 
+# #228 R1 to R12, R15: findings are blocking or suggestions, and only a blocking one changes
+# the verdict.
+check 'review-spec: each finding blocking or a suggestion (#228 R1)' flat_has "$on_review" 'Each finding is either blocking or a suggestion.'
+check 'review-spec: the blocking classes (#228 R2)' flat_has "$on_review" 'Only a finding of one of these classes is blocking:' 'a requirement that no task covers, or a task that lists a requirement that does not exist' 'a requirement that neither a test nor a reader can check' 'would make a task impossible to complete as written or would lead to wrong behavior' 'a task that, merged alone, would make a check of the repository fail'
+check 'review-spec: the suggestions (#228 R2)' flat_has "$on_review" 'a requirement that holds several behaviors each of which is testable, or that states an implementation detail' 'an incomplete list of files, lines or test checks in the Design' 'a split by platform, installer, file or layer' 'a task larger than the review-size guideline' 'a fourth task without its reason in the Decisions'
+check 'review-spec: the splitting rule behind the list suggestion (#228 R2)' flat_has "$on_review" '"once merged alone on `main`, every check of the repository passes"'
+check 'review-spec: verified with only suggestions (#228 R3)' flat_has "$on_review" 'Otherwise `verified`, with the suggestions, if any.' 'A suggestion never changes the verdict, whatever their number.'
+check 'review-spec: changes requested on a blocking finding (#228 R3)' flat_has "$on_review" 'Otherwise `changes requested` when there is any blocking finding.'
+check 'review-spec: a security question stays needs the user (#228 R4)' flat_has "$on_review" '`needs the user` when a decision taken without the user settles a security question' 'name each one under "For the user"'
+check 'review-spec: the Checks table keeps its exceptions (#228 R1)' flat_has "$on_review" '| Code | pass / suggestions / fail / not checked |' '| Security | none / flagged |' '`fail` means at least one blocking finding in that row'
+check 'review-spec: result headings Blocking and Suggestions (#228 R7)' sh -c 'grep -qx "## Blocking" "$1" && grep -qx "## Suggestions" "$1"' _ "$on_review"
+check 'review-spec: suggestions do not change the verdict (#228 R7)' contains "$on_review" 'These do not change the verdict.'
+check 'review-spec: earlier blocking findings resolved or not (#228 R8)' sh -c 'grep -qx "## Earlier round" "$1"' _ "$on_review"
+check 'review-spec: earlier suggestions not repeated (#228 R9)' flat_has "$on_review" 'a suggestion already given in that round is not repeated'
+check 'review-spec: unchanged part marked not raised (#228 R10)' flat_has "$on_review" 'a blocking finding about a part of the specification that did not change since that round is marked "not raised in the earlier round"'
+check 'verified: on, suggestions of a verified specification not handed back (#228 R11)' flat_has "$on_team" 'The suggestions of the result are in the verdict comment and are not handed back to the analyst'
+check 'verified: on, the analyst answers each suggestion (#228 R12)' flat_has "$on_team" 'she addresses every blocking finding and, in her reply comment, states that she did and says for each suggestion whether she applied or declined it'
+check 'review-pr: each finding blocking or a suggestion (#228 R1)' flat_has "$review" 'Each finding is either blocking or a suggestion.'
+check 'review-pr: the blocking classes (#228 R5)' flat_has "$review" 'a failed or cancelled CI check' 'a head that cannot be merged into the base branch by fast-forward' 'a covered requirement that the change does not meet' 'a testable covered requirement that no test exercises' 'a defect (step 6): a change that makes a covered or existing behavior wrong, a crash, a data loss or a security flaw'
+check 'review-pr: everything else a suggestion (#228 R5)' flat_has "$review" 'Every other finding is a suggestion: style, naming, comments, refactoring, future-proofing' 'A comment blocks, and leads to `request changes`, only when it is a defect'
+check 'review-pr: approve with only suggestions (#228 R6)' flat_has "$review" 'Otherwise `approve`, with the suggestions, if any.' 'A suggestion never changes the verdict, whatever their number.'
+check 'review-pr: result headings Blocking and Suggestions (#228 R7)' sh -c 'grep -qx "## Blocking" "$1" && grep -qx "## Suggestions" "$1" && grep -qF "These do not change the verdict." "$1"' _ "$review"
+check 'review-pr: earlier blocking findings resolved or not (#228 R8)' sh -c 'grep -qx "## Earlier round" "$1"' _ "$review"
+check 'review-pr: earlier suggestions not repeated (#228 R9)' flat_has "$review" 'a suggestion already given in that round is not repeated'
+check 'review-pr: unchanged part marked not raised (#228 R10)' flat_has "$review" 'a blocking finding about a part of the change that did not change since that round is marked "not raised in the earlier round"'
+for build in commit-coder commit-coder-solo; do
+	team=$tmp/$build/rules/team.md
+	check "review-pr: suggestions of an approval not handed back, $build (#228 R11)" flat_has "$team" 'The suggestions of an approval stay in the review: they are not handed back to the coder, and they are not a remark for the user'
+	check "review-pr: the coder answers each suggestion, $build (#228 R12)" flat_has "$team" 'she addresses every blocking finding, replies to the review comments (her reply states that she did and says for each suggestion whether she applied or declined it)'
+	check "review-pr: earlier review comments in the notes, $build (#228 R8)" flat_has "$team" 'with the comments of the previous review (blocking findings and suggestions) on a later round'
+	check "review-pr: the pull request rules do not name review-spec, $build (#228 R11)" sh -c 'awk "/^## Delegating to the coder/,0" "$1" | grep -qF "suggestions" && ! awk "/^## Delegating to the coder/,0" "$1" | grep -qF "review-spec"' _ "$team"
+done
+check 'blocking: README describes the blocking classes and the suggestions (#228 R15)' flat_has "$root/README.md" 'each finding is either **blocking** or a **suggestion**' 'a requirement that no task covers' 'a covered requirement the change does not meet' 'the comments are listed under "Blocking" and "Suggestions"' 'whether she applied or declined it'
+
 # R18: the README documents the option, the verification and how to object.
 check 'verified: README lists the option (R18)' contains "$root/README.md" '| `--start-verified-specs` |'
 check 'verified: README lists the no option (R18)' contains "$root/README.md" '| `--no-start-verified-specs` |'
 check 'verified: README lists the profile key and default (R18)' \
 	flat_has "$root/README.md" '`start_verified_specs` (`yes` or `no`, default `no`)'
 check 'verified: README describes the verdicts (R18)' \
-	flat_has "$root/README.md" '`verified`: Kira moves the specification to Ready' '`changes requested`: back to Iris' '`needs the user`: a security question'
+	flat_has "$root/README.md" '`verified`: no blocking finding' '`changes requested`: back to Iris with the blocking findings and the suggestions' '`needs the user`: a security question'
 check 'verified: README lists the security questions (R18)' \
 	flat_has "$root/README.md" 'A security question is an open choice about credentials, tokens or signing keys; permission rules or `allowed-tools`; Git identity or signing; network downloads or remote scripts that are executed; files written or deleted outside the project; CI workflows; accounts and their access rights; or data exposed outside your machine or to other people.'
 check 'verified: README says how to object (R18)' \

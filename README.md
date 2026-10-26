@@ -706,12 +706,25 @@ no longer waits for you when it holds nothing for you to decide:
   skill. It checks that each requirement is a single testable statement, that every
   requirement is covered by a task, that the tasks follow the splitting rules, that every
   decision states its reason, that the specification matches the code and files it names,
-  and that no decision taken without you settles a security question. It returns one
-  verdict, which Kira posts on the specification as her own account and reports in her one
-  line, with the specification's URL:
-  - `verified`: Kira moves the specification to Ready (or adds `status:ready` on a
-    repository with no board) and development starts as if you had moved it;
-  - `changes requested`: back to Iris, who changes the specification, then a new
+  and that no decision taken without you settles a security question. The standard is "good
+  enough": each finding is either **blocking** or a **suggestion**, and only a blocking one
+  changes the verdict. A finding blocks when it is a requirement that no task covers (or a
+  task listing a requirement that does not exist), a requirement that neither a test nor a
+  reader can check, a contradiction that would make a task impossible or lead to wrong
+  behavior, or a task that would make a check of the repository fail when merged alone;
+  everything else (a requirement with several testable behaviors, a thin reason, an
+  incomplete list in the Design, a large task) is a suggestion. On a later round, the result
+  says whether each earlier blocking finding is resolved, does not repeat suggestions, and
+  marks a new blocking finding on an unchanged part as not raised before. It returns one
+  verdict, which Kira posts on the specification as her own account, with its blocking
+  findings and its suggestions, and reports in her one line, with the specification's URL:
+  - `verified`: no blocking finding, whatever the number of suggestions. Kira moves the
+    specification to Ready (or adds `status:ready` on a repository with no board) and
+    development starts as if you had moved it; the suggestions stay in the verdict comment
+    and are not handed back to Iris;
+  - `changes requested`: back to Iris with the blocking findings and the suggestions. She
+    addresses every blocking finding, and her reply says so and says for each suggestion
+    whether she applied or declined it. She changes the specification, then a new
     verification. After two verdicts in a row requesting changes there is no third
     verification (never more than two rounds before you): Iris makes one last pass on the
     remaining comments, and Kira asks you to review the specification yourself, listing the
@@ -747,7 +760,15 @@ With a coder, code goes through Cleo the same way:
   it preloads: it reads the pull request, its tasks and their specification, the diff, the
   CI checks and whether the branch can be fast-forwarded, through `gh` only, and returns a
   verdict (`approve`, `request changes` or `not ready` while CI runs) with its comments and a
-  "For the user" section, while the diff stays out of Kira's conversation. It has no tool to
+  "For the user" section, while the diff stays out of Kira's conversation. The standard is
+  "good enough" here too: the comments are listed under "Blocking" and "Suggestions", and
+  only a blocking finding requests changes: a failed or cancelled CI check, a branch that
+  cannot be fast-forwarded, a covered requirement the change does not meet, a testable
+  requirement that no test exercises, or a defect (wrong behavior, a crash, a data loss or
+  a security flaw). Style, naming, refactoring and the like are suggestions: with only
+  suggestions, the verdict is `approve`, the suggestions stay in the review and are not
+  handed back to Cleo. On a changes-requested round, Cleo addresses every blocking finding
+  and says in her reply, for each suggestion, whether she applied or declined it. It has no tool to
   write files and writes nothing: Kira posts its verdict on GitHub as her own account, in her
   own voice, and never approves against it. Like the members' rules (see
   [Permission rules](#permission-rules)), the review needs auto mode: a background agent

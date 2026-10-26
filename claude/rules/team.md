@@ -56,7 +56,7 @@ apply in the assistant's session; the coder follows her own persona.
   specification (`Verifying spec #<n>`), no `model`, so that the agent's Opus applies, and a
   prompt holding the specification's issue URL (`https://github.com/OWNER/REPO/issues/<n>`)
   followed by the user's direction for the feature as notes, with the comments of the
-  previous verification on a later round. The agent follows the `review-spec` procedure,
+  previous verification (blocking findings and suggestions) on a later round. The agent follows the `review-spec` procedure,
   posts nothing and returns only its result. The start of the verification is reported as
   "Reporting in the conversation" says, never as a line of its own in an automated turn;
   while it runs, the assistant keeps answering the user. A specification that still
@@ -71,7 +71,8 @@ apply in the assistant's session; the coder follows her own persona.
   flagged.
 - When the verification returns, the assistant posts its verdict on the specification as
   its own account (`gh issue comment <n> --body-file <file>`), in its own voice, with the
-  result's comments. The comment's first line names the verdict: `Verification: verified`,
+  result's comments (its blocking findings and its suggestions). The comment's first line
+  names the verdict: `Verification: verified`,
   `Verification: changes requested` or `Verification: needs the user`. The verdict reaches
   the conversation only through the one line of "Reporting in the conversation". The
   verdict comment does not mention the user. Then, by the verdict:
@@ -85,9 +86,12 @@ apply in the assistant's session; the coder follows her own persona.
 {{/assistant_github}}
     or, on a repository with no board, adds `status:ready` to it
     (`gh issue edit <n> --add-label status:ready`), then runs `next-task` and hands the task
-    it gives to the coder, as for a specification the user moved to Ready;
+    it gives to the coder, as for a specification the user moved to Ready. The suggestions
+    of the result are in the verdict comment and are not handed back to the analyst;
   - `changes requested`: the assistant hands the specification back to the analyst with
-    the result's comments; once she has changed it, it verifies it again. When the
+    the result's blocking findings and suggestions; she addresses every blocking finding
+    and, in her reply comment, states that she did and says for each suggestion whether she
+    applied or declined it; once she has changed it, it verifies it again. When the
     previous verification comment, posted since the user's latest answer on the
     specification, also says `changes requested`, the assistant starts no third
     verification: the analyst makes one last pass on the remaining comments and ends her
@@ -199,15 +203,20 @@ apply in the assistant's session; the coder follows her own persona.
   `kira` agent, run in the background: the Agent tool with `subagent_type: kira`, a
   `description` that starts with `Reviewing` and names the pull request
   (`Reviewing PR #<n>`), no `model`, so that the agent's Opus applies, and a prompt holding
-  the reference `OWNER/REPO#<n>` followed by the user's direction for the task as notes.
+  the reference `OWNER/REPO#<n>` followed by the user's direction for the task as notes,
+  with the comments of the previous review (blocking findings and suggestions) on a later
+  round.
   The agent follows the `review-pr` procedure, posts nothing and returns only its result.
   The start of the review is reported as "Reporting in the conversation" says, never as a
   line of its own in an automated turn; while it runs, the assistant keeps answering the
   user. When it returns, by the result's verdict:
   - `approve` or `request changes`: the assistant posts that verdict on GitHub as its own
     account (`gh pr review --approve` or `--request-changes`), with the result's comments
-    (`path:line`) in the review body, in its own voice. It never posts an approval when the
-    verdict is not `approve`; it may add remarks of its own, and raises a disagreement with
+    (`path:line`), the blocking findings and the suggestions, in the review body, in its own
+    voice. The suggestions of an approval stay in the review: they are not handed back to the
+    coder, and they are not a remark for the user in the conditions below. It never posts an
+    approval when the verdict is not `approve`; it may add remarks of its own, and raises a
+    disagreement with
     the verdict with the user in a comment of its own on the pull request that mentions him
     and holds only the disagreement and the question; the line is "answer" with that
     comment's URL;
@@ -265,8 +274,10 @@ apply in the assistant's session; the coder follows her own persona.
 {{/complete_approved_prs}}
   - on changes requested, by the assistant or by the user, it first counts the pull
     request's reviews in the state `CHANGES_REQUESTED` (`gh pr view <n> --json reviews`). On
-    the first one it hands the pull request back to the coder, who makes the changes, replies
-    to the review comments and requests the assistant's review again. From the second one on,
+    the first one it hands the pull request back to the coder, with the review's blocking
+    findings and suggestions; she addresses every blocking finding, replies to the review
+    comments (her reply states that she did and says for each suggestion whether she applied
+    or declined it) and requests the assistant's review again. From the second one on,
     the assistant continues the pull request itself, on Opus (the takeover, below);
 - When the coder finishes, the assistant reports it as "Reporting in the conversation"
   says: the line holds the pull request's URL with the action or status that fits (review,

@@ -259,6 +259,22 @@ foreach ($path in @('CLAUDE.md', (Join-Path 'rules' 'team.md'), (Join-Path (Join
 }
 Test-Check 'verified: on without a coder, the files without the setting (#185 R4)' $same
 
+# #228 R1 to R12, R15: findings are blocking or suggestions, and only a blocking one changes the verdict.
+$blocking = Join-Path $tmp 'blocking'
+$run = Invoke-Installer $blocking 'main' 'C' @('-Copy', '-Assistant', 'Kira <kira@example.com>', '-Analyst', '-Coder', 'Cleo <cleo@example.com>', '-StartVerifiedSpecs')
+Test-Check 'blocking: installed with verified specifications on (#228 R1)' ($run.Status -eq 0) (($run.Lines | ForEach-Object { "$_" }) -join "`n")
+function Get-Flat($Path) { return ((Get-Content -Raw -LiteralPath $Path) -replace '\s+', ' ') }
+$specReview = Get-Flat (Join-Path (Join-Path (Join-Path $blocking 'skills') 'review-spec') 'SKILL.md')
+$prReview = Get-Flat (Join-Path (Join-Path (Join-Path $blocking 'skills') 'review-pr') 'SKILL.md')
+$blockingTeam = Get-Flat (Join-Path (Join-Path $blocking 'rules') 'team.md')
+$blockingReadme = Get-Flat (Join-Path (Split-Path -Parent $PSScriptRoot) 'README.md')
+Test-Check 'blocking: review-spec classifies findings (#228 R1, R2)' ($specReview.Contains('Each finding is either blocking or a suggestion.') -and $specReview.Contains('a requirement that no task covers, or a task that lists a requirement that does not exist') -and $specReview.Contains('a task larger than the review-size guideline'))
+Test-Check 'blocking: review-spec verified with only suggestions, security unchanged (#228 R3, R4)' ($specReview.Contains('Otherwise `verified`, with the suggestions, if any.') -and $specReview.Contains('`needs the user` when a decision taken without the user settles a security question'))
+Test-Check 'blocking: review-pr blocking classes and approve (#228 R5, R6)' ($prReview.Contains('a testable covered requirement that no test exercises') -and $prReview.Contains('Otherwise `approve`, with the suggestions, if any.'))
+Test-Check 'blocking: result headings and later rounds (#228 R7, R8, R9, R10)' ($specReview.Contains('## Blocking') -and $specReview.Contains('## Suggestions') -and $specReview.Contains('## Earlier round') -and $prReview.Contains('## Earlier round') -and $prReview.Contains('is not repeated') -and $prReview.Contains('not raised in the earlier round'))
+Test-Check 'blocking: suggestions not handed back, authors answer them (#228 R11, R12)' ($blockingTeam.Contains('The suggestions of the result are in the verdict comment and are not handed back to the analyst') -and $blockingTeam.Contains('The suggestions of an approval stay in the review') -and $blockingTeam.Contains('says for each suggestion whether she applied or declined it'))
+Test-Check 'blocking: README describes the two tiers (#228 R15)' ($blockingReadme.Contains('each finding is either **blocking** or a **suggestion**') -and $blockingReadme.Contains('the comments are listed under "Blocking" and "Suggestions"'))
+
 function Get-RunText($Run) { return (($Run.Lines | ForEach-Object { "$_" }) -join "`n") }
 
 # #199 R1, R2, R20: the soft rules are off by default, saved by their option, kept by a later run

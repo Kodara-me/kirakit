@@ -22,8 +22,10 @@ local clone and works from any directory.
 
 - the reference is the first word: a URL (`https://github.com/OWNER/REPO/pull/N`),
   `OWNER/REPO#N`, or a number `N`;
-- the notes are the rest, free text (for example the user's direction for the task). Take
-  them into account when judging the change; they never override a requirement.
+- the notes are the rest, free text (for example the user's direction for the task, or the
+  comments of an earlier review). Take them into account when judging the change; they never
+  override a requirement. Notes that hold the comments of an earlier review make this a later
+  round (see "Later rounds").
 
 From the reference, take `OWNER/REPO` and `N`. For a bare number, the repository is the one
 of the current directory (`gh pr view N --json url`); if that fails, return only a line
@@ -55,6 +57,22 @@ Every `gh api` call is a GET: never `-X`, `--method`, `-f`, `-F`, `--field`, `--
 `--input` (a field turns the call into a POST). Never `gh pr review`, `gh pr comment`,
 `gh pr edit`, `gh issue comment`, `gh issue edit`, `gh project`, `git push` or any other
 command that writes.
+
+## Blocking findings and suggestions
+
+Each finding is either blocking or a suggestion. Only a finding of one of these classes is
+blocking:
+
+- a failed or cancelled CI check (step 1);
+- a head that cannot be merged into the base branch by fast-forward (step 2);
+- a covered requirement that the change does not meet (step 3);
+- a testable covered requirement that no test exercises (step 4);
+- a defect (step 6): a change that makes a covered or existing behavior wrong, a crash, a
+  data loss or a security flaw.
+
+Every other finding is a suggestion: style, naming, comments, refactoring, future-proofing,
+an edge case outside the requirements with no current impact, a test that exercises a
+requirement without naming it. A suggestion never changes the verdict, whatever their number.
 
 ## Steps
 
@@ -99,7 +117,8 @@ the files read at the head. A requirement not met leads to `request changes`. A 
 
 For each covered requirement whose behavior can be tested automatically, look for at least
 one test in the head that names it (`R2` in the test's name or description). Search the
-diff first, then the test files at the head. A testable requirement with no such test leads
+diff first, then the test files at the head. A testable requirement that a test exercises without
+naming it is a suggestion (rename the test); only a requirement with no test at all leads
 to `request changes`. A requirement that cannot be tested automatically (documentation, a
 wording, a manual step) is reported as `not testable` and does not block.
 
@@ -121,14 +140,24 @@ They go under "For the user". Such a change does not by itself lead to `request 
 Read the diff as a reviewer: correctness, edge cases, consistency with the rest of the code
 and with the repository's conventions, the specification's Design and Decisions, and the
 notes. Each finding is a comment with its file and line (`path:line`, the line in the head)
-when it applies to one. A comment that asks for a change leads to `request changes`; a mere
-suggestion is marked `(suggestion)` and does not block.
+when it applies to one. A comment blocks, and leads to `request changes`, only when it is a
+defect as defined above; every other comment is a suggestion and does not block.
 
 ## Verdict
 
 - `not ready` when any CI check is pending.
-- Otherwise `request changes` when any check fails or any comment asks for a change.
-- Otherwise `approve`.
+- Otherwise `request changes` when any check fails or any comment is a blocking finding.
+- Otherwise `approve`, with the suggestions, if any.
+
+## Later rounds
+
+When the notes hold the comments of an earlier review:
+
+- an "Earlier round" part of the result states, for each blocking finding of that round,
+  whether it is resolved;
+- a suggestion already given in that round is not repeated;
+- a blocking finding about a part of the change that did not change since that round is
+  marked "not raised in the earlier round".
 
 ## Result
 
@@ -147,19 +176,33 @@ Two to four sentences: what the pull request does and why the verdict.
 | Check | Result | Details |
 | --- | --- | --- |
 | Requirements (R4) | pass / fail / not applicable | One line per requirement: R1 met, or not met, and why; or no task referenced |
-| Tests (R5) | pass / fail / not applicable | One line per requirement: the test that names it, none, or not testable |
+| Tests (R5) | pass / fail / not applicable | One line per requirement: the test that names it, a test that does not name it (suggestion), none, or not testable |
 | Security (R6) | none / flagged | The files, also listed under "For the user" |
 | CI (R7) | pass / fail / pending / no checks | The failed or pending checks |
 | Fast-forward (R8) | pass / fail | The commits the head is behind the base, when it fails |
 
 Rows not run because CI is pending say `not checked`.
 
-## Comments
+## Earlier round
 
-- `path:line` — the finding and what to change.
+Only on a later round: each blocking finding of the earlier round as resolved or not
+resolved, with the reason. Omit the part on a first round.
+
+## Blocking
+
+- `path:line` — the finding and what to change. A blocking finding on a part that did not
+  change since the earlier round ends with "(not raised in the earlier round)".
 - The finding, without a file when it applies to the whole pull request.
 
-None, when there is nothing to say.
+None, when there is no blocking finding.
+
+## Suggestions
+
+These do not change the verdict.
+
+- `path:line` — the suggestion.
+
+None, when there is nothing to suggest.
 
 ## For the user
 
