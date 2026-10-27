@@ -14,10 +14,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: shellcheck get-kira.sh scripts/*.sh
-      # team is a template: check it as built, with every member.
+      # The launchers are templates: check them as built, with every member.
       - run: |
           sh scripts/build.sh -o "$RUNNER_TEMP/build" --analyst
-          shellcheck "$RUNNER_TEMP/build/bin/team"
+          shellcheck "$RUNNER_TEMP/build/bin/assistant" "$RUNNER_TEMP/build/bin/analyst"
 
   psscriptanalyzer:
     runs-on: windows-latest
