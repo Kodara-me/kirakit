@@ -1175,5 +1175,5 @@ attaches `get-kira.sh` and `get-kira.ps1`, stamped with the tag, which is what t
 - `get-kira.ps1` must pass `PSScriptAnalyzer` with `PSScriptAnalyzerSettings.psd1`, stay ASCII
   and run on Windows PowerShell 5.1.
 - `get-kira.ps1` reimplements `build.sh`: CI checks that both produce the same files.
-- CI runs the tests on Ubuntu (`dash`, `bash --posix`) and macOS (`sh`, `zsh`), and the
-  PowerShell installer on Windows (PowerShell 5.1 and 7).
+- CI runs the tests on Ubuntu (`dash`, `bash --posix`), and the PowerShell installer on
+  Windows (PowerShell 5.1 and 7). macOS is not tested for now.

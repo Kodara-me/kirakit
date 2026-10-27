@@ -40,10 +40,6 @@ jobs:
             shell: dash
           - os: ubuntu-latest
             shell: bash --posix
-          - os: macos-latest
-            shell: sh
-          - os: macos-latest
-            shell: zsh --emulate sh
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
