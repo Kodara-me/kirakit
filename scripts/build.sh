@@ -7,7 +7,6 @@
 #   DIR/CLAUDE.md                    from claude/CLAUDE.md
 #   DIR/output-styles/<member>.md, DIR/agents/<member>.md and DIR/skills/<member>/SKILL.md
 #                                    from team/<member>.md
-#   DIR/konsole/<scheme>.colorscheme from launchers/konsole/<scheme>.colorscheme
 #   DIR/bin/<launcher>               from launchers/<launcher>, executable
 #   DIR/settings/<name>.json         from claude/settings/<name>.json
 #
@@ -611,10 +610,6 @@ else
 	# Without an analyst, nothing of an earlier build stays to be installed.
 	rm -rf "$plugin" "$out_dir/settings/kirakit-analyst.md"
 fi
-for file in "$root"/launchers/konsole/*.colorscheme; do
-	[ -f "$file" ] || continue
-	build_file "$file" "$out_dir/konsole/$(basename "$file")"
-done
 # The launchers name the assistant "Kira" when it has no git identity.
 for file in "$root"/launchers/*; do
 	[ -f "$file" ] || continue

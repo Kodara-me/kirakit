@@ -10,7 +10,7 @@ machine with one command.
 | `personas/` | Claude Code output styles: `_core.md` holds the traits shared by every persona, each other file is an overlay (`kira-cozy.md`, …) |
 | `team/` | Team members beside Kira, one file each (`iris.md`, `cleo.md`), built into an output style and an agent |
 | `claude/` | Content for `~/.claude/`: `CLAUDE.md`, `rules/`, `skills/`, `agents/` |
-| `launchers/` | Commands that start a team member or the whole team (`assistant`, `analyst`, `team`), and their Konsole color schemes |
+| `launchers/` | Commands that start a team member (`assistant`, `analyst`) and the GitHub watch (`kirakit-watch`) |
 | `github/` | Issue and pull request templates, a workflow and Copilot instructions to copy into a repository's `.github/` |
 | `.github/workflows/` | This repository's CI, and reusable workflows other repositories can call |
 | `scripts/` | `build.sh` (builds the personalized files into `dist/`) and `test.sh` (end-to-end tests) |
@@ -71,11 +71,9 @@ Outside it, on Linux and macOS (see [Launchers](#launchers)):
 
 | Path | Component |
 | --- | --- |
-| `assistant`, `team`, `kirakit-session`, `kirakit-watch` in `~/.local/bin` (or `--bin-dir`; `$CLAUDE_CONFIG_DIR/bin` with a non-default configuration directory) | `launchers` |
+| `assistant`, `kirakit-watch` in `~/.local/bin` (or `--bin-dir`; `$CLAUDE_CONFIG_DIR/bin` with a non-default configuration directory) | `launchers` |
 | `analyst` in the same directory, with an analyst | `launchers` |
 | `kirakit-analyst.json`, the `kirakit-analyst/` plugin and `kirakit-analyst.md` in the same directory, with an analyst: the settings, style, skills and prompt of the analyst's session (see [The analyst's session](#the-analysts-session)), not executable | `launchers` |
-| `kirakit-assistant.colorscheme` in `$XDG_DATA_HOME/konsole` (default: `~/.local/share/konsole`; or `--color-scheme-dir`; `$CLAUDE_CONFIG_DIR/konsole` with a non-default configuration directory) | `launchers` |
-| `kirakit-analyst.colorscheme` in the same directory, with an analyst | `launchers` |
 
 The `github` component is installed only on request (`--only github`), into a repository's
 `.github/`: issue templates (bug report, and a feature request written as a specification),
@@ -86,12 +84,11 @@ a pull request template, Copilot instructions, and a workflow that checks pull r
 `get-kira.ps1` takes the same options in PowerShell form (`-DryRun`, `-Name`, `-CoAuthor`,
 `-Coder`, `-CoderSigningKey`, `-CoderGithub`, `-AllowReleases`, `-NoAllowReleases`,
 `-CompleteApprovedPrs`, `-NoCompleteApprovedPrs`, `-StartVerifiedSpecs`,
-`-NoStartVerifiedSpecs`, `-BinDir`, `-ColorSchemeDir`, …; see
-`Get-Help .\get-kira.ps1 -Detailed`). `-BinDir DIR` and `-ColorSchemeDir DIR` are `--bin-dir`
-and `--color-scheme-dir` for `get-kira.ps1`: absolute paths (a leading `~/` is expanded), saved
-in the profile as `bin_dir` and `color_scheme_dir` only when passed (a saved value is kept), so
-that both installers accept the same command line. `get-kira.ps1` installs no launchers or
-color schemes and writes nothing in either directory.
+`-NoStartVerifiedSpecs`, `-BinDir`, …; see
+`Get-Help .\get-kira.ps1 -Detailed`). `-BinDir DIR` is `--bin-dir` for `get-kira.ps1`: an
+absolute path (a leading `~/` is expanded), saved in the profile as `bin_dir` only when passed
+(a saved value is kept), so that both installers accept the same command line. `get-kira.ps1`
+installs no launchers and writes nothing in that directory.
 
 | Option | Effect |
 | --- | --- |
@@ -121,7 +118,6 @@ color schemes and writes nothing in either directory.
 | `--default-style PERSONA` | Style selected in `settings.json` (default: `kira-cozy`) |
 | `--assistant-style PERSONA` | Style of the `assistant` launcher (default: the default style) |
 | `--bin-dir DIR` | Where the launchers go, an absolute path (default: `~/.local/bin`, or `bin/` in a non-default configuration directory; saved in the profile) |
-| `--color-scheme-dir DIR` | Where the Konsole color schemes go, an absolute path (default: `konsole/` in `XDG_DATA_HOME`, or `konsole/` in a non-default configuration directory; saved in the profile) |
 | `--reconfigure` | Ask all profile questions again |
 | `--persona NAME` | Install only this persona (repeatable; default: all) |
 | `--only COMPONENT` | `styles`, `claude`, `launchers` or `github`; default: `styles`, `claude` and `launchers` |
@@ -132,8 +128,6 @@ color schemes and writes nothing in either directory.
 Environment variables:
 
 - `CLAUDE_CONFIG_DIR` — Claude Code configuration directory (default: `~/.claude`)
-- `XDG_DATA_HOME` — where the Konsole color schemes go without `--color-scheme-dir`, in
-  `konsole/` (default: `~/.local/share`); ignored when `CLAUDE_CONFIG_DIR` is not `~/.claude`
 - `KIRAKIT_REPO`, `KIRAKIT_REF` — repository and branch or tag fetched without a clone
   (default: the release the installer comes from, otherwise the latest `vX.Y.Z` tag; set
   `KIRAKIT_REF=main` for unreleased changes)
@@ -175,17 +169,19 @@ questions that are not answered yet are asked. Options override the saved values
 `--reconfigure` asks everything again. Without a terminal, unanswered values fall back to
 defaults: no name, `unspecified`, `auto`, no assistant, no analyst, no coder; the optional assistant
 values default to empty, and trailers to yes when there is an assistant. The launcher
-locations (`bin_dir`, `color_scheme_dir`) are saved only when passed with `--bin-dir` or
-`--color-scheme-dir`, never as their default; later runs use a saved one, `--uninstall`
-included.
+location (`bin_dir`) is saved only when passed with `--bin-dir`, never as its default; later
+runs use a saved one, `--uninstall` included. A `color_scheme_dir` that an earlier version
+saved is dropped.
 
 With a `CLAUDE_CONFIG_DIR` other than `~/.claude`, and no saved or passed location, the
-launchers go in `$CLAUDE_CONFIG_DIR/bin` and the color schemes in `$CLAUDE_CONFIG_DIR/konsole`
-(`XDG_DATA_HOME` is ignored), so that a run aimed at a scratch directory never touches your own
-launchers; cleaning up and `--uninstall` skip, and log, any manifest path in `~/.local/bin` or
-the default color scheme directory in that case. Every run that installs launchers logs both
-directories. With `CLAUDE_CONFIG_DIR` unset, the defaults are `~/.local/bin` and
-`${XDG_DATA_HOME:-~/.local/share}/konsole`.
+launchers go in `$CLAUDE_CONFIG_DIR/bin`, so that a run aimed at a scratch directory never
+touches your own launchers; cleaning up and `--uninstall` skip, and log, any manifest path in
+`~/.local/bin` or in the default color scheme directory in that case. Every run that installs
+launchers logs the directory. With `CLAUDE_CONFIG_DIR` unset, the default is `~/.local/bin`.
+
+Earlier versions also installed a `team` launcher, a `kirakit-session` helper and Konsole
+color schemes (`kirakit-assistant.colorscheme`, `kirakit-analyst.colorscheme`). The next run
+removes them when the manifest lists them, and `--uninstall` still does.
 
 ### Who commits
 
@@ -476,11 +472,11 @@ were there before kirakit (for example your own `CLAUDE.md`). It removes the per
 kirakit recorded, and only those, then the record. It keeps the profile, the backups and the
 `outputStyle` and `attribution` settings.
 
-`--uninstall` also removes the launchers and color schemes, and restores the files they
+`--uninstall` also removes the launchers, and restores the files they
 replaced.
 
 Requirements: `git`, and a POSIX shell with standard utilities (`awk`, `sed`, `cmp`, `diff`,
-`mktemp`) or PowerShell 5+. The launchers need `bash`; `team` and the colors need Konsole.
+`mktemp`) or PowerShell 5+. The launchers need `bash`.
 
 `CLAUDE.md`, `rules/`, `skills/`, `agents/` and `output-styles/` in `$CLAUDE_CONFIG_DIR` are
 built from the repository, so an edit made to them in place is not kept by the next install.
@@ -616,11 +612,10 @@ installed only with an analyst or a coder.
   [Development](#development-from-a-ready-specification)). With `--start-verified-specs`,
   Kira verifies it and makes it workable herself (below).
 - **Only the lead's session watches GitHub.** With the assistant's GitHub account in the
-  profile, the `watch` skill (run by the `assistant` launcher at its start, and by the
-  assistant's pane of `team`) starts one `kirakit-watch` check per team account of the
+  profile, the `watch` skill (run by the `assistant` launcher at its start) starts one `kirakit-watch` check per team account of the
   profile, the assistant's, the analyst's and the coder's, with Claude Code's Monitor tool,
   so Kira wakes only when a line is printed, and `/loop 10m` running them with `--once` as
-  the fallback. The `analyst` launcher, Iris's pane of `team` and a plain `claude` session
+  the fallback. The `analyst` launcher and a plain `claude` session
   start no watch; the analyst and the coder run as Kira's background agents. Kira acts on a
   change once, whichever account reported it, and writes one line in the chat per action,
   nothing when nothing changed:
@@ -824,8 +819,7 @@ persona, under her own rules and on her agent's model, without leaving the conve
 The lead setup changes nothing for a direct conversation with Iris, except that her session
 is restricted (see [The analyst's session](#the-analysts-session)):
 
-- **Talk to her** with the `analyst` command, or open the whole team side by side with
-  `team` (see [Launchers](#launchers)). You can also switch the session's output style to
+- **Talk to her** with the `analyst` command (see [Launchers](#launchers)). You can also switch the session's output style to
   `Iris` (`/config`), and back to a Kira style the same way.
 - `claude --agent iris` is not the way to talk to her: an agent session keeps the global
   output style, so Kira's persona would sit in the same prompt.
@@ -844,26 +838,16 @@ output styles keep the session's model.
 
 ## Launchers
 
-The `launchers` component installs one command per team member, and one for the whole team:
+The `launchers` component installs one command per team member:
 
 | Command | What it does |
 | --- | --- |
 | `assistant [ARGS…]` | Starts Claude Code as the assistant: a session named after it (Kira without a git identity), in its style. With the assistant's GitHub account, the session starts with `/watch`, the lead's watch of GitHub, except with `-p` or `--print` |
 | `analyst [ARGS…]` | The same for Iris, with an analyst, in a restricted session that starts no watch (see [The analyst's session](#the-analysts-session)) |
-| `team [DIR]` | Opens a new Konsole window with every member side by side (the assistant on the left), each running its command in `DIR` (default: the current directory); the watch starts in the assistant's pane only |
 
 `assistant` and `analyst` pass their arguments to Claude Code (`assistant --resume`,
 `analyst -p "…"`) and exit with its status. The assistant's style is the default style, or
 the one given with `--assistant-style`.
-
-In Konsole, each member's pane takes its own color scheme while Claude Code runs: Catppuccin
-Mocha with a mauve (assistant) or peach (analyst) background. The scheme of the Konsole
-profile comes back when Claude Code exits, fails or is interrupted. Outside Konsole, no color
-changes; the color sequences go to the terminal, never to redirected output.
-
-`team` needs Konsole. It writes a temporary layout with one pane per member and opens it with
-`konsole --separate --layout`. It uses no D-Bus: Konsole refuses to run commands over D-Bus
-unless its security-sensitive D-Bus API is enabled.
 
 `kirakit-watch ROLE [--once]` is the background check of a team account (`assistant`,
 `analyst`, or `coder`, also called `developer`); the lead's session runs one per team account
@@ -892,7 +876,7 @@ successfully. A lock left by a check that was killed is taken over. It needs `jq
 
 The installer warns when the bin directory is not on your `PATH`, and when another command
 with a launcher's name comes first in it. A shell function or alias of the same name, such
-as a hand-written `team` fish function, also wins over the launcher, and the installer
+as a hand-written `assistant` function, also wins over the launcher, and the installer
 cannot see it: remove it once the launchers are installed.
 
 The launchers are not supported on Windows: `get-kira.ps1` prints a notice and installs none,

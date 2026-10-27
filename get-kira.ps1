@@ -78,9 +78,6 @@ Ask all profile questions again.
 Where get-kira.sh puts the launchers, an absolute path (saved in the profile under bin_dir).
 This installer installs no launchers and writes nothing there; the option lets both installers
 take the same command line.
-.PARAMETER ColorSchemeDir
-Where get-kira.sh puts the Konsole color schemes, an absolute path (saved in the profile under
-color_scheme_dir). Nothing is written there by this installer.
 .PARAMETER Persona
 Install only these personas (default: all).
 .PARAMETER Only
@@ -125,7 +122,6 @@ param(
     [string]$DefaultStyle,
     [switch]$Reconfigure,
     [string]$BinDir,
-    [string]$ColorSchemeDir,
     [string[]]$Persona = @(),
     [ValidateSet('styles', 'claude', 'launchers', 'github')]
     [string]$Only,
@@ -581,8 +577,7 @@ function Get-KiraProfile {
     # A location given on this run wins over the saved one; both must be absolute paths.
     $launcherDirs = ''
     $launcherOptions = @(
-        @{ Key = 'bin_dir'; Param = 'BinDir'; Label = 'bin directory' },
-        @{ Key = 'color_scheme_dir'; Param = 'ColorSchemeDir'; Label = 'color scheme directory' }
+        @{ Key = 'bin_dir'; Param = 'BinDir'; Label = 'bin directory' }
     )
     foreach ($option in $launcherOptions) {
         $value = ''
@@ -1489,7 +1484,7 @@ try {
             if (-not $Only -or $Only -eq 'styles') { Install-KiraStyle }
             if (-not $Only -or $Only -eq 'claude') { Install-KiraClaude $userProfile.style $userProfile }
             if (-not $Only -or $Only -eq 'launchers') {
-                Write-KiraLog 'notice: the launchers (assistant, analyst, team) are not supported on Windows; none is installed'
+                Write-KiraLog 'notice: the launchers (assistant, analyst) are not supported on Windows; none is installed'
             }
             Save-KiraManifest
         }

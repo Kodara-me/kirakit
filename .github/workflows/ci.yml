@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: shellcheck get-kira.sh scripts/*.sh launchers/kirakit-session
+      - run: shellcheck get-kira.sh scripts/*.sh
       # team is a template: check it as built, with every member.
       - run: |
           sh scripts/build.sh -o "$RUNNER_TEMP/build" --analyst

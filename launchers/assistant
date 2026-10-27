@@ -7,8 +7,8 @@ watch=/watch
 for arg in "$@"; do
 	case $arg in -p | --print) watch= ;; esac
 done
-exec "$(dirname -- "$0")/kirakit-session" '{{assistant_name}}' '{"outputStyle":"{{assistant_style}}"}' kirakit-assistant ${watch:+"$watch"} "$@"
+exec claude -n '{{assistant_name}}' --settings '{"outputStyle":"{{assistant_style}}"}' ${watch:+"$watch"} "$@"
 {{/assistant_github}}
 {{^assistant_github}}
-exec "$(dirname -- "$0")/kirakit-session" '{{assistant_name}}' '{"outputStyle":"{{assistant_style}}"}' kirakit-assistant "$@"
+exec claude -n '{{assistant_name}}' --settings '{"outputStyle":"{{assistant_style}}"}' "$@"
 {{/assistant_github}}
