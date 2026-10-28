@@ -95,8 +95,8 @@ function Invoke-Installer([string]$ConfigDir, [string]$Ref, [string]$Locale, [st
         HOME = $scratchHome; USERPROFILE = $scratchHome; XDG_DATA_HOME = $scratchData; XDG_CACHE_HOME = $scratchCache }
     # A run given a launcher location, as an option or saved in the profile, is out of the guard.
     $profilePath = Join-Path $ConfigDir '.kirakit-profile'
-    $given = ($Arguments -match '^-(BinDir|ColorSchemeDir)') -or ((Test-Path -LiteralPath $profilePath) -and
-        ([IO.File]::ReadAllText($profilePath) -match '(?m)^(bin_dir|color_scheme_dir)='))
+    $given = ($Arguments -match '^-BinDir') -or ((Test-Path -LiteralPath $profilePath) -and
+        ([IO.File]::ReadAllText($profilePath) -match '(?m)^bin_dir='))
     $before = Get-GuardListing $scratchHome, $scratchData
     foreach ($name in $vars.Keys) {
         $saved[$name] = [Environment]::GetEnvironmentVariable($name)
@@ -310,33 +310,30 @@ function Get-ProfileText([string]$ConfigDir) {
     return [IO.File]::ReadAllText($path)
 }
 $launcherBin = Join-Path $tmp 'launcher-bin'
-$launcherSchemes = Join-Path $tmp 'launcher-schemes'
 $fresh = Join-Path $tmp 'launcher-fresh'
 $run = Invoke-Installer $fresh 'main' 'C' @('-Copy', '-Assistant', 'Kira <kira@example.com>')
 $freshProfile = Get-ProfileText $fresh
-Test-Check 'launcher dirs: a fresh run saves neither location (#172 R3)' ($run.Status -eq 0 -and $freshProfile -and
-    -not $freshProfile.Contains('bin_dir=') -and -not $freshProfile.Contains('color_scheme_dir=')) (Get-RunText $run)
+Test-Check 'launcher dirs: a fresh run saves no location (#172 R3)' ($run.Status -eq 0 -and $freshProfile -and
+    -not $freshProfile.Contains('bin_dir=')) (Get-RunText $run)
 $given = Join-Path $tmp 'launcher-given'
-$run = Invoke-Installer $given 'main' 'C' @('-Copy', '-Assistant', 'Kira <kira@example.com>', '-BinDir', $launcherBin, '-ColorSchemeDir', $launcherSchemes)
-Test-Check 'launcher dirs: -BinDir and -ColorSchemeDir are saved (#172 R8)' ($run.Status -eq 0 -and
-    (Test-ProfileLine $given "bin_dir=$launcherBin") -and (Test-ProfileLine $given "color_scheme_dir=$launcherSchemes")) (Get-RunText $run)
+$run = Invoke-Installer $given 'main' 'C' @('-Copy', '-Assistant', 'Kira <kira@example.com>', '-BinDir', $launcherBin)
+Test-Check 'launcher dirs: -BinDir is saved (#172 R8)' ($run.Status -eq 0 -and
+    (Test-ProfileLine $given "bin_dir=$launcherBin")) (Get-RunText $run)
 $run = Invoke-Installer $given 'main' 'C' @('-Copy', '-Assistant', 'Kira <kira@example.com>')
-Test-Check 'launcher dirs: saved locations are kept by a later run (#172 R3)' ($run.Status -eq 0 -and
-    (Test-ProfileLine $given "bin_dir=$launcherBin") -and (Test-ProfileLine $given "color_scheme_dir=$launcherSchemes")) (Get-RunText $run)
-Test-Check 'launcher dirs: nothing is written in either directory (#172 R8)' (
-    -not (Test-Path -LiteralPath $launcherBin) -and -not (Test-Path -LiteralPath $launcherSchemes))
+Test-Check 'launcher dirs: a saved location is kept by a later run (#172 R3)' ($run.Status -eq 0 -and
+    (Test-ProfileLine $given "bin_dir=$launcherBin")) (Get-RunText $run)
+Test-Check 'launcher dirs: nothing is written in the directory (#172 R8)' (
+    -not (Test-Path -LiteralPath $launcherBin))
 $kept = Join-Path $tmp 'launcher-kept'
 New-Item -ItemType Directory -Path $kept | Out-Null
-[IO.File]::WriteAllText((Join-Path $kept '.kirakit-profile'), "bin_dir=$launcherBin$([char]10)")
+[IO.File]::WriteAllText((Join-Path $kept '.kirakit-profile'), "bin_dir=$launcherBin$([char]10)color_scheme_dir=$tmp/old-schemes$([char]10)")
 $run = Invoke-Installer $kept 'main' 'C' @('-Copy', '-Assistant', 'Kira <kira@example.com>')
-Test-Check 'launcher dirs: a location saved by get-kira.sh is kept (#172 R3)' ($run.Status -eq 0 -and
+Test-Check 'launcher dirs: a location saved by get-kira.sh is kept, the retired color scheme directory dropped (#172 R3)' ($run.Status -eq 0 -and
     (Test-ProfileLine $kept "bin_dir=$launcherBin") -and -not (Get-ProfileText $kept).Contains('color_scheme_dir=')) (Get-RunText $run)
-foreach ($name in @('BinDir', 'ColorSchemeDir')) {
-    $relative = Join-Path $tmp "launcher-relative-$name"
-    $run = Invoke-Installer $relative 'main' 'C' @('-Copy', '-Assistant', 'Kira <kira@example.com>', "-$name", 'relative/path')
-    Test-Check "launcher dirs: a relative -$name is rejected, nothing saved (#172 R8)" ($run.Status -ne 0 -and
-        (Get-RunText $run).Contains('must be an absolute path') -and -not (Test-Path -LiteralPath (Join-Path $relative '.kirakit-profile'))) (Get-RunText $run)
-}
+$relative = Join-Path $tmp 'launcher-relative'
+$run = Invoke-Installer $relative 'main' 'C' @('-Copy', '-Assistant', 'Kira <kira@example.com>', '-BinDir', 'relative/path')
+Test-Check 'launcher dirs: a relative -BinDir is rejected, nothing saved (#172 R8)' ($run.Status -ne 0 -and
+    (Get-RunText $run).Contains('must be an absolute path') -and -not (Test-Path -LiteralPath (Join-Path $relative '.kirakit-profile'))) (Get-RunText $run)
 
 # #120: a command per team member, the same as scripts/build.sh builds it.
 function Get-MemberCommand([string]$Member, [string]$Title, [string]$Model) {

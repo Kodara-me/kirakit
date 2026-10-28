@@ -38,7 +38,6 @@ originals=$CLAUDE_DIR/.kirakit-originals
 permissions_record=$CLAUDE_DIR/.kirakit-permissions
 # The launcher directory and the color scheme directory: resolved by resolve_launcher_dirs.
 bin_dir=
-konsole_dir=
 profile_keys='name gender language assistant assistant_signing_key assistant_github co_author_trailer analyst analyst_github coder coder_signing_key coder_github'
 nl='
 '
@@ -94,13 +93,10 @@ Options:
   --assistant-style PERSONA  Style of the assistant launcher (default: the default style)
   --bin-dir DIR              Where the launchers go (default: ~/.local/bin, or bin/ in a
                              CLAUDE_CONFIG_DIR other than ~/.claude; saved)
-  --color-scheme-dir DIR     Where the Konsole color schemes go (default: konsole/ in
-                             XDG_DATA_HOME, or konsole/ in a CLAUDE_CONFIG_DIR other than
-                             ~/.claude; saved)
   --reconfigure              Ask all profile questions again
   --persona NAME             Install only this persona (repeatable; default: all)
   --only COMPONENT           styles, claude (CLAUDE.md, rules, settings, agents, skills),
-                             launchers (assistant, analyst, team, Konsole color schemes) or github
+                             launchers (assistant, analyst, watch) or github
   --target DIR               Repository for --only github (default: the current one)
   --link                     Symlink files to the local clone (default from a clone)
   --copy                     Copy files (default without a clone)
@@ -115,8 +111,6 @@ Profile options are asked once and saved in \$CLAUDE_CONFIG_DIR/.kirakit-profile
 
 Environment:
   CLAUDE_CONFIG_DIR  Claude Code configuration directory (default: ~/.claude)
-  XDG_DATA_HOME      Where the Konsole color schemes go without --color-scheme-dir, in konsole/
-                     (default: ~/.local/share), when CLAUDE_CONFIG_DIR is ~/.claude or unset
   KIRAKIT_REPO       Repository fetched without a clone (default: $KIRAKIT_REPO)
   KIRAKIT_REF        Branch or tag fetched without a clone (default: the latest release)
 EOF
@@ -145,7 +139,7 @@ work_dir() {
 
 # backup PATH [ROOT [PREFIX] [cp]]: move PATH (or copy it, with "cp") into this run's
 # backup directory, under PREFIX followed by PATH relative to ROOT. A path outside ROOT,
-# such as a Konsole color scheme, is kept whole under "outside".
+# such as a launcher, is kept whole under "outside".
 backup() {
 	if [ -z "$backup_dir" ]; then
 		# Never reuse the directory of an earlier run started within the same second.
@@ -374,37 +368,29 @@ expand_home() {
 	esac
 }
 
-# resolve_launcher_dirs: the launcher directory and the color scheme directory, each from its
-# option on this run, else the profile, else the default. given_bin_dir and
-# given_color_scheme_dir hold a location given on this run or saved earlier, and are empty
-# for a default, which is never saved in the profile. The default depends on the configuration
-# directory: ~/.local/bin and the XDG data directory for ~/.claude, bin/ and konsole/ under the
+# resolve_launcher_dirs: the launcher directory, from its option on this run, else the
+# profile, else the default. given_bin_dir holds a location given on this run or saved
+# earlier, and is empty for a default, which is never saved in the profile. The default
+# depends on the configuration directory: ~/.local/bin for ~/.claude, bin/ under the
 # configuration directory for any other (scratch_launchers=1).
 resolve_launcher_dirs() {
 	given_bin_dir=${opt_bin_dir-${saved_bin_dir-}}
-	given_color_scheme_dir=${opt_color_scheme_dir-${saved_color_scheme_dir-}}
 	[ -z "$given_bin_dir" ] || given_bin_dir=$(expand_home "$given_bin_dir")
-	[ -z "$given_color_scheme_dir" ] || given_color_scheme_dir=$(expand_home "$given_color_scheme_dir")
 	default_bin_dir=$HOME/.local/bin
+	# Only to leave alone the color schemes an earlier version put in the default place.
 	default_konsole_dir=${XDG_DATA_HOME:-$HOME/.local/share}/konsole
 	# Any configuration directory other than ~/.claude keeps its launchers under it by default,
 	# so that a run aimed at a scratch directory never touches the user's own launchers.
 	if [ "${CLAUDE_DIR%/}" = "$HOME/.claude" ]; then
 		scratch_launchers=0
 		bin_dir=${given_bin_dir:-$default_bin_dir}
-		konsole_dir=${given_color_scheme_dir:-$default_konsole_dir}
 	else
 		scratch_launchers=1
 		bin_dir=${given_bin_dir:-${CLAUDE_DIR%/}/bin}
-		konsole_dir=${given_color_scheme_dir:-${CLAUDE_DIR%/}/konsole}
 	fi
 	case $bin_dir in
 	/*) ;;
 	*) die "the bin directory must be an absolute path: $bin_dir" ;;
-	esac
-	case $konsole_dir in
-	/*) ;;
-	*) die "the color scheme directory must be an absolute path: $konsole_dir" ;;
 	esac
 }
 
@@ -433,7 +419,6 @@ load_profile() {
 		style) saved_style=$value ;;
 		assistant_style) saved_assistant_style=$value ;;
 		bin_dir) saved_bin_dir=$value ;;
-		color_scheme_dir) saved_color_scheme_dir=$value ;;
 		esac
 	done <"$profile"
 	# Profiles before the analyst: the team had none, and the question is not asked again.
@@ -588,7 +573,6 @@ setup_profile() {
 	profile_text="name=$user_name${nl}gender=$user_gender${nl}language=$user_language${nl}assistant_name=$assistant_name${nl}assistant_email=$assistant_email${nl}assistant_signing_key=$assistant_signing_key${nl}assistant_github=$assistant_github${nl}co_author_trailer=$co_author_trailer${nl}analyst=$analyst${nl}analyst_github=$analyst_github${nl}coder=$coder${nl}coder_signing_key=$coder_signing_key${nl}coder_github=$coder_github${nl}allow_releases=$allow_releases${nl}complete_approved_prs=$complete_approved_prs${nl}start_verified_specs=$start_verified_specs${nl}soft_rules=$soft_rules${nl}style=$default_style${nl}assistant_style=$assistant_style"
 	# Only a location given on this run or saved earlier, never the computed default.
 	[ -z "$given_bin_dir" ] || profile_text="$profile_text${nl}bin_dir=$given_bin_dir"
-	[ -z "$given_color_scheme_dir" ] || profile_text="$profile_text${nl}color_scheme_dir=$given_color_scheme_dir"
 	if [ -f "$profile" ] && [ "$(cat "$profile")" = "$profile_text" ]; then
 		return
 	fi
@@ -674,12 +658,11 @@ install_styles() {
 	done
 }
 
-# The launchers and their Konsole color schemes. They live outside the configuration
-# directory, but are recorded in the manifest like the rest, so that --uninstall removes them.
+# The launchers. They live outside the configuration directory, but are recorded in the
+# manifest like the rest, so that --uninstall removes them.
 install_launchers() {
 	launchers=
 	log "launchers: $bin_dir"
-	log "color schemes: $konsole_dir"
 	for file in "$src"/launchers/*; do
 		[ -f "$file" ] || continue
 		launcher=$(basename "$file")
@@ -694,22 +677,18 @@ install_launchers() {
 	# Launchers an earlier run put in another bin directory.
 	if [ -f "$manifest" ]; then
 		while IFS= read -r path; do
-			case $path in "$CLAUDE_DIR"/* | "$konsole_dir"/* | "$bin_dir"/*) continue ;; esac
+			case $path in "$CLAUDE_DIR"/* | "$bin_dir"/*) continue ;; esac
 			if in_default_launcher_location "$path"; then
 				log "skip (default launcher location): $path"
 				continue
 			fi
-			[ -f "$src/launchers/${path##*/}" ] || [ -f "$src/launchers/konsole/${path##*/}" ] ||
+			[ -f "$src/launchers/${path##*/}" ] ||
 				case ${path##*/} in kirakit-analyst.json | kirakit-analyst | kirakit-analyst.md) ;; *) continue ;; esac
 			remove_installed "$path"
 			removed="$removed$path$nl"
 		done <"$manifest"
 	fi
-	for file in "$src"/launchers/konsole/*.colorscheme; do
-		[ -f "$file" ] || continue
-		scheme=$(basename "$file")
-		install_built "konsole/$scheme" "$konsole_dir/$scheme"
-	done
+	retire_launchers
 	case ":$PATH:" in
 	*":$bin_dir:"*) ;;
 	*) log "warning: $bin_dir is not on your PATH; add it to start the launchers by name" ;;
@@ -719,6 +698,27 @@ install_launchers() {
 		[ "$found" = "$bin_dir/$launcher" ] ||
 			log "warning: $found comes before $bin_dir/$launcher in your PATH"
 	done
+}
+
+# retire_launchers: remove what earlier versions installed and the launchers no longer
+# include, the team launcher, kirakit-session and the Konsole color schemes, when the manifest
+# lists them.
+retire_launchers() {
+	[ -f "$manifest" ] || return 0
+	while IFS= read -r path; do
+		case $path in
+		"$bin_dir"/team | "$bin_dir"/kirakit-session | */kirakit-*.colorscheme) ;;
+		"$CLAUDE_DIR"/*) continue ;;
+		*/team | */kirakit-session) ;;
+		*) continue ;;
+		esac
+		if in_default_launcher_location "$path"; then
+			log "skip (default launcher location): $path"
+			continue
+		fi
+		remove_installed "$path"
+		removed="$removed$path$nl"
+	done <"$manifest"
 }
 
 # in_default_launcher_location PATH: whether PATH is in a default launcher location while the
@@ -1192,7 +1192,13 @@ uninstall_all() {
 		case $path in
 		'') continue ;;
 		*/../* | */..) log "skip: $path" && continue ;;
-		"$CLAUDE_DIR"/* | "$konsole_dir"/kirakit-*.colorscheme) ;;
+		"$CLAUDE_DIR"/*) ;;
+		*/kirakit-*.colorscheme)
+			if in_default_launcher_location "$path"; then
+				log "skip (default launcher location): $path"
+				continue
+			fi
+			;;
 		"$bin_dir"/assistant | "$bin_dir"/analyst | "$bin_dir"/team | "$bin_dir"/kirakit-session | "$bin_dir"/kirakit-watch | "$bin_dir"/kirakit-analyst.json | \
 			"$bin_dir"/kirakit-analyst | "$bin_dir"/kirakit-analyst.md) ;;
 		*)
@@ -1218,7 +1224,7 @@ while [ $# -gt 0 ]; do
 	--dry-run) dry_run=1 ;;
 	--name | --gender | --language | --co-author | --assistant | --assistant-signing-key | \
 		--assistant-github | --analyst-github | --default-style | --persona | --only | --target | \
-		--assistant-style | --bin-dir | --color-scheme-dir | --coder | --coder-signing-key | --coder-github)
+		--assistant-style | --bin-dir | --coder | --coder-signing-key | --coder-github)
 		[ $# -ge 2 ] || die "missing value for $1"
 		case $1 in
 		--name) opt_name=$2 ;;
@@ -1276,10 +1282,6 @@ while [ $# -gt 0 ]; do
 		--bin-dir)
 			case $2 in '' | *"$nl"*) die "invalid bin directory: $2" ;; esac
 			opt_bin_dir=$2
-			;;
-		--color-scheme-dir)
-			case $2 in '' | *"$nl"*) die "invalid color scheme directory: $2" ;; esac
-			opt_color_scheme_dir=$2
 			;;
 		--only)
 			case $2 in

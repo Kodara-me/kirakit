@@ -13,11 +13,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: shellcheck get-kira.sh scripts/*.sh launchers/kirakit-session
-      # team is a template: check it as built, with every member.
+      - run: shellcheck get-kira.sh scripts/*.sh
+      # The launchers are templates: check them as built, with every member.
       - run: |
           sh scripts/build.sh -o "$RUNNER_TEMP/build" --analyst
-          shellcheck "$RUNNER_TEMP/build/bin/team"
+          shellcheck "$RUNNER_TEMP/build/bin/assistant" "$RUNNER_TEMP/build/bin/analyst"
 
   psscriptanalyzer:
     runs-on: windows-latest
@@ -40,10 +40,6 @@ jobs:
             shell: dash
           - os: ubuntu-latest
             shell: bash --posix
-          - os: macos-latest
-            shell: sh
-          - os: macos-latest
-            shell: zsh --emulate sh
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

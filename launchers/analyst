@@ -11,7 +11,7 @@ if [ ! -f "$settings" ]; then
 	printf 'analyst: missing %s; no session started\n' "$settings" >&2
 	exit 1
 fi
-exec "$dir/kirakit-session" '{{analyst_style}}' "$settings" kirakit-analyst \
+exec claude -n '{{analyst_style}}' --settings "$settings" \
 	--setting-sources= --permission-mode dontAsk \
 	--plugin-dir "$dir/kirakit-analyst" --append-system-prompt-file "$dir/kirakit-analyst.md" "$@"
 {{/analyst}}
