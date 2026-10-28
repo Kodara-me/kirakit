@@ -2573,12 +2573,14 @@ check 'permissions: file missing, created (R1)' contains "$claude/settings.json"
 check 'permissions: file missing, valid JSON (R4)' valid_json "$claude/settings.json"
 check 'permissions: assistant board rules (R1)' contains "$claude/settings.json" '"Bash(GH_TOKEN=$(gh auth token --user kira-bot) gh project item-add:*)"'
 check 'permissions: assistant pushes main and branches (R1)' sh -c 'grep -qF "\"Bash(git push origin main)\"" "$1" && grep -qF "\"Bash(git push -u origin feat/:*)\"" "$1" && grep -qF "\"Bash(git push origin --delete:*)\"" "$1"' _ "$claude/settings.json"
+check 'permissions: assistant merges by fast-forward (#236 R1)' sh -c 'grep -qF "\"Bash(GH_TOKEN=\$(gh auth token --user kira-bot) gh pr merge:*)\"" "$1" && grep -qF "\"Bash(git checkout main)\"" "$1" && grep -qF "\"Bash(git pull --ff-only:*)\"" "$1" && grep -qF "\"Bash(git merge --ff-only:*)\"" "$1" && grep -qF "\"Bash(git fetch:*)\"" "$1"' _ "$claude/settings.json"
+check 'permissions: no merge or pull rule without --ff-only (#236 R1)' sh -c '! grep -qF -e "git merge:*" -e "git pull:*" -e "git merge --no-ff" "$1"' _ "$claude/settings.json"
 check 'permissions: analyst rules (R2)' contains "$claude/settings.json" "$iris_rule"
 check 'permissions: analyst has nothing else (R2)' test "$(grep -c 'user iris-bot' "$claude/settings.json")" = 7
 check 'permissions: no release rules (R1)' sh -c '! grep -q -e "release create" -e "origin v:" "$1"' _ "$claude/settings.json"
-check 'permissions: 33 rules (R1, R2)' test "$(rule_count "$claude/settings.json")" = 33
+check 'permissions: 38 rules (R1, R2)' test "$(rule_count "$claude/settings.json")" = 38
 check 'permissions: rerun changes nothing (R5)' unchanged kira --copy
-check 'permissions: no rule twice (R5)' test "$(rule_count "$claude/settings.json")" = 33
+check 'permissions: no rule twice (R5)' test "$(rule_count "$claude/settings.json")" = 38
 
 claude=$tmp/permissions-none
 mkdir -p "$claude"
@@ -2600,7 +2602,7 @@ for empty in '[]' '[\n    ]'; do
 	mkdir -p "$claude"
 	printf '{\n  "permissions": {\n    "allow": %b,\n    "deny": ["Bash(rm:*)"]\n  }\n}\n' "$empty" >"$claude/settings.json"
 	kira_team --copy >/dev/null
-	check "permissions: empty allow ($empty), added (R1)" test "$(rule_count "$claude/settings.json")" = 33
+	check "permissions: empty allow ($empty), added (R1)" test "$(rule_count "$claude/settings.json")" = 38
 	check "permissions: empty allow ($empty), valid JSON (R4)" valid_json "$claude/settings.json"
 	check "permissions: empty allow ($empty), deny kept (R4)" contains "$claude/settings.json" '"deny": ["Bash(rm:*)"]'
 done
@@ -2613,7 +2615,7 @@ check 'permissions: own rules kept (R4)' sh -c 'grep -qxF "      \"Bash(make:*)\
 check 'permissions: added to own rules (R1)' contains "$claude/settings.json" "$iris_rule"
 check 'permissions: a rule present not added again (R5)' test "$(grep -cF "$kira_rule" "$claude/settings.json")" = 1
 check 'permissions: own rules, valid JSON (R4)' valid_json "$claude/settings.json"
-check 'permissions: own rules, 34 rules (R5)' test "$(rule_count "$claude/settings.json")" = 34
+check 'permissions: own rules, 39 rules (R5)' test "$(rule_count "$claude/settings.json")" = 39
 
 for shape in '"allow": ["Bash(make:*)"]' '"allow": ["Bash(make:*)"], "ask": {"allow": []}'; do
 	claude=$tmp/permissions-unknown
@@ -2632,7 +2634,7 @@ mkdir -p "$claude"
 printf '{\n  "keep": true\n}\n' >"$claude/settings.json"
 kira_team --dry-run >"$tmp/permissions-dry.log"
 check 'permissions: dry run reports the rules (R9)' grep -qF 'set permission: Bash(GH_TOKEN=$(gh auth token --user iris-bot) gh issue create:*)' "$tmp/permissions-dry.log"
-check 'permissions: dry run reports every rule (R9)' test "$(grep -c 'set permission: ' "$tmp/permissions-dry.log")" = 33
+check 'permissions: dry run reports every rule (R9)' test "$(grep -c 'set permission: ' "$tmp/permissions-dry.log")" = 38
 check 'permissions: dry run writes nothing (R9)' sh -c '! grep -q permissions "$1"' _ "$claude/settings.json"
 
 # --- recording, updating and removing the permission rules (#67) ---------------------------
@@ -2664,7 +2666,7 @@ check 'record: no release rules by default (R3)' test "$(occurrences 'release cr
 check 'record: no tag rule by default (R3)' test "$(occurrences "$tag_rule")" = 0
 check 'record: releases off saved (R3)' profile_has 'allow_releases=no'
 check 'record: rules recorded (R7)' recorded "$kira_rule"
-check 'record: every rule recorded (R7)' test "$(wc -l <"$claude/.kirakit-permissions")" -eq 33
+check 'record: every rule recorded (R7)' test "$(wc -l <"$claude/.kirakit-permissions")" -eq 38
 kira --copy --allow-releases >/dev/null
 check 'record: release rule with --allow-releases (R3)' test "$(occurrences "$release_rule")" = 1
 check 'record: tag rule with --allow-releases (R3)' test "$(occurrences "$tag_rule")" = 1
@@ -2674,7 +2676,7 @@ check 'record: releases kept on rerun (R3)' unchanged kira --copy
 kira --copy --no-allow-releases >/dev/null
 check 'record: releases turned off, release rule removed (R7)' test "$(occurrences 'release create')" = 0
 check 'record: releases turned off, tag rule removed (R7)' test "$(occurrences "$tag_rule")" = 0
-check 'record: releases turned off, other rules kept (R7)' test "$(rule_count "$claude/settings.json")" = 33
+check 'record: releases turned off, other rules kept (R7)' test "$(rule_count "$claude/settings.json")" = 38
 check 'record: releases turned off, valid JSON (R7)' valid_json "$claude/settings.json"
 check 'record: releases turned off, record updated (R7)' sh -c '! grep -q "release create" "$1"' _ "$claude/.kirakit-permissions"
 check 'record: releases turned off, saved (R3)' profile_has 'allow_releases=no'
@@ -2683,7 +2685,7 @@ claude=$tmp/record-login
 kira_team --copy >/dev/null
 kira --copy --assistant-github kira-new >/dev/null
 check 'record: login changed, old rules removed (R7)' test "$(occurrences 'user kira-bot')" = 0
-check 'record: login changed, new rules added (R7)' test "$(occurrences 'user kira-new')" = 10
+check 'record: login changed, new rules added (R7)' test "$(occurrences 'user kira-new')" = 11
 check 'record: login changed, branch rules kept (R7)' test "$(occurrences "$main_rule")" = 1
 check 'record: login changed, valid JSON (R7)' valid_json "$claude/settings.json"
 check 'record: login changed, record follows (R7)' sh -c '! grep -q "user kira-bot" "$1" && grep -q "user kira-new" "$1"' _ "$claude/.kirakit-permissions"
@@ -2789,6 +2791,7 @@ check 'coder rules: she cannot push main (R25, D25)' test "$(occurrences 'origin
 check 'coder rules: she deletes her work branches (R25)' allows "$claude/settings.json" 'git push origin --delete fix/12-name'
 check 'coder rules: she cannot delete main (R25, D25)' sh -c '! "$@"' _ allows "$claude/settings.json" 'git push origin --delete main'
 check 'coder rules: she cannot push to main (R25, D25)' sh -c '! "$@"' _ allows "$claude/settings.json" 'git push origin main'
+check 'coder rules: she cannot merge a pull request (#236 R1)' sh -c '! grep -q -e "pr merge" -e "git checkout main" -e "ff-only" "$1"' _ "$claude/settings.json"
 check 'coder rules: no broad delete rule (D25)' test "$(occurrences '"Bash(git push origin --delete:*)"')" = 0
 check 'coder rules: no release or tag (R25)' sh -c '! grep -q -e "release create" -e "origin v:" "$1"' _ "$claude/settings.json"
 check 'coder rules: 30 rules (R25)' test "$(rule_count "$claude/settings.json")" = 30
@@ -2809,7 +2812,7 @@ kira --copy --coder-github '' >/dev/null
 check 'coder rules: removed without her account (R25)' test "$(occurrences 'user cleo-bot')" = 0
 check "coder rules: the lead's pr edit removed with her (R27)" test "$(occurrences "$lead_edit_rule")" = 0
 check 'coder rules: the shared push rules stay for the lead (R25)' test "$(occurrences '"Bash(git push origin feat/:*)"')" = 1
-check 'coder rules: back to the team without a coder (R25)' test "$(rule_count "$claude/settings.json")" = 33
+check 'coder rules: back to the team without a coder (R25)' test "$(rule_count "$claude/settings.json")" = 38
 check 'coder rules: removal, valid JSON (R25)' valid_json "$claude/settings.json"
 check 'coder rules: her delete rules removed (R25)' test "$(occurrences 'delete feat/')" = 0
 check 'coder rules: removal, record updated (R25)' sh -c '! grep -q -e "user cleo-bot" -e "pr edit" "$1"' _ "$claude/.kirakit-permissions"
@@ -2817,7 +2820,7 @@ check 'coder rules: removal, record updated (R25)' sh -c '! grep -q -e "user cle
 claude=$tmp/coder-rules-none
 kira_team --coder 'Cleo <cleo@example.com>' --copy >/dev/null
 check "coder rules: no account, no rule (R25)" sh -c '! grep -q "pr edit" "$1"' _ "$claude/settings.json"
-check "coder rules: no lead's pr edit without a coder account (R27)" test "$(rule_count "$claude/settings.json")" = 33
+check "coder rules: no lead's pr edit without a coder account (R27)" test "$(rule_count "$claude/settings.json")" = 38
 # The kira agent's reads run in auto mode without a rule: none is added for them (#183 R6).
 check 'coder rules: no read rule for the review (#183 R6)' sh -c '! grep -q -e "gh pr view" -e "gh pr diff" -e "gh api" "$1"' _ "$claude/settings.json"
 

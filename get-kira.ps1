@@ -1050,6 +1050,12 @@ function Get-KiraPermissionRule($UserProfile) {
         }
         $rules.Add('Bash(git push origin main)')
         $rules.Add('Bash(git push origin --delete:*)')
+        # Merging an approved pull request by fast-forward (#236).
+        $rules.Add("Bash($gh pr merge:*)")
+        foreach ($rule in @('Bash(git checkout main)', 'Bash(git pull --ff-only:*)',
+                'Bash(git merge --ff-only:*)', 'Bash(git fetch:*)')) {
+            $rules.Add($rule)
+        }
         $rules.Add("Bash($gh project item-edit:*)")
         $rules.Add("Bash($gh project item-add:*)")
         if ($UserProfile.allow_releases -eq 'yes') {
