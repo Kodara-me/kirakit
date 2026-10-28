@@ -837,6 +837,10 @@ permission_rules() {
 				printf 'Bash(git push origin %s/:*)\n' "$type"
 			done
 			printf '%s\n' 'Bash(git push origin main)' 'Bash(git push origin --delete:*)'
+			# Merging an approved pull request by fast-forward (#236).
+			printf 'Bash(%s pr merge:*)\n' "$gh"
+			printf '%s\n' 'Bash(git checkout main)' 'Bash(git pull --ff-only:*)' \
+				'Bash(git merge --ff-only:*)' 'Bash(git fetch:*)'
 			printf 'Bash(%s project item-edit:*)\n' "$gh"
 			printf 'Bash(%s project item-add:*)\n' "$gh"
 			if [ "$allow_releases" = yes ]; then
