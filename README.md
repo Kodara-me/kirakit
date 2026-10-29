@@ -11,6 +11,7 @@ machine with one command.
 | `team/` | Team members beside Kira, one file each (`iris.md`, `cleo.md`), built into an output style and an agent |
 | `claude/` | Content for `~/.claude/`: `CLAUDE.md`, `rules/`, `skills/`, `agents/` |
 | `launchers/` | Commands that start a team member (`assistant`, `analyst`) and the GitHub watch (`kirakit-watch`) |
+| `windows/` | The Windows launcher, `kira.ps1` (solo mode, or `-Team`), installed by `get-kira.ps1` |
 | `github/` | Issue and pull request templates, a workflow and Copilot instructions to copy into a repository's `.github/` |
 | `.github/workflows/` | This repository's CI, and reusable workflows other repositories can call |
 | `scripts/` | `build.sh` (builds the personalized files into `dist/`) and `test.sh` (end-to-end tests) |
@@ -61,11 +62,13 @@ In `$CLAUDE_CONFIG_DIR` (default: `~/.claude`):
 | --- | --- |
 | `output-styles/kira-*.md` | `styles` |
 | `output-styles/iris.md`, with an analyst; `output-styles/cleo.md`, with a coder | `styles` |
-| `CLAUDE.md`, `rules/git.md`, `skills/*`, `agents/*` (`rules/team.md` with an analyst or a coder, `agents/iris.md` with an analyst, `agents/cleo.md` and `agents/kira.md` with a coder) | `claude` |
+| `CLAUDE.md`, `rules/git.md`, `rules/solo.md`, `skills/*`, `agents/*` (`rules/team.md` with an analyst or a coder, `agents/iris.md` with an analyst, `agents/cleo.md` and `agents/kira.md` with a coder) | `claude` |
 | `outputStyle`, `attribution` and the members' rules in `permissions.allow` in `settings.json` | `claude` — only these are changed; the file is edited in place (see [Permission rules](#permission-rules)) |
 | `.kirakit-profile`, `.kirakit-manifest`, `.kirakit-originals` | Profile and the record used by `--uninstall` |
 | `.kirakit-permissions` | The permission rules kirakit added to `settings.json`, one per line |
 | `.kirakit-backups/<timestamp>/` | Files that were replaced or removed |
+
+On Windows, `kira.ps1` in the bin directory (see [The `kira` command on Windows](#the-kira-command-on-windows)), component `launchers`.
 
 Outside it, on Linux and macOS (see [Launchers](#launchers)):
 
@@ -88,7 +91,7 @@ a pull request template, Copilot instructions, and a workflow that checks pull r
 `Get-Help .\get-kira.ps1 -Detailed`). `-BinDir DIR` is `--bin-dir` for `get-kira.ps1`: an
 absolute path (a leading `~/` is expanded), saved in the profile as `bin_dir` only when passed
 (a saved value is kept), so that both installers accept the same command line. `get-kira.ps1`
-installs no launchers and writes nothing in that directory.
+puts only `kira.ps1` there (default: `bin\` in the configuration directory).
 
 | Option | Effect |
 | --- | --- |
@@ -879,8 +882,22 @@ with a launcher's name comes first in it. A shell function or alias of the same 
 as a hand-written `assistant` function, also wins over the launcher, and the installer
 cannot see it: remove it once the launchers are installed.
 
-The launchers are not supported on Windows: `get-kira.ps1` prints a notice and installs none,
-so the analyst's restricted session and the watch are not available there either.
+The `assistant` and `analyst` launchers are not supported on Windows: `get-kira.ps1` prints a
+notice and installs only `kira.ps1` (below), so the analyst's restricted session and the watch
+are not available there either.
+
+### The `kira` command on Windows
+
+`get-kira.ps1` installs `kira.ps1`, built from `windows/kira.ps1`, in the `-BinDir` directory
+(default: `bin\` in the configuration directory). Put that directory on your `PATH`, and remove
+any `kira` function of your PowerShell profile, which would win over the script.
+
+| Command | Session |
+| --- | --- |
+| `kira` | Solo: you and Kira work together directly. No watch of GitHub, no hand-off to the team, no board moves, no team-style reporting (`rules/solo.md`, selected by an appended system prompt, `Kirakit solo mode`). |
+| `kira -Team` | The team mode: starts the lead's watch (`/watch`, one `kirakit-watch` check per account), unless the arguments contain `-p` or `--print`. |
+
+Any other argument goes to `claude`.
 
 ### The analyst's session
 

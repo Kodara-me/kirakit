@@ -75,15 +75,14 @@ Output style selected in settings.json (default: kira-cozy).
 .PARAMETER Reconfigure
 Ask all profile questions again.
 .PARAMETER BinDir
-Where get-kira.sh puts the launchers, an absolute path (saved in the profile under bin_dir).
-This installer installs no launchers and writes nothing there; the option lets both installers
-take the same command line.
+Where the launchers go, an absolute path (saved in the profile under bin_dir). This installer
+puts kira.ps1 there (default: bin under the configuration directory).
 .PARAMETER Persona
 Install only these personas (default: all).
 .PARAMETER Only
 Install one component: styles, claude (CLAUDE.md, rules, settings, agents, skills) or github.
-launchers is accepted for parity with get-kira.sh, but the launchers are not supported on
-Windows: nothing is installed.
+launchers installs kira.ps1 only: the assistant and analyst launchers are not supported on
+Windows.
 .PARAMETER Target
 Repository for -Only github (default: the current one).
 .PARAMETER Link
@@ -593,6 +592,7 @@ function Get-KiraProfile {
                 throw "the $($option.Label) must be an absolute path: $value"
             }
             $launcherDirs += "$($option.Key)=$value$Nl"
+            $result[$option.Key] = $value
         }
     }
 
@@ -884,6 +884,14 @@ function Build-KiraOutput($UserProfile) {
             # A skill whose SKILL.md renders to nothing is not built.
             if (-not (Test-Path -LiteralPath (Join-Path $dest 'SKILL.md'))) { Remove-Item -LiteralPath $dest -Recurse -Force }
         }
+    }
+    # The kira command, the Windows launcher (get-kira.sh has no counterpart: its launchers are
+    # built by scripts/build.sh).
+    $kiraLauncher = Join-Path (Join-Path $script:Src 'windows') 'kira.ps1'
+    if (Test-Path -LiteralPath $kiraLauncher) {
+        $launcherValues = @{} + $values
+        if (-not $launcherValues.assistant_name) { $launcherValues.assistant_name = 'Kira' }
+        Write-KiraRendered (Join-Path (Join-Path $out 'bin') 'kira.ps1') @(Split-KiraLine (Read-KiraText $kiraLauncher)) $launcherValues $kiraLauncher
     }
     $agents = Join-Path $claude 'agents'
     if (Test-Path -LiteralPath $agents) {
@@ -1490,7 +1498,9 @@ try {
             if (-not $Only -or $Only -eq 'styles') { Install-KiraStyle }
             if (-not $Only -or $Only -eq 'claude') { Install-KiraClaude $userProfile.style $userProfile }
             if (-not $Only -or $Only -eq 'launchers') {
-                Write-KiraLog 'notice: the launchers (assistant, analyst) are not supported on Windows; none is installed'
+                Write-KiraLog 'notice: the launchers assistant and analyst are not supported on Windows; only kira is installed'
+                $binTarget = if ($userProfile.ContainsKey('bin_dir') -and $userProfile.bin_dir) { $userProfile.bin_dir } else { Join-Path $ClaudeDir 'bin' }
+                Install-KiraBuilt 'bin/kira.ps1' (Join-Path $binTarget 'kira.ps1')
             }
             Save-KiraManifest
         }

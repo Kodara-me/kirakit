@@ -75,6 +75,7 @@ jobs:
           $launchers = ./get-kira.ps1 -Only launchers *>&1 | Out-String
           if ($LASTEXITCODE -ne 0) { Write-Host $launchers; exit 1 }
           if (-not $launchers.Contains('not supported on Windows')) { throw "no launchers notice with -Only launchers:`n$launchers" }
+          if (-not (Test-Path (Join-Path $env:CLAUDE_CONFIG_DIR 'bin\kira.ps1'))) { throw 'kira.ps1 not installed' }
           $styles = Join-Path $env:CLAUDE_CONFIG_DIR 'output-styles'
           if (-not (Test-Path (Join-Path $styles 'kira-cozy.md'))) { throw 'styles not installed' }
           $settings = Get-Content (Join-Path $env:CLAUDE_CONFIG_DIR 'settings.json') -Raw
@@ -145,7 +146,7 @@ jobs:
         run: |
           remote=$RUNNER_TEMP/remote
           git init -q -b main "$remote"
-          cp -r personas team scripts claude github get-kira.sh get-kira.ps1 "$remote/"
+          cp -r personas team scripts claude github windows get-kira.sh get-kira.ps1 "$remote/"
           git -C "$remote" add -A
           git -C "$remote" -c user.name=ci -c user.email=ci@example.com commit -q -m ci
           for tag in v0.9.0 v0.10.0 v0.2.1; do git -C "$remote" tag "$tag"; done

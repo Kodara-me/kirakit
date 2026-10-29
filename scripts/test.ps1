@@ -322,8 +322,13 @@ Test-Check 'launcher dirs: -BinDir is saved (#172 R8)' ($run.Status -eq 0 -and
 $run = Invoke-Installer $given 'main' 'C' @('-Copy', '-Assistant', 'Kira <kira@example.com>')
 Test-Check 'launcher dirs: a saved location is kept by a later run (#172 R3)' ($run.Status -eq 0 -and
     (Test-ProfileLine $given "bin_dir=$launcherBin")) (Get-RunText $run)
-Test-Check 'launcher dirs: nothing is written in the directory (#172 R8)' (
-    -not (Test-Path -LiteralPath $launcherBin))
+Test-Check 'launcher dirs: only kira.ps1 is written in the directory' (
+    (@(Get-ChildItem -LiteralPath $launcherBin -Force | ForEach-Object Name) -join ',') -ceq 'kira.ps1')
+$kiraScript = Get-Content -LiteralPath (Join-Path $launcherBin 'kira.ps1') -Raw
+Test-Check 'kira.ps1: solo without -Team, the watch only with it' (
+    $kiraScript.Contains('Kirakit solo mode') -and $kiraScript.Contains('param([switch]$Team)') -and
+    $kiraScript.Contains('/watch') -and -not $kiraScript.Contains('{{'))
+Test-Check 'kira.ps1: the solo rules are installed' (Test-Path -LiteralPath (Join-Path $given 'rules\solo.md'))
 $kept = Join-Path $tmp 'launcher-kept'
 New-Item -ItemType Directory -Path $kept | Out-Null
 [IO.File]::WriteAllText((Join-Path $kept '.kirakit-profile'), "bin_dir=$launcherBin$([char]10)color_scheme_dir=$tmp/old-schemes$([char]10)")
