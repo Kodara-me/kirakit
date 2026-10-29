@@ -883,8 +883,8 @@ as a hand-written `assistant` function, also wins over the launcher, and the ins
 cannot see it: remove it once the launchers are installed.
 
 The `assistant` and `analyst` launchers are not supported on Windows: `get-kira.ps1` prints a
-notice and installs only `kira.ps1` (below), so the analyst's restricted session and the watch
-are not available there either.
+notice and installs only `kira.ps1` (below),
+so the analyst's restricted session and the watch are not available there either.
 
 ### The `kira` command on Windows
 
