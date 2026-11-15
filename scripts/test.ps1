@@ -89,7 +89,8 @@ Copy-Item -LiteralPath (Join-Path $root 'get-kira.ps1') -Destination $installer
 # Runs the installer in a new process with KIRAKIT_REF set to $Ref and the locale set to
 # $Locale, and returns its exit code and its output in order: each line of stdout as text,
 # each line of stderr as an error record.
-function Invoke-Installer([string]$ConfigDir, [string]$Ref, [string]$Locale, [string[]]$Arguments) {
+# With -Block, the installer runs from a script block, as the one-line install with irm runs it.
+function Invoke-Installer([string]$ConfigDir, [string]$Ref, [string]$Locale, [string[]]$Arguments, [switch]$Block) {
     $saved = @{}
     $vars = @{ CLAUDE_CONFIG_DIR = $ConfigDir; KIRAKIT_REPO = $remoteUrl; KIRAKIT_REF = $Ref; LANG = $Locale; LC_ALL = $Locale
         HOME = $scratchHome; USERPROFILE = $scratchHome; XDG_DATA_HOME = $scratchData; XDG_CACHE_HOME = $scratchCache }
@@ -104,8 +105,17 @@ function Invoke-Installer([string]$ConfigDir, [string]$Ref, [string]$Locale, [st
     }
     try {
         $ErrorActionPreference = 'Continue'
-        $lines = @(& $shell -NoProfile -ExecutionPolicy Bypass -File $installer @Arguments `
-                -Name Alex -Gender female -Language auto -NoCoAuthor 2>&1)
+        if ($Block) {
+            # Parameter names as they are, every value quoted.
+            $words = @(@($Arguments) + @('-Name', 'Alex', '-Gender', 'female', '-Language', 'auto', '-NoCoAuthor') | ForEach-Object {
+                    if ($_ -cmatch '^-[A-Za-z]+$') { $_ } else { "'" + $_.Replace("'", "''") + "'" }
+                })
+            $command = "& ([scriptblock]::Create([IO.File]::ReadAllText('$($installer.Replace("'", "''"))'))) $($words -join ' ')"
+            $lines = @(& $shell -NoProfile -ExecutionPolicy Bypass -Command $command 2>&1)
+        } else {
+            $lines = @(& $shell -NoProfile -ExecutionPolicy Bypass -File $installer @Arguments `
+                    -Name Alex -Gender female -Language auto -NoCoAuthor 2>&1)
+        }
         return @{ Status = $LASTEXITCODE; Lines = $lines }
     } finally {
         foreach ($name in $saved.Keys) { [Environment]::SetEnvironmentVariable($name, $saved[$name]) }
@@ -431,6 +441,14 @@ Test-Check 'profile url: the next steps name each member' ((Get-RunText $run) -m
 $run = Invoke-Installer $remoteConfig 'main' 'C' @('-Copy', '-ProfileUrl', $remoteFile)
 Test-Check 'profile url: a rerun creates no key and prints no next steps' ($run.Status -eq 0 -and
     -not ((Get-RunText $run) -match 'create signing key|next steps')) (Get-RunText $run)
+# Run from a script block, as the one-line install runs it: create_keys=yes still creates the
+# keys (the parameter is then not in the script scope).
+$blockConfig = Join-Path $tmp 'profile-url-block'
+[IO.File]::WriteAllText($remoteFile, (($remoteLines -replace 'profile-keys', 'block-keys') -join "`n") + "`n")
+$run = Invoke-Installer $blockConfig 'main' 'C' @('-Copy', '-ProfileUrl', $remoteFile) -Block
+Test-Check 'profile url: from a script block, create_keys=yes creates the keys' ((Test-Path -LiteralPath $blockConfig) -and
+    (Test-Path -LiteralPath (Join-Path (Join-Path $tmp 'block-keys') 'kira.pub')) -and
+    (Test-Path -LiteralPath (Join-Path (Join-Path $tmp 'block-keys') 'cleo.pub'))) (Get-RunText $run)
 $noCreate = Join-Path $tmp 'profile-url-nocreate'
 [IO.File]::WriteAllText($remoteFile, (($remoteLines | Where-Object { $_ -ne 'create_keys=yes' }) -replace 'profile-keys', 'profile-none') -join "`n")
 $run = Invoke-Installer $noCreate 'main' 'C' @('-Copy', '-ProfileUrl', $remoteFile)

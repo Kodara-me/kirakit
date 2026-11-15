@@ -181,6 +181,10 @@ $script:OriginalsNew = New-Object System.Collections.Generic.List[string]
 $script:Removed = New-Object System.Collections.Generic.List[string]
 # The values of -ProfileUrl, by profile key.
 $script:RemoteProfile = @{}
+# -CreateKeys, or create_keys=yes in the profile of -ProfileUrl. A variable of its own: run from
+# a script block (irm), the parameter is not in the script scope, so setting $script:CreateKeys
+# would not reach the code that reads $CreateKeys.
+$script:CreateMissingKeys = [bool]$CreateKeys
 
 function Write-KiraLog([string]$Message) {
     Write-Host "kirakit: $Message"
@@ -529,7 +533,7 @@ function Get-KiraRemoteProfile([string]$Source) {
             # An action of this run, like -CreateKeys: not a profile value, never saved.
             'create_keys' {
                 if (@('yes', 'no') -cnotcontains $value) { throw "invalid $key in the profile: $value (expected yes or no)" }
-                if ($value -eq 'yes') { $script:CreateKeys = [switch]$true }
+                if ($value -eq 'yes') { $script:CreateMissingKeys = $true }
             }
             { @('assistant_name', 'assistant_email') -ccontains $_ } { }
             default { Write-KiraLog "warning: unknown key in the profile, ignored: $key" }
@@ -735,7 +739,7 @@ function Initialize-KiraSigningKey([string]$Who, [string]$Identity, [string]$Key
         if (-not (Test-Path -LiteralPath $private -PathType Leaf)) { Write-KiraLog "warning: no private key next to $Key; $Who cannot sign with it" }
         return $false
     }
-    if (-not $CreateKeys) {
+    if (-not $script:CreateMissingKeys) {
         Write-KiraLog "warning: $Who's signing key $Key does not exist; $Who cannot commit as itself until it does (-CreateKeys creates it)"
         return $false
     }
