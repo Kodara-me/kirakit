@@ -8,7 +8,11 @@
 # calls the user, the user's gender, the answer language and the assistant (git identity,
 # signing key, GitHub account, Co-Authored-By trailers). The installer asks once (on the
 # terminal, even when piped from curl) and saves the answers in $CLAUDE_DIR/.kirakit-profile
-# for later runs.
+# for later runs. --profile-url reads the answers from a profile in the same format, such as a
+# gist, and asks only what it leaves out. With --create-keys, a signing key the profile names
+# that does not exist yet is created (ed25519, no passphrase). A signing key is added to its
+# member's GitHub account, with that account's own token, only when gh is logged in to it; the
+# installer never logs in, and ends with what is left to do.
 #
 # Usage: get-kira.sh [options] (see --help)
 set -eu
@@ -29,6 +33,7 @@ work=
 backup_dir=
 build_dir=
 reconfigure=0
+create_keys=0
 installed=
 originals_new=
 removed=
@@ -94,7 +99,14 @@ Options:
   --bin-dir DIR              Where the launchers go (default: ~/.local/bin, or bin/ in a
                              CLAUDE_CONFIG_DIR other than ~/.claude; saved)
   --reconfigure              Ask all profile questions again
-  --persona NAME             Install only this persona (repeatable; default: all)
+  --profile-url SOURCE       Read the profile from an https URL (a gist page is read through
+                             its raw content) or a file, in the format of .kirakit-profile; its
+                             values act as options, and the keys it leaves out are asked;
+                             create_keys=yes in it stands for --create-keys
+  --create-keys              Create the signing keys the profile names that do not exist yet
+                             (ed25519, no passphrase); with or without it, a key is added to its
+                             member's account when gh is logged in to that account
+  --persona NAME            Install only this persona (repeatable; default: all)
   --only COMPONENT           styles, claude (CLAUDE.md, rules, settings, agents, skills),
                              launchers (assistant, analyst, watch) or github
   --target DIR               Repository for --only github (default: the current one)
@@ -108,6 +120,9 @@ and pull request templates, workflows and Copilot instructions into a repository
 directory.
 
 Profile options are asked once and saved in \$CLAUDE_CONFIG_DIR/.kirakit-profile.
+
+Without a clone, with a profile:
+  curl -fsSL .../get-kira.sh | sh -s -- --profile-url https://gist.github.com/USER/ID
 
 Environment:
   CLAUDE_CONFIG_DIR  Claude Code configuration directory (default: ~/.claude)
@@ -585,15 +600,279 @@ setup_profile() {
 	fi
 }
 
-# R8: warn about a signing key that is not there; the installer never creates one.
-# check_signing_key WHO KEY, such as WHO="the assistant".
-check_signing_key() {
-	[ -n "$2" ] || return 0
-	if [ ! -f "$2" ]; then
-		log "warning: $1's signing key $2 does not exist; $1 cannot commit as itself until it does"
-	elif [ ! -f "${2%.pub}" ]; then
-		log "warning: no private key next to $2; $1 cannot sign with it"
+# remote_option VAR VALUE: set the option VAR to VALUE, unless the command line gave it.
+remote_option() {
+	eval "[ -n \"\${$1+set}\" ]" || eval "$1=\$2"
+	remote_count=$((remote_count + 1))
+}
+
+# load_remote_profile SOURCE: read the profile of --profile-url, checked like the options it
+# stands for, into the options this run was not given: the command line wins, and a key the
+# profile leaves out is asked, or taken from the saved profile (mirrors Get-KiraRemoteProfile
+# in get-kira.ps1). SOURCE is an https URL, a gist page (read through its raw content: a gist
+# of one file), or a file. Its assistant is "assistant", or "assistant_name" and
+# "assistant_email" as .kirakit-profile saves it; an empty email means no assistant.
+load_remote_profile() {
+	remote_source=$1
+	case $remote_source in
+	https://gist.github.com/?*)
+		rest=${remote_source#https://gist.github.com/}
+		rest=${rest%/}
+		case $rest in
+		*'?'* | *'#'* | */*/*) ;;
+		*) remote_source=https://gist.github.com/$rest/raw ;;
+		esac
+		;;
+	esac
+	work_dir
+	remote_file=$work/remote-profile
+	case $remote_source in
+	https://*)
+		log "profile: fetching $remote_source"
+		if command -v curl >/dev/null 2>&1; then
+			curl -fsSL --proto '=https' "$remote_source" >"$remote_file" || die "could not fetch the profile $remote_source"
+		elif command -v wget >/dev/null 2>&1; then
+			wget -q -O "$remote_file" "$remote_source" || die "could not fetch the profile $remote_source"
+		else
+			die "curl or wget is required to fetch the profile $remote_source"
+		fi
+		;;
+	*://*) die "the profile must be an https URL or a file: $remote_source" ;;
+	*)
+		remote_path=$(expand_home "$remote_source")
+		[ -f "$remote_path" ] || die "profile not found: $remote_source"
+		log "profile: reading $remote_path"
+		cp -- "$remote_path" "$remote_file"
+		;;
+	esac
+	bom=$(printf '\357\273\277')
+	cr=$(printf '\r')
+	remote_count=0
+	remote_on=
+	remote_assistant_given= remote_email_given= remote_assistant_name= remote_assistant_email=
+	while IFS= read -r line || [ -n "$line" ]; do
+		line=${line#"$bom"}
+		line=${line%"$cr"}
+		case $line in ?*=*) ;; *) continue ;; esac
+		key=${line%%=*}
+		value=${line#*=}
+		case $key in
+		name | language | assistant_signing_key | coder_signing_key | bin_dir)
+			case $value in *'"'*) die "invalid $key in the profile: $value" ;; esac
+			# An empty launcher location is no location: the default applies.
+			[ "$key" != bin_dir ] || [ -n "$value" ] || continue
+			remote_option "opt_$key" "$value"
+			;;
+		gender)
+			case $value in
+			male | female | nonbinary | unspecified) remote_option opt_gender "$value" ;;
+			*) die "unknown gender in the profile: $value (expected male, female, nonbinary or unspecified)" ;;
+			esac
+			;;
+		assistant | coder)
+			valid_co_author "$value" || die "invalid $key in the profile: $value (expected \"NAME <EMAIL>\")"
+			[ "$key" != assistant ] || remote_assistant_given=1
+			remote_option "opt_$key" "$value"
+			;;
+		assistant_github | analyst_github | coder_github)
+			valid_github "$value" || die "invalid GitHub login in the profile: $key=$value"
+			remote_option "opt_$key" "$value"
+			;;
+		co_author_trailer | analyst | allow_releases | complete_approved_prs | start_verified_specs | soft_rules)
+			case $value in
+			yes | no) ;;
+			*) die "invalid $key in the profile: $value (expected yes or no)" ;;
+			esac
+			remote_option "opt_$key" "$value"
+			case $key:$value in
+			co_author_trailer:* | analyst:*) ;;
+			*:yes) remote_on="$remote_on $key" ;;
+			esac
+			;;
+		style | assistant_style)
+			case $value in
+			*[!A-Za-z0-9_-]*) die "invalid persona name in the profile: $key=$value" ;;
+			esac
+			if [ "$key" = style ]; then
+				[ -z "$value" ] || remote_option opt_style "$value"
+			else
+				remote_option opt_assistant_style "$value"
+			fi
+			;;
+		# An action of this run, like --create-keys: not a profile value, never saved.
+		create_keys)
+			case $value in
+			yes) create_keys=1 ;;
+			no) ;;
+			*) die "invalid $key in the profile: $value (expected yes or no)" ;;
+			esac
+			;;
+		assistant_name) remote_assistant_name=$value ;;
+		assistant_email) remote_email_given=1 remote_assistant_email=$value ;;
+		*) log "warning: unknown key in the profile, ignored: $key" ;;
+		esac
+	done <"$remote_file"
+	if [ -z "$remote_assistant_given" ] && [ -n "$remote_email_given" ]; then
+		if [ -n "$remote_assistant_email" ]; then
+			value="${remote_assistant_name:-Kira} <$remote_assistant_email>"
+			valid_co_author "$value" || die "invalid assistant in the profile: $value (expected \"NAME <EMAIL>\")"
+		else
+			value=
+		fi
+		remote_option opt_assistant "$value"
 	fi
+	log "profile: $remote_count values given${remote_on:+; turned on:$remote_on}"
+}
+
+# R8: warn about a signing key that is not there. With --create-keys, it is created instead,
+# ed25519 without a passphrase so that the member signs without a prompt; register_signing_key
+# then adds it to her account when gh is logged in to it (print_next_steps says what is left). Only a missing pair is
+# created: a private key without its public one is left alone, with a warning. The keys created
+# are added to created_keys, one per line.
+# create_signing_key WHO IDENTITY KEY, such as WHO="the assistant" and IDENTITY="Kira <kira@example.com>".
+create_signing_key() {
+	[ -n "$3" ] || return 0
+	private=${3%.pub}
+	if [ -f "$3" ]; then
+		[ -f "$private" ] || log "warning: no private key next to $3; $1 cannot sign with it"
+		return 0
+	fi
+	if [ "$create_keys" -eq 0 ]; then
+		log "warning: $1's signing key $3 does not exist; $1 cannot commit as itself until it does (--create-keys creates it)"
+		return 0
+	fi
+	if [ "$private" = "$3" ]; then
+		log "warning: $1's signing key $3 does not exist and is not a .pub path; $1 cannot commit as itself until it does"
+		return 0
+	fi
+	if [ -e "$private" ] || [ -L "$private" ]; then
+		log "warning: $private exists without $3; left alone. Write the public key with: ssh-keygen -y -f $private > $3"
+		return 0
+	fi
+	if ! command -v ssh-keygen >/dev/null 2>&1; then
+		log "warning: $1's signing key $3 does not exist and ssh-keygen is not installed; $1 cannot commit as itself until it does"
+		return 0
+	fi
+	key_email=${2##*<}
+	key_email=${key_email%>}
+	log "create signing key: $private for $1 (ed25519, no passphrase)"
+	created_keys="$created_keys$3$nl"
+	if [ "$dry_run" -eq 1 ]; then
+		printf '[dry-run] ssh-keygen -t ed25519 -N "" -C "%s (git signing)" -f %s\n' "$key_email" "$private"
+		return 0
+	fi
+	(umask 077 && mkdir -p -- "$(dirname -- "$private")")
+	{ ssh-keygen -q -t ed25519 -N '' -C "$key_email (git signing)" -f "$private" </dev/null && [ -f "$3" ]; } ||
+		die "ssh-keygen could not create $private"
+}
+
+# gh_token LOGIN: print the token gh holds for LOGIN; fail when gh is not installed or not
+# logged in to that account. GH_TOKEN and GITHUB_TOKEN are set aside: gh would print them
+# whatever the account.
+gh_token() {
+	[ -n "$1" ] || return 1
+	command -v gh >/dev/null 2>&1 || return 1
+	(
+		unset GH_TOKEN GITHUB_TOKEN
+		gh auth token -h github.com --user "$1" 2>/dev/null
+	)
+}
+
+# R8: register KEY as a signing key of LOGIN, with LOGIN's own token, when gh is logged in to
+# that account; the installer never logs in itself. A key already registered is not added
+# again. Sets reg_state: registered (now, or in a dry run), present (already a signing key of
+# LOGIN), scope (gh is logged in, but its token cannot read or add signing keys), failed (gh
+# refused it), or empty (no key, no login, or gh not logged in to LOGIN) (mirrors
+# Register-KiraSigningKey in get-kira.ps1).
+# register_signing_key WHO LOGIN KEY, such as WHO="the assistant".
+register_signing_key() {
+	reg_state=
+	{ [ -n "$2" ] && [ -n "$3" ] && [ -f "$3" ]; } || return 0
+	{ token=$(gh_token "$2") && [ -n "$token" ]; } || return 0
+	public=$(awk 'NR == 1 { print $1, $2 }' "$3")
+	case $public in
+	?*' '?*) ;;
+	*)
+		log "warning: $3 is not a public SSH key; not registered"
+		reg_state=failed
+		return 0
+		;;
+	esac
+	# The token must be LOGIN's own: a key is never added to another account.
+	gh_login=$(GH_TOKEN=$token GITHUB_TOKEN='' gh api user --jq .login 2>/dev/null) || gh_login=
+	if [ "$gh_login" != "$2" ]; then
+		log "warning: gh's token for $2 does not answer as $2; $3 not registered"
+		reg_state=failed
+		return 0
+	fi
+	if ! gh_keys=$(GH_TOKEN=$token GITHUB_TOKEN='' gh api --paginate /user/ssh_signing_keys --jq '.[].key' 2>/dev/null); then
+		log "warning: gh is logged in to $2, but its token cannot read signing keys (scope admin:ssh_signing_key); $3 not registered"
+		reg_state=scope
+		return 0
+	fi
+	if printf '%s\n' "$gh_keys" | awk '{ print $1, $2 }' | grep -qxF -- "$public"; then
+		log "up to date: $3 is a signing key of $2"
+		reg_state=present
+		return 0
+	fi
+	title="kirakit signing key ($2)"
+	log "register signing key: $3 on $2, for $1"
+	reg_state=registered
+	if [ "$dry_run" -eq 1 ]; then
+		printf '[dry-run] gh ssh-key add %s --type signing --title "%s" (as %s)\n' "$3" "$title" "$2"
+		return 0
+	fi
+	if ! GH_TOKEN=$token GITHUB_TOKEN='' gh ssh-key add "$3" --type signing --title "$title" >/dev/null 2>&1; then
+		log "warning: gh could not add $3 to $2 as a signing key (scope admin:ssh_signing_key?)"
+		reg_state=scope
+	fi
+}
+
+# next_step TITLE LOGIN KEY STATE: what is left to do for one member (see print_next_steps),
+# with STATE the result of register_signing_key for KEY.
+next_step() {
+	account=${2:-her GitHub account}
+	add='(GitHub, Settings, SSH and GPG keys, New SSH key, Key type: Signing Key)'
+	case ${4-} in
+	registered)
+		if [ "$dry_run" -eq 1 ]; then now='would be'; else now='is now'; fi
+		log "  $1: $3 $now a signing key of $2"
+		;;
+	present) log "  $1: $3 is already a signing key of $2" ;;
+	scope) log "  $1: let gh add signing keys to $2: gh auth switch -h github.com -u $2, gh auth refresh -h github.com -s admin:ssh_signing_key, switch back to your account, then run the installer again" ;;
+	failed) log "  $1: add $3 to $account by hand, as a signing key only $add" ;;
+	*)
+		if [ -z "$3" ]; then
+			log "  $1: no signing key, she never commits"
+		else
+			case $nl$created_keys in
+			*"$nl$3$nl"*) log "  $1: add $3 to $account as a signing key only $add, or log $account in to gh and run the installer again: it adds the key itself" ;;
+			*) log "  $1: $3 already existed; check that it is a signing key of $account" ;;
+			esac
+		fi
+		;;
+	esac
+	if [ -n "$2" ] && ! gh_token "$2" >/dev/null; then
+		if [ -n "$3" ]; then scopes=project,admin:ssh_signing_key; else scopes=project; fi
+		log "    log $2 in to gh (gh auth login -h github.com -s $scopes), then switch back to your account (gh auth switch -h github.com -u YOUR-LOGIN)"
+	fi
+}
+
+# What is left to do for the team's signing keys and accounts, after a run that created a key,
+# registered one or could not: the installer creates keys only on request, registers them only
+# through an account gh is logged in to, and never logs in itself (mirrors Write-KiraNextStep in
+# get-kira.ps1).
+print_next_steps() {
+	case " ${state_assistant-} ${state_coder-} " in
+	*' registered '* | *' scope '* | *' failed '*) ;;
+	*) [ -n "${created_keys-}" ] || return 0 ;;
+	esac
+	log "next steps for the team's signing keys and accounts:"
+	[ -z "$assistant" ] || next_step "${assistant% <*}" "$assistant_github" "$assistant_signing_key" "${state_assistant-}"
+	[ -z "$coder" ] || next_step "${coder% <*}" "$coder_github" "$coder_signing_key" "${state_coder-}"
+	[ "$analyst" != yes ] || next_step Iris "$analyst_github" '' ''
+	[ -z "${created_keys-}" ] || log '  the private keys have no passphrase: anything running as you can sign as the team, so keep them on this machine'
+	log '  details: the README, "Give the assistant its own identity" and the two sections after it'
 }
 
 # Build into the clone for symlinks, into a temporary directory otherwise, so that a dry
@@ -1224,7 +1503,7 @@ while [ $# -gt 0 ]; do
 	--dry-run) dry_run=1 ;;
 	--name | --gender | --language | --co-author | --assistant | --assistant-signing-key | \
 		--assistant-github | --analyst-github | --default-style | --persona | --only | --target | \
-		--assistant-style | --bin-dir | --coder | --coder-signing-key | --coder-github)
+		--assistant-style | --bin-dir | --coder | --coder-signing-key | --coder-github | --profile-url)
 		[ $# -ge 2 ] || die "missing value for $1"
 		case $1 in
 		--name) opt_name=$2 ;;
@@ -1290,6 +1569,10 @@ while [ $# -gt 0 ]; do
 			esac
 			;;
 		--target) github_target=$2 ;;
+		--profile-url)
+			[ -n "$2" ] || die "missing value for $1"
+			profile_url=$2
+			;;
 		esac
 		shift
 		;;
@@ -1305,6 +1588,7 @@ while [ $# -gt 0 ]; do
 	--analyst) opt_analyst=yes ;;
 	--no-analyst) opt_analyst=no ;;
 	--reconfigure) reconfigure=1 ;;
+	--create-keys) create_keys=1 ;;
 	--link) mode='link' ;;
 	--copy) mode=copy ;;
 	--uninstall) uninstall=1 ;;
@@ -1358,6 +1642,10 @@ if [ -z "$src" ]; then
 fi
 [ -n "$mode" ] || mode='link'
 
+if [ -n "${profile_url+set}" ] && [ "$only" != github ]; then
+	load_remote_profile "$profile_url"
+fi
+
 for persona in $personas ${opt_style-} ${opt_assistant_style-}; do
 	[ -f "$src/personas/$persona.md" ] || die "unknown persona: $persona"
 done
@@ -1374,8 +1662,14 @@ log "target: $CLAUDE_DIR"
 setup_profile
 [ -f "$src/personas/$default_style.md" ] || die "unknown default style: $default_style"
 log "profile: ${user_name:-(no name)}, $user_gender, language $user_language, assistant ${assistant:-none}, co-author trailers $co_author_trailer, analyst $analyst${analyst_github:+ ($analyst_github)}, coder ${coder:-none}, style $default_style"
-check_signing_key 'the assistant' "$assistant_signing_key"
-check_signing_key 'the coder' "$coder_signing_key"
+created_keys=
+create_signing_key 'the assistant' "$assistant" "$assistant_signing_key"
+create_signing_key 'the coder' "$coder" "$coder_signing_key"
+# In a dry run, a key that would be created is not there yet: it is not registered.
+register_signing_key 'the assistant' "$assistant_github" "$assistant_signing_key"
+state_assistant=$reg_state
+register_signing_key 'the coder' "$coder_github" "$coder_signing_key"
+state_coder=$reg_state
 build
 
 if [ -z "$only" ] || [ "$only" = styles ]; then
@@ -1388,5 +1682,6 @@ if [ -z "$only" ] || [ "$only" = launchers ]; then
 	install_launchers
 fi
 write_manifest
+print_next_steps
 
 log "done"

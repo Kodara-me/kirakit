@@ -140,6 +140,17 @@ jobs:
           # Invalid values are refused.
           ! CLAUDE_CONFIG_DIR="$RUNNER_TEMP/ps-bad" pwsh -File get-kira.ps1 -DryRun -Coder Cleo
           ! CLAUDE_CONFIG_DIR="$RUNNER_TEMP/ps-bad" pwsh -File get-kira.ps1 -DryRun -CoderGithub 'a/b'
+          # A profile read with --profile-url, below the options of the command line; a key it
+          # leaves out (coder_signing_key) is asked, and without a terminal takes its default.
+          printf 'name=Remote\ngender=male\nlanguage=French\nassistant_name=Kira\nassistant_email=kira@example.com\nassistant_signing_key=/keys/kira.pub\nassistant_github=kira-bot\nco_author_trailer=yes\nanalyst=yes\nanalyst_github=iris-bot\ncoder=Cleo <cleo@example.com>\ncoder_github=cleo-bot\nsoft_rules=yes\nstyle=kira-sassy\n' \
+            >"$RUNNER_TEMP/team.profile"
+          CLAUDE_CONFIG_DIR="$RUNNER_TEMP/sh-remote" sh get-kira.sh --copy --name Alex \
+            --profile-url "$RUNNER_TEMP/team.profile" </dev/null
+          CLAUDE_CONFIG_DIR="$RUNNER_TEMP/ps-remote" pwsh -File get-kira.ps1 -Copy -Name Alex \
+            -ProfileUrl "$RUNNER_TEMP/team.profile" </dev/null
+          grep -qx 'name=Alex' "$RUNNER_TEMP/ps-remote/.kirakit-profile"
+          grep -qx 'style=kira-sassy' "$RUNNER_TEMP/ps-remote/.kirakit-profile"
+          grep -qx 'complete_approved_prs=yes' "$RUNNER_TEMP/ps-remote/.kirakit-profile"
           CLAUDE_CONFIG_DIR="$RUNNER_TEMP/sh-generic" sh get-kira.sh --copy </dev/null
           CLAUDE_CONFIG_DIR="$RUNNER_TEMP/ps-generic" pwsh -File get-kira.ps1 -Copy </dev/null
       - name: Same release tag picked without a clone
@@ -159,7 +170,7 @@ jobs:
       - name: Compare
         run: |
           for pair in sh:ps sh-assistant:ps-assistant sh-analyst:ps-analyst sh-generic:ps-generic sh-coder:ps-coder \
-            sh-verified:ps-verified; do
+            sh-verified:ps-verified sh-remote:ps-remote; do
             a=$RUNNER_TEMP/${pair%%:*} b=$RUNNER_TEMP/${pair##*:}
             for path in output-styles skills rules CLAUDE.md settings.json; do
               diff -r "$a/$path" "$b/$path"

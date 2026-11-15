@@ -3501,6 +3501,69 @@ check 'watch README: only the lead watches, one check per team account (#43)' fl
 check 'watch README: how a specification wakes the lead (#43)' flat_has_text "$(readme_watch)" 'How a specification wakes Kira.' 'the `status:ready` label' 'runs `next-task` in that repository'
 check 'watch README: the merge condition (#43 R11)' flat_has_text "$(readme_watch)" 'only when your own latest review approves its last commit' 'never count'
 
+# --- --profile-url -------------------------------------------------------------------------
+
+# A profile answers the questions, below the options of the command line, and create_keys=yes
+# creates the missing signing keys, once.
+claude=$tmp/profile-url
+remote_keys=$tmp/profile-keys
+printf 'name=Remote\r\ngender=male\r\nlanguage=French\r\nassistant_name=Kira\r\nassistant_email=kira@example.com\r\nassistant_signing_key=%s/kira.pub\r\nassistant_github=kira-bot\r\nco_author_trailer=yes\r\nanalyst=yes\r\nanalyst_github=iris-bot\r\ncoder=Cleo <cleo@example.com>\r\ncoder_signing_key=%s/cleo.pub\r\ncoder_github=cleo-bot\r\nsoft_rules=yes\r\nstyle=kira-sassy\r\ncreate_keys=yes\r\nunknown=1\r\n' \
+	"$remote_keys" "$remote_keys" >"$tmp/team.profile"
+kira --copy --name Alex --profile-url "$tmp/team.profile" >"$tmp/profile-url.log" 2>&1 || true
+check 'profile url: installed from the profile' test -f "$claude/CLAUDE.md"
+for line in name=Alex gender=male language=French assistant_email=kira@example.com 'coder=Cleo <cleo@example.com>' \
+	analyst_github=iris-bot soft_rules=yes complete_approved_prs=yes start_verified_specs=yes style=kira-sassy; do
+	check "profile url: $line saved" profile_has "$line"
+done
+check 'profile url: create_keys is not saved' sh -c '! grep -q create_keys "$1"' _ "$claude/.kirakit-profile"
+check 'profile url: nothing asked' sh -c '! grep -q "no terminal to ask for" "$1"' _ "$tmp/profile-url.log"
+check 'profile url: an unknown key is ignored with a warning' contains "$tmp/profile-url.log" 'unknown key in the profile, ignored: unknown'
+check 'profile url: both keys created' sh -c 'test -f "$1/kira.pub" && test -f "$1/kira" && test -f "$1/cleo.pub"' _ "$remote_keys"
+check 'profile url: the next steps name each member' sh -c 'grep -q "next steps" "$1" && grep -q "Kira: add" "$1" && grep -q "Cleo: add" "$1" && grep -q "Iris: no signing key" "$1"' _ "$tmp/profile-url.log"
+kira --copy --name Alex --profile-url "$tmp/team.profile" >"$tmp/profile-url-rerun.log" 2>&1 || true
+check 'profile url: a rerun creates no key and prints no next steps' sh -c '! grep -Eq "create signing key|next steps" "$1"' _ "$tmp/profile-url-rerun.log"
+claude=$tmp/profile-url-nocreate
+grep -v create_keys "$tmp/team.profile" | sed 's/profile-keys/profile-none/' >"$tmp/team-nocreate.profile"
+kira --copy --profile-url "$tmp/team-nocreate.profile" >"$tmp/profile-url-nocreate.log" 2>&1 || true
+check 'profile url: without create_keys, a missing key is only warned about' sh -c 'grep -qF -- "--create-keys creates it" "$1" && test ! -e "$2"' _ "$tmp/profile-url-nocreate.log" "$tmp/profile-none"
+claude=$tmp/profile-url-bad
+printf 'gender=robot\n' >"$tmp/bad.profile"
+# profile_url_fails ARGS: whether get-kira.sh fails with these arguments.
+profile_url_fails() {
+	! kira_run "$@"
+}
+check 'profile url: an invalid value fails' profile_url_fails --copy --profile-url "$tmp/bad.profile"
+check 'profile url: an invalid value installs nothing' test ! -e "$claude"
+check 'profile url: a plain http URL is refused' profile_url_fails --copy --profile-url http://example.com/team.profile
+
+# R8: a key is added to its member's account when gh is logged in to it, with that account's
+# token, and never otherwise. A stand-in gh, first on PATH, is logged in to kira-bot only, has
+# no signing key registered, and records each key it is asked to add.
+mkdir -p "$tmp/fake-gh"
+cat >"$tmp/fake-gh/gh" <<'EOF'
+#!/bin/sh
+case "$1 $2" in
+'auth token') [ "$6" = kira-bot ] && echo tok-kira && exit 0; exit 1 ;;
+'api user') echo kira-bot ;;
+'api --paginate') ;;
+'ssh-key add') printf '%s %s\n' "${GH_TOKEN-}" "$*" >>"$(dirname "$0")/added.log" ;;
+*) exit 1 ;;
+esac
+EOF
+chmod +x "$tmp/fake-gh/gh"
+claude=$tmp/profile-register
+printf 'assistant=Kira <kira@example.com>\nassistant_signing_key=%s/kira.pub\nassistant_github=kira-bot\nanalyst=no\ncoder=Cleo <cleo@example.com>\ncoder_signing_key=%s/cleo.pub\ncoder_github=cleo-bot\ncreate_keys=yes\n' \
+	"$tmp/register-keys" "$tmp/register-keys" >"$tmp/register.profile"
+saved_path=$PATH
+PATH=$tmp/fake-gh:$PATH
+export PATH
+kira --copy --name Alex --gender male --language auto --profile-url "$tmp/register.profile" >"$tmp/register.log" 2>&1 || true
+PATH=$saved_path
+export PATH
+check 'register: the key of the logged-in account is added with its own token' sh -c 'grep -q "^tok-kira ssh-key add .*kira.pub --type signing" "$1"' _ "$tmp/fake-gh/added.log"
+check 'register: no key added to an account gh is not logged in to' sh -c '! grep -q cleo.pub "$1"' _ "$tmp/fake-gh/added.log"
+check 'register: the next steps say which key is registered and what is left' sh -c 'grep -q "is now a signing key of kira-bot" "$1" && grep -q "log cleo-bot in to gh" "$1"' _ "$tmp/register.log"
+
 # --- the clone -----------------------------------------------------------------------------
 
 check "clone: dist/ unchanged" test "$(dist_fingerprint)" = "$dist_before"

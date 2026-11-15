@@ -13,13 +13,20 @@ and files are copied.
 Output styles, skills, agents and CLAUDE.md are personalized from a profile: how Kira calls
 the user, the user's gender, the answer language, the assistant (git identity, signing
 key, GitHub account, Co-Authored-By trailers), the analyst and the coder. The installer asks once and saves the answers
-in $CLAUDE_CONFIG_DIR\.kirakit-profile for later runs.
+in $CLAUDE_CONFIG_DIR\.kirakit-profile for later runs. -ProfileUrl reads the answers from a profile in the same
+format, such as a gist, and asks only what it leaves out.
+
+With -CreateKeys (or create_keys=yes in the profile of -ProfileUrl), a signing key that the profile names and that
+does not exist yet is created (ed25519, no passphrase). A signing key is added to its member's GitHub account,
+with that account's own token, only when gh is logged in to it; the installer never logs in, and ends with what
+is left to do.
 
 Without -Only, styles and claude are installed. The github component copies issue and pull
 request templates, workflows and Copilot instructions into a repository's .github directory.
 
 Remote use:
   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Kodara-me/kirakit/main/get-kira.ps1))) -DryRun
+  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Kodara-me/kirakit/main/get-kira.ps1))) -ProfileUrl https://gist.github.com/USER/ID
 
 Environment: CLAUDE_CONFIG_DIR (default: ~\.claude), KIRAKIT_REPO and KIRAKIT_REF (repository
 and branch or tag fetched without a clone; default: the latest release).
@@ -74,6 +81,13 @@ Strict rules: the team asks the user its questions (default).
 Output style selected in settings.json (default: kira-cozy).
 .PARAMETER Reconfigure
 Ask all profile questions again.
+.PARAMETER ProfileUrl
+A profile in the format of .kirakit-profile: an https URL (a gist page is read through its raw content) or a file.
+Its values act as options, below the options of the command line; the keys it leaves out are asked, or taken from
+the saved profile. create_keys=yes in it stands for -CreateKeys, and is not saved.
+.PARAMETER CreateKeys
+Create the signing keys the profile names that do not exist yet (ed25519, no passphrase). With or without it, a
+key is added to its member's account when gh is logged in to that account.
 .PARAMETER BinDir
 Where the launchers go, an absolute path (saved in the profile under bin_dir). This installer
 puts kira.ps1 there (default: bin under the configuration directory).
@@ -120,6 +134,8 @@ param(
     [switch]$NoSoftRules,
     [string]$DefaultStyle,
     [switch]$Reconfigure,
+    [string]$ProfileUrl,
+    [switch]$CreateKeys,
     [string]$BinDir,
     [string[]]$Persona = @(),
     [ValidateSet('styles', 'claude', 'launchers', 'github')]
@@ -163,6 +179,8 @@ $script:SettingsBackedUp = $false
 $script:Installed = New-Object System.Collections.Generic.List[string]
 $script:OriginalsNew = New-Object System.Collections.Generic.List[string]
 $script:Removed = New-Object System.Collections.Generic.List[string]
+# The values of -ProfileUrl, by profile key.
+$script:RemoteProfile = @{}
 
 function Write-KiraLog([string]$Message) {
     Write-Host "kirakit: $Message"
@@ -416,14 +434,19 @@ function Expand-KiraHome([string]$Path) {
     return $Path
 }
 
+# The KEY=VALUE lines of a profile, by key; a byte order mark and carriage returns are dropped.
+function ConvertFrom-KiraProfileText([string]$Text) {
+    $values = @{}
+    foreach ($line in @(Split-KiraLine $Text.TrimStart([char]0xFEFF))) {
+        $i = $line.IndexOf('=')
+        if ($i -gt 0) { $values[$line.Substring(0, $i).Trim()] = $line.Substring($i + 1).TrimEnd("`r") }
+    }
+    return $values
+}
+
 function Read-KiraProfile {
     $saved = @{}
-    if (Test-Path -LiteralPath $ProfilePath) {
-        foreach ($line in [IO.File]::ReadAllLines($ProfilePath, $Utf8)) {
-            $i = $line.IndexOf('=')
-            if ($i -gt 0) { $saved[$line.Substring(0, $i)] = $line.Substring($i + 1) }
-        }
-    }
+    if (Test-Path -LiteralPath $ProfilePath) { $saved = ConvertFrom-KiraProfileText (Read-KiraText $ProfilePath) }
     if ($saved.ContainsKey('assistant_name')) {
         $saved.assistant = if ($saved['assistant_email']) { "$($saved.assistant_name) <$($saved.assistant_email)>" } else { '' }
     } elseif ($saved.ContainsKey('co_author')) {
@@ -445,9 +468,89 @@ function Read-KiraProfile {
     return $saved
 }
 
-# Resolve the profile from parameters, the saved profile, then questions.
+# The profile of -ProfileUrl, checked like the options it stands for, by profile key (mirrors
+# load_remote_profile in get-kira.sh). SOURCE is an https URL, a gist page (read through its
+# raw content: a gist of one file), or a file. Its assistant is "assistant", or
+# "assistant_name" and "assistant_email" as .kirakit-profile saves it; an empty email means no
+# assistant. A key it leaves out is not given: it is asked, or taken from the saved profile.
+function Get-KiraRemoteProfile([string]$Source) {
+    if ($Source -match '^https://gist\.github\.com/[^/?#]+(/[^/?#]+)?/?$') { $Source = $Source.TrimEnd('/') + '/raw' }
+    if ($Source -match '^https://') {
+        Write-KiraLog "profile: fetching $Source"
+        $ProgressPreference = 'SilentlyContinue'
+        if ($PSVersionTable.PSVersion.Major -lt 6) {
+            [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        }
+        try {
+            $response = Invoke-WebRequest -Uri $Source -UseBasicParsing
+        } catch {
+            throw "could not fetch the profile ${Source}: $($_.Exception.Message)"
+        }
+        $text = $Utf8.GetString($response.RawContentStream.ToArray())
+    } elseif ($Source -match '^[A-Za-z][A-Za-z0-9+.-]*://') {
+        throw "the profile must be an https URL or a file: $Source"
+    } else {
+        $path = Expand-KiraHome $Source
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "profile not found: $Source" }
+        Write-KiraLog "profile: reading $path"
+        $text = Read-KiraText $path
+    }
+    $raw = ConvertFrom-KiraProfileText $text
+    $values = @{}
+    foreach ($key in @($raw.Keys | Sort-Object)) {
+        $value = $raw[$key]
+        switch -CaseSensitive ($key) {
+            { @('name', 'language', 'assistant_signing_key', 'coder_signing_key', 'bin_dir') -ccontains $_ } {
+                if ($value.Contains('"')) { throw "invalid $key in the profile: $value" }
+                $values[$key] = $value
+            }
+            'gender' {
+                if (@('male', 'female', 'nonbinary', 'unspecified') -cnotcontains $value) {
+                    throw "unknown gender in the profile: $value (expected male, female, nonbinary or unspecified)"
+                }
+                $values[$key] = $value
+            }
+            { @('assistant', 'coder') -ccontains $_ } {
+                if (-not (Test-KiraCoAuthor $value)) { throw "invalid $key in the profile: $value (expected `"NAME <EMAIL>`")" }
+                $values[$key] = $value
+            }
+            { @('assistant_github', 'analyst_github', 'coder_github') -ccontains $_ } {
+                if (-not (Test-KiraGithub $value)) { throw "invalid GitHub login in the profile: $key=$value" }
+                $values[$key] = $value
+            }
+            { @('co_author_trailer', 'analyst', 'allow_releases', 'complete_approved_prs', 'start_verified_specs', 'soft_rules') -ccontains $_ } {
+                if (@('yes', 'no') -cnotcontains $value) { throw "invalid $key in the profile: $value (expected yes or no)" }
+                $values[$key] = $value
+            }
+            { @('style', 'assistant_style') -ccontains $_ } {
+                if ($value -and $value -notmatch '^[A-Za-z0-9_-]+$') { throw "invalid persona name in the profile: $key=$value" }
+                if ($value -or $key -eq 'assistant_style') { $values[$key] = $value }
+            }
+            # An action of this run, like -CreateKeys: not a profile value, never saved.
+            'create_keys' {
+                if (@('yes', 'no') -cnotcontains $value) { throw "invalid $key in the profile: $value (expected yes or no)" }
+                if ($value -eq 'yes') { $script:CreateKeys = [switch]$true }
+            }
+            { @('assistant_name', 'assistant_email') -ccontains $_ } { }
+            default { Write-KiraLog "warning: unknown key in the profile, ignored: $key" }
+        }
+    }
+    if (-not $raw.ContainsKey('assistant') -and $raw.ContainsKey('assistant_email')) {
+        $assistantName = if ($raw['assistant_name']) { $raw['assistant_name'] } else { 'Kira' }
+        $value = if ($raw['assistant_email']) { "$assistantName <$($raw['assistant_email'])>" } else { '' }
+        if (-not (Test-KiraCoAuthor $value)) { throw "invalid assistant in the profile: $value (expected `"NAME <EMAIL>`")" }
+        $values['assistant'] = $value
+    }
+    $on = @(@('allow_releases', 'complete_approved_prs', 'start_verified_specs', 'soft_rules') | Where-Object { $values[$_] -eq 'yes' })
+    Write-KiraLog "profile: $($values.Count) values given$(if ($on.Count -gt 0) { "; turned on: $($on -join ' ')" })"
+    return $values
+}
+
+# Resolve the profile from parameters, -ProfileUrl, the saved profile, then questions.
 function Get-KiraProfile {
     $saved = Read-KiraProfile
+    # The values of -ProfileUrl stand above the saved ones, below the parameters, and are not asked.
+    foreach ($key in $script:RemoteProfile.Keys) { $saved[$key] = $script:RemoteProfile[$key] }
     $given = @{
         name                  = $Bound.ContainsKey('Name')
         gender                = $Bound.ContainsKey('Gender')
@@ -504,7 +607,7 @@ function Get-KiraProfile {
         if ($key -eq 'analyst_github' -and $missing -notcontains 'analyst' -and $result.analyst -ne 'yes') { continue }
         # Meaningless without a coder identity, unless it is about to be asked.
         if ($key -ne 'coder' -and $key.StartsWith('coder') -and $missing -notcontains 'coder' -and -not $result.coder) { continue }
-        if (-not $given[$key] -and ($Reconfigure -or -not $saved.ContainsKey($key))) { $missing += $key }
+        if (-not $given[$key] -and -not $script:RemoteProfile.ContainsKey($key) -and ($Reconfigure -or -not $saved.ContainsKey($key))) { $missing += $key }
     }
     $save = $true
     if ($missing.Count -gt 0 -and -not (Test-KiraCanPrompt)) {
@@ -619,15 +722,160 @@ function Get-KiraProfile {
     return $result
 }
 
-# R8: warn about a signing key that is not there; the installer never creates one.
-# Test-KiraSigningKey WHO KEY, such as WHO = "the assistant".
-function Test-KiraSigningKey([string]$Who, [string]$Key) {
-    if (-not $Key) { return }
-    if (-not (Test-Path -LiteralPath $Key -PathType Leaf)) {
-        Write-KiraLog "warning: $Who's signing key $Key does not exist; $Who cannot commit as itself until it does"
-    } elseif (-not (Test-Path -LiteralPath ($Key -replace '\.pub$', '') -PathType Leaf)) {
-        Write-KiraLog "warning: no private key next to $Key; $Who cannot sign with it"
+# R8: warn about a signing key that is not there. With -CreateKeys, it is created instead,
+# ed25519 without a passphrase so that the member signs without a prompt; Register-KiraSigningKey
+# then adds it to her account when gh is logged in to it (Write-KiraNextStep says what is left). Only a missing pair is
+# created: a private key without its public one is left alone, with a warning. Returns whether
+# a key was created.
+# Initialize-KiraSigningKey WHO IDENTITY KEY, such as WHO = "the assistant" and IDENTITY = "Kira <kira@example.com>".
+function Initialize-KiraSigningKey([string]$Who, [string]$Identity, [string]$Key) {
+    if (-not $Key) { return $false }
+    $private = $Key -replace '\.pub$', ''
+    if (Test-Path -LiteralPath $Key -PathType Leaf) {
+        if (-not (Test-Path -LiteralPath $private -PathType Leaf)) { Write-KiraLog "warning: no private key next to $Key; $Who cannot sign with it" }
+        return $false
     }
+    if (-not $CreateKeys) {
+        Write-KiraLog "warning: $Who's signing key $Key does not exist; $Who cannot commit as itself until it does (-CreateKeys creates it)"
+        return $false
+    }
+    if ($private -eq $Key) {
+        Write-KiraLog "warning: $Who's signing key $Key does not exist and is not a .pub path; $Who cannot commit as itself until it does"
+        return $false
+    }
+    if (Test-KiraPresent $private) {
+        Write-KiraLog "warning: $private exists without $Key; left alone. Write the public key with: ssh-keygen -y -f $private > $Key"
+        return $false
+    }
+    $keygen = Get-Command ssh-keygen -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $keygen) {
+        Write-KiraLog "warning: $Who's signing key $Key does not exist and ssh-keygen is not installed; $Who cannot commit as itself until it does"
+        return $false
+    }
+    $email = if ($Identity -match '<(.+)>$') { $Matches[1] } else { $Who }
+    $comment = "$email (git signing)"
+    Write-KiraLog "create signing key: $private for $Who (ed25519, no passphrase)"
+    if ($DryRun) {
+        Write-DryRun "ssh-keygen -t ed25519 -N `"`" -C `"$comment`" -f $private"
+        return $true
+    }
+    Initialize-KiraDirectory (Split-Path -Parent $private)
+    # A command line of its own: Windows PowerShell 5.1 drops an empty argument such as -N ''.
+    $info = New-Object Diagnostics.ProcessStartInfo
+    $info.FileName = $keygen.Source
+    $info.Arguments = '-q -t ed25519 -N "" -C "' + $comment + '" -f "' + $private + '"'
+    $info.UseShellExecute = $false
+    $process = [Diagnostics.Process]::Start($info)
+    $process.WaitForExit()
+    if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $Key -PathType Leaf)) { throw "ssh-keygen could not create $private" }
+    return $true
+}
+
+# The token gh holds for LOGIN, or nothing when gh is not installed or not logged in to that
+# account. GH_TOKEN and GITHUB_TOKEN are set aside: gh would print them whatever the account.
+function Get-KiraGhToken([string]$Login) {
+    if (-not $Login -or -not (Get-Command gh -CommandType Application -ErrorAction SilentlyContinue)) { return '' }
+    $ErrorActionPreference = 'Continue'
+    $saved = @($env:GH_TOKEN, $env:GITHUB_TOKEN)
+    try {
+        $env:GH_TOKEN = $null; $env:GITHUB_TOKEN = $null
+        $token = @(& gh auth token -h github.com --user $Login 2>$null)
+        if ($LASTEXITCODE -ne 0 -or $token.Count -eq 0) { return '' }
+        return ([string]$token[0]).Trim()
+    } finally {
+        $env:GH_TOKEN = $saved[0]; $env:GITHUB_TOKEN = $saved[1]
+    }
+}
+
+# R8: register KEY as a signing key of LOGIN, with LOGIN's own token, when gh is logged in to
+# that account; the installer never logs in itself. A key already registered is not added
+# again. Returns registered (now, or in a dry run), present (already a signing key of LOGIN),
+# scope (gh is logged in, but its token cannot read or add signing keys), failed (gh refused
+# to add it), or nothing (no key, no login, or gh not logged in to LOGIN) (mirrors
+# register_signing_key in get-kira.sh).
+function Register-KiraSigningKey([string]$Who, [string]$Login, [string]$Key) {
+    if (-not $Login -or -not $Key -or -not (Test-Path -LiteralPath $Key -PathType Leaf)) { return '' }
+    $token = Get-KiraGhToken $Login
+    if (-not $token) { return '' }
+    $fields = @((Read-KiraText $Key).Trim() -split '\s+')
+    if ($fields.Count -lt 2) { Write-KiraLog "warning: $Key is not a public SSH key; not registered"; return 'failed' }
+    $public = "$($fields[0]) $($fields[1])"
+    $ErrorActionPreference = 'Continue'
+    $saved = @($env:GH_TOKEN, $env:GITHUB_TOKEN)
+    try {
+        $env:GH_TOKEN = $token; $env:GITHUB_TOKEN = $null
+        # The token must be LOGIN's own: a key is never added to another account.
+        $account = @(& gh api user --jq .login 2>$null)
+        if ($LASTEXITCODE -ne 0 -or $account.Count -eq 0 -or ([string]$account[0]).Trim() -ne $Login) {
+            Write-KiraLog "warning: gh's token for $Login does not answer as $Login; $Key not registered"
+            return 'failed'
+        }
+        $registered = @(& gh api --paginate /user/ssh_signing_keys --jq '.[].key' 2>$null)
+        if ($LASTEXITCODE -ne 0) {
+            Write-KiraLog "warning: gh is logged in to $Login, but its token cannot read signing keys (scope admin:ssh_signing_key); $Key not registered"
+            return 'scope'
+        }
+        if (@($registered | ForEach-Object { (([string]$_).Trim() -split '\s+')[0..1] -join ' ' }) -contains $public) {
+            Write-KiraLog "up to date: $Key is a signing key of $Login"
+            return 'present'
+        }
+        $title = "kirakit signing key ($Login)"
+        Write-KiraLog "register signing key: $Key on $Login, for $Who"
+        if ($DryRun) { Write-DryRun "gh ssh-key add $Key --type signing --title `"$title`" (as $Login)"; return 'registered' }
+        & gh ssh-key add $Key --type signing --title $title 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-KiraLog "warning: gh could not add $Key to $Login as a signing key (scope admin:ssh_signing_key?)"
+            return 'scope'
+        }
+        return 'registered'
+    } finally {
+        $env:GH_TOKEN = $saved[0]; $env:GITHUB_TOKEN = $saved[1]
+    }
+}
+
+# What is left to do for the team's signing keys and accounts, after a run that created a key,
+# registered one or could not: the installer creates keys only on request, registers them only
+# through an account gh is logged in to, and never logs in itself (mirrors print_next_steps in
+# get-kira.sh). REGISTERED holds the result of Register-KiraSigningKey by key.
+function Write-KiraNextStep($UserProfile, [string[]]$Created, $Registered) {
+    $states = @($Registered.Values)
+    if ($Created.Count -eq 0 -and $states -notcontains 'registered' -and $states -notcontains 'scope' -and $states -notcontains 'failed') { return }
+    $members = @(
+        @{ Title = ($UserProfile.assistant -replace ' <.*$', ''); Login = $UserProfile.assistant_github; Key = $UserProfile.assistant_signing_key; Show = [bool]$UserProfile.assistant },
+        @{ Title = ($UserProfile.coder -replace ' <.*$', ''); Login = $UserProfile.coder_github; Key = $UserProfile.coder_signing_key; Show = [bool]$UserProfile.coder },
+        @{ Title = 'Iris'; Login = $UserProfile.analyst_github; Key = ''; Show = $UserProfile.analyst -eq 'yes' }
+    )
+    $add = '(GitHub, Settings, SSH and GPG keys, New SSH key, Key type: Signing Key)'
+    Write-KiraLog 'next steps for the team''s signing keys and accounts:'
+    foreach ($member in $members) {
+        if (-not $member.Show) { continue }
+        $login = $member.Login
+        $account = if ($login) { $login } else { 'her GitHub account' }
+        $state = if ($member.Key) { [string]$Registered[$member.Key] } else { '' }
+        switch ($state) {
+            'registered' { Write-KiraLog "  $($member.Title): $($member.Key) $(if ($DryRun) { 'would be' } else { 'is now' }) a signing key of $login" }
+            'present' { Write-KiraLog "  $($member.Title): $($member.Key) is already a signing key of $login" }
+            'scope' { Write-KiraLog "  $($member.Title): let gh add signing keys to ${login}: gh auth switch -h github.com -u $login, gh auth refresh -h github.com -s admin:ssh_signing_key, switch back to your account, then run the installer again" }
+            'failed' { Write-KiraLog "  $($member.Title): add $($member.Key) to $account by hand, as a signing key only $add" }
+            default {
+                if ($member.Key -and $Created -contains $member.Key) {
+                    Write-KiraLog "  $($member.Title): add $($member.Key) to $account as a signing key only $add, or log $account in to gh and run the installer again: it adds the key itself"
+                } elseif ($member.Key) {
+                    Write-KiraLog "  $($member.Title): $($member.Key) already existed; check that it is a signing key of $account"
+                } else {
+                    Write-KiraLog "  $($member.Title): no signing key, she never commits"
+                }
+            }
+        }
+        if ($login -and -not (Get-KiraGhToken $login)) {
+            $scopes = if ($member.Key) { 'project,admin:ssh_signing_key' } else { 'project' }
+            Write-KiraLog "    log $login in to gh (gh auth login -h github.com -s $scopes), then switch back to your account (gh auth switch -h github.com -u YOUR-LOGIN)"
+        }
+    }
+    if ($Created.Count -gt 0) {
+        Write-KiraLog '  the private keys have no passphrase: anything running as you can sign as the team, so keep them on this machine'
+    }
+    Write-KiraLog '  details: the README, "Give the assistant its own identity" and the two sections after it'
 }
 
 # --- Build (mirrors scripts/build.sh) -------------------------------------------------------
@@ -1485,6 +1733,10 @@ try {
             Install-KiraGithub
         } else {
             Write-KiraLog "target: $ClaudeDir"
+            if ($Bound.ContainsKey('ProfileUrl')) {
+                if (-not $ProfileUrl) { throw 'missing value for -ProfileUrl' }
+                $script:RemoteProfile = Get-KiraRemoteProfile $ProfileUrl
+            }
             $userProfile = Get-KiraProfile
             if (-not (Test-Path -LiteralPath (Join-Path (Join-Path $script:Src 'personas') "$($userProfile.style).md"))) {
                 throw "unknown default style: $($userProfile.style)"
@@ -1492,8 +1744,17 @@ try {
             $shownName = if ($userProfile.name) { $userProfile.name } else { '(no name)' }
             $shownAssistant = if ($userProfile.assistant) { $userProfile.assistant } else { 'none' }
             Write-KiraLog "profile: $shownName, $($userProfile.gender), language $($userProfile.language), assistant $shownAssistant, co-author trailers $($userProfile.co_author_trailer), analyst $($userProfile.analyst)$(if ($userProfile.analyst_github) { " ($($userProfile.analyst_github))" }), coder $(if ($userProfile.coder) { $userProfile.coder } else { 'none' }), style $($userProfile.style)"
-            Test-KiraSigningKey 'the assistant' $userProfile.assistant_signing_key
-            Test-KiraSigningKey 'the coder' $userProfile.coder_signing_key
+            $createdKeys = @()
+            if (Initialize-KiraSigningKey 'the assistant' $userProfile.assistant $userProfile.assistant_signing_key) { $createdKeys += $userProfile.assistant_signing_key }
+            if (Initialize-KiraSigningKey 'the coder' $userProfile.coder $userProfile.coder_signing_key) { $createdKeys += $userProfile.coder_signing_key }
+            # In a dry run, a key that would be created is not there yet: it is not registered.
+            $registeredKeys = @{}
+            if ($userProfile.assistant_signing_key) {
+                $registeredKeys[$userProfile.assistant_signing_key] = Register-KiraSigningKey 'the assistant' $userProfile.assistant_github $userProfile.assistant_signing_key
+            }
+            if ($userProfile.coder_signing_key) {
+                $registeredKeys[$userProfile.coder_signing_key] = Register-KiraSigningKey 'the coder' $userProfile.coder_github $userProfile.coder_signing_key
+            }
             Build-KiraOutput $userProfile
             if (-not $Only -or $Only -eq 'styles') { Install-KiraStyle }
             if (-not $Only -or $Only -eq 'claude') { Install-KiraClaude $userProfile.style $userProfile }
@@ -1503,6 +1764,7 @@ try {
                 Install-KiraBuilt 'bin/kira.ps1' (Join-Path $binTarget 'kira.ps1')
             }
             Save-KiraManifest
+            Write-KiraNextStep $userProfile $createdKeys $registeredKeys
         }
     }
     Write-KiraLog 'done'

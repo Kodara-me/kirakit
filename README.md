@@ -54,6 +54,65 @@ For a fixed version, replace `latest/download` with `download/v0.2.2` (or any ot
 pass options through the pipe, use `sh -s -- --dry-run` or append `-DryRun` after the last
 parenthesis.
 
+### Install from a profile, without questions
+
+Keep your answers in a profile on GitHub, such as a gist, and install on any machine without
+being asked anything:
+
+```sh
+curl -fsSL https://github.com/Kodara-me/kirakit/releases/latest/download/get-kira.sh | sh -s -- \
+    --profile-url https://gist.github.com/<you>/<gist id>
+```
+
+```powershell
+& ([scriptblock]::Create((irm https://github.com/Kodara-me/kirakit/releases/latest/download/get-kira.ps1))) -ProfileUrl https://gist.github.com/<you>/<gist id>
+```
+
+The profile has the format of `.kirakit-profile`, one `key=value` per line, so a saved profile
+can be uploaded as it is (signing keys then best written as `~/.ssh/...`, expanded on each
+machine). `--profile-url` (`-ProfileUrl`) takes an `https` URL, a gist page (read through its
+raw content, so the gist must hold that one file; otherwise give the file's raw URL), or a
+local file. The profile's values act as options: options on the command line win over them,
+and a key the profile leaves out is asked, or taken from the saved profile, so private values
+can stay out of a public gist and be answered on the terminal. An invalid value stops the run
+before anything is installed, and an unknown key is ignored with a warning. The run logs which
+autonomy options the profile turns on (`allow_releases`, `complete_approved_prs`,
+`start_verified_specs`, `soft_rules`): only use a profile you wrote.
+
+```ini
+name=Alex
+gender=female
+language=French
+assistant_name=Kira
+assistant_email=kira@example.com
+assistant_signing_key=~/.ssh/kira_signing_ed25519.pub
+assistant_github=kira-bot
+co_author_trailer=yes
+analyst=yes
+analyst_github=iris-bot
+coder=Cleo <cleo@example.com>
+coder_signing_key=~/.ssh/cleo_signing_ed25519.pub
+coder_github=cleo-bot
+soft_rules=yes
+style=kira-sassy
+create_keys=yes
+```
+
+`assistant=NAME <EMAIL>` is accepted in place of `assistant_name` and `assistant_email`; an
+empty `assistant_email` means no assistant, an empty `coder` no coder. `create_keys=yes` stands
+for `--create-keys` (`-CreateKeys`) and is not saved: each signing key the profile names that
+does not exist yet is created with `ssh-keygen` (ed25519, no passphrase). A private key found
+without its public key is left alone, with a warning.
+
+With or without `--create-keys`, when `gh` is logged in to a member's GitHub account (the
+profile's `assistant_github` or `coder_github`), the installer adds her signing key to that
+account with `gh ssh-key add --type signing`, using that account's own token, after checking
+that the token answers as that login and that the key is not registered yet. The token needs
+the `admin:ssh_signing_key` scope; without it, nothing is added and the run says how to grant
+it. The installer never logs in to `gh` itself: a run that created, registered or could not
+register a key ends with what is left to do for each member (see
+[Give the assistant its own identity](#give-the-assistant-its-own-identity)).
+
 ### What gets installed
 
 In `$CLAUDE_CONFIG_DIR` (default: `~/.claude`):
@@ -122,6 +181,8 @@ puts only `kira.ps1` there (default: `bin\` in the configuration directory).
 | `--assistant-style PERSONA` | Style of the `assistant` launcher (default: the default style) |
 | `--bin-dir DIR` | Where the launchers go, an absolute path (default: `~/.local/bin`, or `bin/` in a non-default configuration directory; saved in the profile) |
 | `--reconfigure` | Ask all profile questions again |
+| `--profile-url SOURCE` | Read the profile from an `https` URL, a gist page or a file; its values act as options, and the keys it leaves out are asked (see [Install from a profile](#install-from-a-profile-without-questions)) |
+| `--create-keys` | Create the signing keys the profile names that do not exist yet (ed25519, no passphrase); a key is added to its member's account when `gh` is logged in to it, with or without this option |
 | `--persona NAME` | Install only this persona (repeatable; default: all) |
 | `--only COMPONENT` | `styles`, `claude`, `launchers` or `github`; default: `styles`, `claude` and `launchers` |
 | `--target DIR` | Repository for `--only github` (default: the current one) |
@@ -287,8 +348,10 @@ rules were handed to you.
 
 ### Give the assistant its own identity
 
-The installer never creates or uploads keys: these steps are done once, by hand. The examples
-use `kira` and `kira@example.com`; use the assistant's own name and address.
+The installer creates the key only with `--create-keys` (step 3), and registers it (step 5)
+itself when `gh` is logged in to the assistant's account with the `admin:ssh_signing_key`
+scope (steps 2 and 4); otherwise these steps are done once, by hand. The examples use `kira` and `kira@example.com`; use the
+assistant's own name and address.
 
 1. Create a GitHub account for the assistant, with its email address verified (Settings →
    Emails): GitHub shows a commit as Verified only for a verified address. Give it Write

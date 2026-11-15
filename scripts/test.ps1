@@ -404,6 +404,80 @@ $run = Invoke-Installer (Join-Path $tmp 'members-clash') 'member-clash' 'C' @('-
 Test-Check 'commands: a clash with a skill fails, naming the member (#120 R9)' ($run.Status -ne 0 -and
     (Get-RunText $run).Contains('team member test has the same name as the skill')) (Get-RunText $run)
 
+# -ProfileUrl: a profile answers the questions, below the parameters (the -Name and -Gender that
+# Invoke-Installer passes win), and create_keys=yes creates the missing signing keys, once.
+$remoteConfig = Join-Path $tmp 'profile-url'
+$remoteKeys = Join-Path $tmp 'profile-keys'
+$remoteFile = Join-Path $tmp 'team.profile'
+$remoteLines = @('name=Remote', 'gender=male', 'assistant_name=Kira', 'assistant_email=kira@example.com',
+    "assistant_signing_key=$remoteKeys/kira.pub", 'assistant_github=kira-bot', 'analyst=yes', 'analyst_github=iris-bot',
+    'coder=Cleo <cleo@example.com>', "coder_signing_key=$remoteKeys/cleo.pub", 'coder_github=cleo-bot',
+    'soft_rules=yes', 'style=kira-sassy', 'create_keys=yes', 'unknown=1')
+# A byte order mark and CRLF line ends, as a file saved on Windows has them.
+[IO.File]::WriteAllText($remoteFile, ([char]0xFEFF) + ($remoteLines -join "`r`n") + "`r`n")
+$run = Invoke-Installer $remoteConfig 'main' 'C' @('-Copy', '-ProfileUrl', $remoteFile)
+Test-Check 'profile url: installed from the profile' ($run.Status -eq 0) (Get-RunText $run)
+foreach ($line in @('name=Alex', 'gender=female', 'assistant_email=kira@example.com', 'coder=Cleo <cleo@example.com>',
+        'analyst_github=iris-bot', 'soft_rules=yes', 'complete_approved_prs=yes', 'start_verified_specs=yes', 'style=kira-sassy')) {
+    Test-Check "profile url: $line saved" (Test-ProfileLine $remoteConfig $line) (Get-ProfileText $remoteConfig)
+}
+Test-Check 'profile url: create_keys is not saved' (-not (Get-ProfileText $remoteConfig).Contains('create_keys'))
+Test-Check 'profile url: an unknown key is ignored with a warning' (Get-RunText $run).Contains('unknown key in the profile, ignored: unknown')
+Test-Check 'profile url: both keys created' ((Test-Path -LiteralPath (Join-Path $remoteKeys 'kira.pub')) -and
+    (Test-Path -LiteralPath (Join-Path $remoteKeys 'kira')) -and (Test-Path -LiteralPath (Join-Path $remoteKeys 'cleo.pub')))
+Test-Check 'profile url: the next steps name each member' ((Get-RunText $run) -match 'next steps' -and
+    (Get-RunText $run).Contains('Kira: add') -and (Get-RunText $run).Contains('Cleo: add') -and
+    (Get-RunText $run).Contains('Iris: no signing key')) (Get-RunText $run)
+$run = Invoke-Installer $remoteConfig 'main' 'C' @('-Copy', '-ProfileUrl', $remoteFile)
+Test-Check 'profile url: a rerun creates no key and prints no next steps' ($run.Status -eq 0 -and
+    -not ((Get-RunText $run) -match 'create signing key|next steps')) (Get-RunText $run)
+$noCreate = Join-Path $tmp 'profile-url-nocreate'
+[IO.File]::WriteAllText($remoteFile, (($remoteLines | Where-Object { $_ -ne 'create_keys=yes' }) -replace 'profile-keys', 'profile-none') -join "`n")
+$run = Invoke-Installer $noCreate 'main' 'C' @('-Copy', '-ProfileUrl', $remoteFile)
+Test-Check 'profile url: without create_keys, a missing key is only warned about' ($run.Status -eq 0 -and
+    (Get-RunText $run).Contains('-CreateKeys creates it') -and -not (Test-Path -LiteralPath (Join-Path $tmp 'profile-none'))) (Get-RunText $run)
+[IO.File]::WriteAllText($remoteFile, "gender=robot`n")
+$bad = Join-Path $tmp 'profile-url-bad'
+$run = Invoke-Installer $bad 'main' 'C' @('-Copy', '-ProfileUrl', $remoteFile)
+Test-Check 'profile url: an invalid value fails and installs nothing' ($run.Status -ne 0 -and
+    (Get-RunText $run).Contains('unknown gender in the profile: robot') -and -not (Test-Path -LiteralPath $bad)) (Get-RunText $run)
+$run = Invoke-Installer $bad 'main' 'C' @('-Copy', '-ProfileUrl', 'http://example.com/team.profile')
+Test-Check 'profile url: a plain http URL is refused' ($run.Status -ne 0 -and (Get-RunText $run).Contains('must be an https URL or a file')) (Get-RunText $run)
+
+# R8: a key is added to its member's account when gh is logged in to it, with that account's
+# token, and never otherwise. A stand-in gh, first on PATH, is logged in to kira-bot only, has
+# no signing key registered, and records each key it is asked to add.
+$fakeBin = Join-Path $tmp 'fake-gh'
+New-Item -ItemType Directory -Path $fakeBin | Out-Null
+[IO.File]::WriteAllText((Join-Path $fakeBin 'gh.cmd'), ((@('@echo off',
+                'if "%1"=="auth" if "%6"=="kira-bot" goto token',
+                'if "%1"=="auth" exit /b 1',
+                'if "%1"=="api" if "%2"=="user" goto login',
+                'if "%1"=="api" exit /b 0',
+                'if "%1"=="ssh-key" goto add',
+                'exit /b 1',
+                ':token', 'echo tok-kira', 'exit /b 0',
+                ':login', 'echo kira-bot', 'exit /b 0',
+                ':add', '>>"%~dp0added.log" echo %GH_TOKEN% %*', 'exit /b 0') -join "`r`n") + "`r`n"))
+$registerConfig = Join-Path $tmp 'profile-register'
+$registerKeys = Join-Path $tmp 'register-keys'
+[IO.File]::WriteAllText($remoteFile, ((@('assistant=Kira <kira@example.com>', "assistant_signing_key=$registerKeys/kira.pub",
+                'assistant_github=kira-bot', 'analyst=no', 'coder=Cleo <cleo@example.com>', "coder_signing_key=$registerKeys/cleo.pub",
+                'coder_github=cleo-bot', 'create_keys=yes') -join "`n") + "`n"))
+$savedPath = $env:PATH
+try {
+    $env:PATH = $fakeBin + [IO.Path]::PathSeparator + $env:PATH
+    $run = Invoke-Installer $registerConfig 'main' 'C' @('-Copy', '-ProfileUrl', $remoteFile)
+} finally {
+    $env:PATH = $savedPath
+}
+$added = Get-Installed (Join-Path $fakeBin 'added.log')
+Test-Check 'register: the key of the logged-in account is added with its own token' ($run.Status -eq 0 -and $null -ne $added -and
+    $added.Contains('tok-kira ssh-key add') -and $added.Contains('kira.pub') -and $added.Contains('--type signing')) "$added`n$(Get-RunText $run)"
+Test-Check 'register: no key added to an account gh is not logged in to' ($null -ne $added -and -not $added.Contains('cleo.pub'))
+Test-Check 'register: the next steps say which key is registered and what is left' ((Get-RunText $run).Contains('is now a signing key of kira-bot') -and
+    (Get-RunText $run).Contains('log cleo-bot in to gh')) (Get-RunText $run)
+
 # #169 R9: the guard fails on a file written outside the configuration directory, naming it.
 $selfHome = Join-Path $tmp 'guard-self'
 New-Item -ItemType Directory -Path (Join-Path $selfHome 'bin') -Force | Out-Null
