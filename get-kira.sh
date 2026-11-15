@@ -649,7 +649,7 @@ load_remote_profile() {
 	cr=$(printf '\r')
 	remote_count=0
 	remote_on=
-	remote_assistant_given= remote_email_given= remote_assistant_name= remote_assistant_email=
+	remote_assistant_given='' remote_email_given='' remote_assistant_name='' remote_assistant_email=''
 	while IFS= read -r line || [ -n "$line" ]; do
 		line=${line#"$bom"}
 		line=${line%"$cr"}

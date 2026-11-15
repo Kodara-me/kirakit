@@ -79,11 +79,14 @@ kira_run() {
 # out of its scope.
 
 # guard_list DIR...: one line per file under each directory, sorted: path, checksum, size
-# and modification time.
+# and modification time. The one file gh itself writes on any command, its telemetry device
+# ID, is left out by its exact path under the directory, nothing else: the installer runs gh
+# to register the members' signing keys.
 guard_list() {
 	for guard_dir in "$@"; do
 		[ -d "$guard_dir" ] || continue
 		find "$guard_dir" ! -type d | sort | while IFS= read -r guard_file; do
+			[ "$guard_file" != "$guard_dir/.local/state/gh/device-id" ] || continue
 			printf '%s\t%s\t%s\n' "$guard_file" "$(cksum <"$guard_file" 2>/dev/null || echo -)" \
 				"$(find "$guard_file" -prune -exec ls -ld {} + | awk '{ print $6, $7, $8 }')"
 		done
@@ -3581,6 +3584,16 @@ check 'guard: a file written in the scratch home fails and is named (#169 R9)' \
 	sh -c 'test -n "$1" && printf "%s" "$2" | grep -qF "$3"' _ "$guard_self_ok" "$guard_self" "$tmp/guard-self/home/.local/bin/team"
 guard_list "$tmp/guard-self/home" >"$tmp/guard-self/same"
 check 'guard: identical listings pass (#169 R9)' guard_report self "$tmp/guard-self/after" "$tmp/guard-self/same"
+# gh's own device ID is ignored, but only that exact path.
+mkdir -p "$tmp/guard-self/home/.local/state/gh"
+printf 'id\n' >"$tmp/guard-self/home/.local/state/gh/device-id"
+guard_list "$tmp/guard-self/home" >"$tmp/guard-self/gh-id"
+check "guard: gh's device ID is ignored (#169 R9)" guard_report self "$tmp/guard-self/same" "$tmp/guard-self/gh-id"
+printf 'leak\n' >"$tmp/guard-self/home/.local/state/gh/other"
+guard_list "$tmp/guard-self/home" >"$tmp/guard-self/gh-other"
+guard_gh_other=$(guard_report self "$tmp/guard-self/gh-id" "$tmp/guard-self/gh-other") || true
+check 'guard: another file in that directory is still flagged and named (#169 R9)' \
+	sh -c 'printf "%s" "$1" | grep -qF "$2"' _ "$guard_gh_other" "$tmp/guard-self/home/.local/state/gh/other"
 
 # Every installer run above that was given only a scratch configuration directory.
 if [ -s "$tmp/guard-failures" ]; then
